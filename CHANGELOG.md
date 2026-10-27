@@ -2,6 +2,12 @@
 
 Version 0.x is the development series. Minor versions add capabilities; patch versions fix or polish existing behavior. Version 1.0 will mark the first public release.
 
+## 0.5.1 — Verify Windows bridge installation across environments
+
+### Fixed
+
+- Validate Windows installer paths using their canonical filesystem identity so shortened profile paths pass the release checks.
+
 ## 0.5.0 — Connect the hosted board to your local Codex chat
 
 ### Added

@@ -1,6 +1,14 @@
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "entries": [
+    {
+      "version": "0.5.1",
+      "title": "Verify Windows bridge installation across environments",
+      "added": [],
+      "fixed": [
+        "Validate Windows installer paths using their canonical filesystem identity so shortened profile paths pass the release checks."
+      ]
+    },
     {
       "version": "0.5.0",
       "title": "Connect the hosted board to your local Codex chat",

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import {spawn,execFileSync} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
-import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -12,7 +12,10 @@ import {bridgeSourceFiles,bridgeLauncherFiles,prepareBridgeStage,listBridgePacka
 const root=fileURLToPath(new URL('../',import.meta.url));
 const sourceHash='f'.repeat(64);
 function fixture(){
-  const directory=mkdtempSync(path.join(os.tmpdir(),"sharedboard bridge 'case "));
+  // Hosted Windows runners may expose TEMP through an 8.3 alias (RUNNER~1).
+  // Canonicalize both the cleanup boundary and fixture before deriving paths.
+  const temporary=realpathSync.native(os.tmpdir());
+  const directory=realpathSync.native(mkdtempSync(path.join(temporary,"sharedboard bridge 'case ")));
   const source=path.join(directory,'source'),runtime=path.join(directory,'runtime'),stage=path.join(directory,'extracted ZIP'),installed=path.join(directory,"installed bridge ' copy");
   for(const item of ['bridge','packaging/bridge'])mkdirSync(path.join(source,item),{recursive:true});
   mkdirSync(runtime);mkdirSync(stage);
@@ -23,8 +26,8 @@ function fixture(){
   copyFileSync(process.execPath,path.join(runtime,'node.exe'));
   writeFileSync(path.join(runtime,'LICENSE'),'Fixture runtime license');writeFileSync(path.join(runtime,'README.md'),'Fixture runtime readme');
   return {directory,source,runtime,stage,installed,prepare(target=stage){return prepareBridgeStage({sourceRoot:source,runtimeDirectory:runtime,stageDirectory:target,sourceHash});},clean(){
-    const resolved=path.resolve(directory),temporary=path.resolve(os.tmpdir())+path.sep;
-    if(!resolved.startsWith(temporary)||!path.basename(resolved).startsWith("sharedboard bridge 'case "))throw new Error('Refusing bridge fixture cleanup outside its temporary folder.');
+    const resolved=realpathSync.native(directory),relative=path.relative(temporary,resolved);
+    if(!relative||relative==='..'||relative.startsWith(`..${path.sep}`)||path.isAbsolute(relative)||!path.basename(resolved).startsWith("sharedboard bridge 'case "))throw new Error('Refusing bridge fixture cleanup outside its temporary folder.');
     rmSync(resolved,{recursive:true,force:true});
   }};
 }
@@ -79,7 +82,7 @@ test('isolated bridge install/start/reinstall/stop preserves grants and never ow
     f.prepare();
     const installed=await run(f.stage,'-Install','-InstallDir',f.installed,'-SkipProtocolRegistration','-NoBrowser','-Port',String(port));
     assert.equal(installed.code,0,installed.output);saved=metadata(f.installed);
-    assert.equal(path.resolve(saved.root),f.installed);assert.equal(path.resolve(saved.dataDir),path.join(f.installed,'data'));assert.equal(saved.port,port);
+    assert.equal(realpathSync.native(saved.root),realpathSync.native(f.installed));assert.equal(realpathSync.native(saved.dataDir),realpathSync.native(path.join(f.installed,'data')));assert.equal(saved.port,port);
     assert.equal(existsSync(path.join(f.installed,'package-manifest.json')),true);assert.equal(existsSync(path.join(f.installed,'app/app')),false);
     const originalHealth=await health(port);assert.equal(originalHealth.product,'SharedBoard Bridge');assert.equal(originalHealth.bridgeId,saved.bridgeId);assert.equal(originalHealth.version,JSON.parse(readFileSync(path.join(f.installed,'app/package.json'))).version);
     const pairing=await fetch(`http://127.0.0.1:${port}/bridge/browser/pair`,{method:'POST',headers:{Origin:'https://sharedboard.app','Content-Type':'application/json'},body:JSON.stringify({boardId:randomUUID(),title:'Private installation fixture',permission:'read',clientId:'fixture_tab'})});
