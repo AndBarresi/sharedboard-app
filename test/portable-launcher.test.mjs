@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import {mkdtempSync,mkdirSync,copyFileSync,linkSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,copyFileSync,linkSync,readFileSync,realpathSync,writeFileSync,rmSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -15,12 +15,12 @@ const server=http.createServer((req,res)=>{res.setHeader('Content-Type','applica
 server.listen(Number(process.env.PORT),'127.0.0.1',()=>{fs.writeFileSync(path.join(dataDir,'.connection.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port,token,pid:process.pid,projectRoot,dataDir}));});`;
 
 function staging(){
-  const directory=mkdtempSync(path.join(os.tmpdir(),"sharedboard portable 'case "));
+  const temporary=realpathSync.native(os.tmpdir()),directory=realpathSync.native(mkdtempSync(path.join(temporary,"sharedboard portable 'case ")));
   for(const folder of ['scripts','runtime','app/server','app/dist'])mkdirSync(path.join(directory,folder),{recursive:true});
   copyFileSync(launcher,path.join(directory,'scripts','portable.ps1'));
   try{linkSync(process.execPath,path.join(directory,'runtime','node.exe'));}catch{copyFileSync(process.execPath,path.join(directory,'runtime','node.exe'));}
   writeFileSync(path.join(directory,'app','package.json'),'{"type":"module"}');writeFileSync(path.join(directory,'app','server','index.mjs'),stub);writeFileSync(path.join(directory,'app','dist','index.html'),'fixture');
-  return {directory,connection:()=>JSON.parse(readFileSync(path.join(directory,'data','.connection.json'),'utf8')),clean(){const resolved=path.resolve(directory),temporary=path.resolve(os.tmpdir())+path.sep;if(!resolved.startsWith(temporary)||!path.basename(resolved).startsWith("sharedboard portable 'case "))throw new Error('Refusing fixture cleanup outside the temporary staging folder.');rmSync(resolved,{recursive:true,force:true});}};
+  return {directory,connection:()=>JSON.parse(readFileSync(path.join(directory,'data','.connection.json'),'utf8')),clean(){const resolved=realpathSync.native(directory),relative=path.relative(temporary,resolved);if(!relative||relative==='..'||relative.startsWith(`..${path.sep}`)||path.isAbsolute(relative)||!path.basename(resolved).startsWith("sharedboard portable 'case "))throw new Error('Refusing fixture cleanup outside the temporary staging folder.');rmSync(resolved,{recursive:true,force:true});}};
 }
 
 function run(directory,...flags){
@@ -41,7 +41,7 @@ test('portable launch isolates occupied ports, reuses its own service and stops 
   try{
     assert.ok(port<=65000,'the fixture needs a normal user port');
     const launched=await run(first.directory,'-NoBrowser','-PreferredPort',String(port));assert.equal(launched.code,0,launched.output);
-    const connection=first.connection();assert.notEqual(new URL(connection.url).port,String(port));assert.equal(path.resolve(connection.dataDir),path.resolve(first.directory,'data'));
+    const connection=first.connection();assert.notEqual(new URL(connection.url).port,String(port));assert.equal(realpathSync.native(connection.dataDir),realpathSync.native(path.join(first.directory,'data')));
     assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(),'unrelated app');
     const repeated=await run(first.directory,'-NoBrowser','-PreferredPort',String(port));assert.equal(repeated.code,0,repeated.output);assert.equal(first.connection().pid,connection.pid,'double-clicking again must reuse this copy');
     mkdirSync(path.join(second.directory,'data'));copyFileSync(path.join(first.directory,'data','.connection.json'),path.join(second.directory,'data','.connection.json'));

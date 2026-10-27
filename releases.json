@@ -1,6 +1,15 @@
 {
-  "version": "0.6.0",
+  "version": "0.6.1",
   "entries": [
+    {
+      "version": "0.6.1",
+      "title": "Native Mac launcher compatibility and compact workspace polish",
+      "added": [],
+      "fixed": [
+        "Build the Mac companion with a native launcher targeting macOS 13.5, and validate platform paths and preserved download metadata accurately.",
+        "Use the space freed by consolidated controls to keep the board title readable in compact windows."
+      ]
+    },
     {
       "version": "0.6.0",
       "title": "Windows and Mac bridge setup from the website",
@@ -154,5 +163,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "9f8f308a8b415a2a3d5173536ebfeec9ee38e7e7067dec860ecc8116188f096f"
+  "sourceHash": "caece5d07cf7f0cf1e3cdfe8318d3d200b73aaf0e1f3a388ed582d5977219ac3"
 }

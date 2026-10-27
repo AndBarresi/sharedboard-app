@@ -84,20 +84,21 @@ export function prepareMacBridgeApp({sourceRoot=root,runtimeDirectory,stageDirec
   if(process.platform!=='darwin'||!target.startsWith('macos-')||target!==`macos-${process.arch}`)throw new Error('Build and test each Mac package on its matching native macOS architecture. Rosetta is not installed automatically.');
   const runtime=bridgeRuntimePin(target,sourceRoot),pkg=JSON.parse(readFileSync(path.join(sourceRoot,'package.json'),'utf8'));
   const app=path.join(stageDirectory,'SharedBoard Bridge.app');
-  execFileSync('/usr/bin/osacompile',['-o',app,ordinaryFile(path.join(sourceRoot,'packaging/bridge-macos/application.applescript'),sourceRoot)],{stdio:'pipe'});
   const appResources=path.join(app,'Contents/Resources'),companion=mkdtempSync(path.join(os.tmpdir(),'sharedboard-macos-resources-'));
+  mkdirSync(appResources,{recursive:true});mkdirSync(path.join(app,'Contents/MacOS'));
+  const architecture=process.arch==='arm64'?'arm64':'x86_64';
+  execFileSync('/usr/bin/xcrun',['--sdk','macosx','clang','-fobjc-arc','-fblocks','-O2','-Wall','-Wextra','-arch',architecture,`-mmacosx-version-min=${runtime.minimumOSVersion}`,'-framework','Cocoa',ordinaryFile(path.join(sourceRoot,'packaging/bridge-macos/application.m'),sourceRoot),'-o',path.join(app,'Contents/MacOS/SharedBoardBridge')],{stdio:'pipe'});
   const prepared=prepareBridgeStage({sourceRoot,runtimeDirectory,stageDirectory:companion,sourceHash,target});
   for(const name of readdirSync(companion))cpSync(path.join(companion,name),path.join(appResources,name),{recursive:true,errorOnExist:true,force:false});
-  const plist=path.join(app,'Contents/Info.plist'),info=JSON.parse(execFileSync('/usr/bin/plutil',['-convert','json','-o','-',plist],{encoding:'utf8'}));
-  Object.assign(info,{CFBundleIdentifier:'app.sharedboard.bridge',CFBundleName:'SharedBoard Bridge',CFBundleDisplayName:'SharedBoard Bridge',CFBundleShortVersionString:pkg.version,CFBundleVersion:pkg.version,LSMinimumSystemVersion:runtime.minimumOSVersion,LSUIElement:true,CFBundleURLTypes:[{CFBundleURLName:'app.sharedboard.bridge',CFBundleURLSchemes:['sharedboard-bridge'],CFBundleTypeRole:'Viewer'}]});
+  const plist=path.join(app,'Contents/Info.plist'),info={CFBundleExecutable:'SharedBoardBridge',CFBundlePackageType:'APPL',CFBundleInfoDictionaryVersion:'6.0',NSPrincipalClass:'NSApplication',CFBundleIdentifier:'app.sharedboard.bridge',CFBundleName:'SharedBoard Bridge',CFBundleDisplayName:'SharedBoard Bridge',CFBundleShortVersionString:pkg.version,CFBundleVersion:pkg.version,LSMinimumSystemVersion:runtime.minimumOSVersion,LSUIElement:true,CFBundleURLTypes:[{CFBundleURLName:'app.sharedboard.bridge',CFBundleURLSchemes:['sharedboard-bridge'],CFBundleTypeRole:'Viewer'}]};
   writeFileSync(plist,JSON.stringify(info));execFileSync('/usr/bin/plutil',['-convert','xml1',plist]);
   const executable=path.join(app,'Contents/MacOS',info.CFBundleExecutable);
   const architectures=execFileSync('/usr/bin/lipo',['-archs',executable],{encoding:'utf8'}).trim().split(/\s+/);
-  if(!architectures.includes(process.arch==='arm64'?'arm64':'x86_64'))throw new Error('The generated Mac application does not support its target architecture.');
-  const loadCommands=execFileSync('/usr/bin/otool',['-l','-arch',process.arch==='arm64'?'arm64':'x86_64',executable],{encoding:'utf8'});
+  if(!architectures.includes(architecture))throw new Error('The generated Mac application does not support its target architecture.');
+  const loadCommands=execFileSync('/usr/bin/otool',['-l','-arch',architecture,executable],{encoding:'utf8'});
   const minimums=loadCommands.split(/Load command \d+/).flatMap(block=>/cmd LC_BUILD_VERSION\b/.test(block)?[block.match(/\bminos\s+([\d.]+)/)?.[1]]:/cmd LC_VERSION_MIN_MACOSX\b/.test(block)?[block.match(/\bversion\s+([\d.]+)/)?.[1]]:[]).filter(Boolean);
   const numeric=value=>value.split('.').reduce((total,part,index)=>total+Number(part)*1000**(2-index),0);
-  if(!minimums.length||minimums.some(value=>numeric(value)>numeric(runtime.minimumOSVersion)))throw new Error('The generated Mac app requires a newer operating system than the documented minimum.');
+  if(!minimums.length||minimums.some(value=>numeric(value)>numeric(runtime.minimumOSVersion)))throw new Error(`The generated Mac app minimum (${minimums.join(', ')||'unknown'}) exceeds the documented ${runtime.minimumOSVersion}.`);
   chmodSync(executable,0o755);
   // Ad-hoc signing seals bundle integrity; it is not Developer ID signing/notarization.
   // It does not change Gatekeeper or remove downloaded-file quarantine attributes.

@@ -28,7 +28,7 @@ test('actual Mac download preserves executables, signatures, manifest, and safe 
     const manifest=JSON.parse(readFileSync(path.join(extracted,'package-manifest.json'))),app=path.join(extracted,'SharedBoard Bridge.app');
     assert.equal(manifest.platform,`macos-${process.arch}`);assert.equal(manifest.minimumOSVersion,'13.5');
     for(const item of manifest.files){const file=path.join(extracted,item.path);assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'),item.sha256);assert.equal(statSync(file).mode&0o777,item.mode);}
-    for(const file of ['Install SharedBoard Bridge.command','Start SharedBoard Bridge.command','Stop SharedBoard Bridge.command','SharedBoard Bridge.app/Contents/Resources/bridge.command','SharedBoard Bridge.app/Contents/Resources/runtime/node','SharedBoard Bridge.app/Contents/MacOS/applet'])assert.ok(statSync(path.join(extracted,file)).mode&0o111,`ZIP extraction must preserve executable bits: ${file}`);
+    for(const file of ['Install SharedBoard Bridge.command','Start SharedBoard Bridge.command','Stop SharedBoard Bridge.command','SharedBoard Bridge.app/Contents/Resources/bridge.command','SharedBoard Bridge.app/Contents/Resources/runtime/node','SharedBoard Bridge.app/Contents/MacOS/SharedBoardBridge'])assert.ok(statSync(path.join(extracted,file)).mode&0o111,`ZIP extraction must preserve executable bits: ${file}`);
     execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app]);
     const runtime=path.join(app,'Contents/Resources/runtime/node');assert.equal(execFileSync(runtime,['-p','process.platform+"-"+process.arch'],{encoding:'utf8'}).trim(),`darwin-${process.arch}`);
     // Only disposable GitHub runners may register the real scheme/default install.
@@ -39,6 +39,9 @@ test('actual Mac download preserves executables, signatures, manifest, and safe 
     const result=await command(extracted,'Install');assert.equal(result.code,0,result.output);
     const ready=await until(()=>health()),state=JSON.parse(readFileSync(path.join(data,'launcher-macos.json')));assert.equal(ready.bridgeId,state.bridgeId);
     const stop=await command(extracted,'Stop');assert.equal(stop.code,0,stop.output);await assert.rejects(health());
+    execFileSync('/usr/bin/open',['-g',installed]);
+    assert.equal((await until(()=>health())).bridgeId,state.bridgeId,'a normal app launch must start the installed bridge');
+    const normalStop=await command(extracted,'Stop');assert.equal(normalStop.code,0,normalStop.output);await assert.rejects(health());
     const marker=path.join(directory,`must-not-execute-${randomUUID()}`),url=`sharedboard-bridge://open?command=${encodeURIComponent(`touch '${marker}'`)}&pair=untrusted`;
     execFileSync('/usr/bin/open',['-g',url]);
     await until(()=>health());const first=JSON.parse(readFileSync(path.join(data,'launcher-macos.json')));

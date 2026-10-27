@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.6.1 — Native Mac launcher compatibility and compact workspace polish
+
+### Fixed
+
+- Build the Mac companion with a native launcher targeting macOS 13.5, and validate platform paths and preserved download metadata accurately.
+- Use the space freed by consolidated controls to keep the board title readable in compact windows.
+
 ## 0.6.0 — Windows and Mac bridge setup from the website
 
 ### Added

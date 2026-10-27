@@ -36,6 +36,12 @@ const health=port=>fetch(`http://127.0.0.1:${port}/bridge/health`,{signal:AbortS
 const saved=f=>JSON.parse(readFileSync(path.join(f.data,'launcher-macos.json'),'utf8'));
 const flags=(f,port)=>['--install-dir',f.installed,'--data-dir',f.data,'--port',String(port),'--no-browser'];
 async function freePort(){const server=http.createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;}
+function assertQuarantinePreserved(actual,original){
+  const [actualFlags,...actualMetadata]=actual.split(';'),[originalFlags,...originalMetadata]=original.split(';');
+  assert.match(actualFlags,/^[a-f0-9]+$/i);assert.match(originalFlags,/^[a-f0-9]+$/i);
+  assert.equal(parseInt(actualFlags,16)&parseInt(originalFlags,16),parseInt(originalFlags,16),'macOS may add quarantine bits but must not remove existing ones');
+  assert.deepEqual(actualMetadata,originalMetadata,'quarantine timestamp, source, and UUID must be retained');
+}
 
 test('Mac runtime pins and resource manifests separate architecture, licenses, version, and private state',()=>{
   for(const arch of ['arm64','x64']){
@@ -61,12 +67,12 @@ test('native Mac installer preserves quarantine metadata, actual grants, and own
   try{
     const {app}=f.prepare();
     execFileSync('/usr/bin/xattr',['-w','app.sharedboard.fixture','preserve this metadata',app]);
-    const quarantine=`0000;00000000;SharedBoardFixture;${randomUUID()}`;
+    const quarantine=`0081;00000000;SharedBoardFixture;${randomUUID()}`;
     execFileSync('/usr/bin/xattr',['-w','com.apple.quarantine',quarantine,app]);
     mkdirSync(f.data);writeFileSync(path.join(f.data,'launcher-macos.lock'),JSON.stringify({pid:process.pid,uid:process.getuid(),created:'stale process identity',command:'stale launcher'}));
     const installed=await runMacCommand(f.stage,'Install',...flags(f,port),'--skip-protocol-registration');assert.equal(installed.code,0,installed.output);latest=saved(f);
     assert.equal((await health(port)).bridgeId,latest.bridgeId);assert.equal(execFileSync('/usr/bin/xattr',['-p','app.sharedboard.fixture',f.installed],{encoding:'utf8'}).trim(),'preserve this metadata');
-    assert.equal(execFileSync('/usr/bin/xattr',['-p','com.apple.quarantine',f.installed],{encoding:'utf8'}).trim(),quarantine);
+    assertQuarantinePreserved(execFileSync('/usr/bin/xattr',['-p','com.apple.quarantine',f.installed],{encoding:'utf8'}).trim(),quarantine);
     const paired=await fetch(`http://127.0.0.1:${port}/bridge/browser/pair`,{method:'POST',headers:{Origin:'https://sharedboard.app','Content-Type':'application/json'},body:JSON.stringify({boardId:randomUUID(),clientId:'fixture_tab',permission:'read',title:'Private Mac fixture'})});assert.equal(paired.status,200);
     const grants=JSON.parse(readFileSync(path.join(f.data,'bridge-state.json'))).grants;assert.equal(grants.length,1);
     const repeated=await runMacCommand(f.stage,'Start',...flags(f,port));assert.equal(repeated.code,0,repeated.output);assert.equal(saved(f).pid,latest.pid);
@@ -83,7 +89,7 @@ test('native Mac installer preserves quarantine metadata, actual grants, and own
     writeFileSync(path.join(f.data,'launcher-macos.json'),JSON.stringify(latest));const exited=new Promise(resolve=>spoof.once('exit',resolve));spoof.kill();await exited;spoof=null;
     const update=await runMacCommand(f.stage,'Install',...flags(f,port),'--skip-protocol-registration');assert.equal(update.code,0,update.output);latest=saved(f);
     assert.deepEqual(JSON.parse(readFileSync(path.join(f.data,'bridge-state.json'))).grants,grants);assert.equal(execFileSync('/usr/bin/xattr',['-p','app.sharedboard.fixture',f.installed],{encoding:'utf8'}).trim(),'preserve this metadata');
-    assert.equal(execFileSync('/usr/bin/xattr',['-p','com.apple.quarantine',f.installed],{encoding:'utf8'}).trim(),quarantine);
+    assertQuarantinePreserved(execFileSync('/usr/bin/xattr',['-p','com.apple.quarantine',f.installed],{encoding:'utf8'}).trim(),quarantine);
     const stopped=await runMacCommand(f.stage,'Stop',...flags(f,port));assert.equal(stopped.code,0,stopped.output);await assert.rejects(health(port));
   }finally{
     if(spoof){const exited=new Promise(resolve=>spoof.once('exit',resolve));spoof.kill();await exited;}
