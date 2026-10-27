@@ -8,7 +8,7 @@ const write=(name,value)=>writeFileSync(path.join(root,name),`${JSON.stringify(v
 function fingerprint(){
   const hash=createHash('sha256');
   const walk=directory=>{for(const item of readdirSync(path.join(root,directory),{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){const name=`${directory}/${item.name}`;if(item.isDirectory())walk(name);else{hash.update(name);hash.update(readFileSync(path.join(root,name)));}}};
-  for(const directory of ['src','server','shared','scripts','packaging','hosting','.github'])walk(directory);
+  for(const directory of ['src','server','shared','scripts','packaging','hosting','.github','bridge'])walk(directory);
   for(const name of ['index.html','vite.config.mjs','pnpm-lock.yaml','.node-version','.gitattributes','LICENSE','AUTHORS.md']){try{hash.update(name);hash.update(readFileSync(path.join(root,name)));}catch(error){if(error.code!=='ENOENT')throw error;}}
   const pkg=read('package.json');hash.update(JSON.stringify({scripts:pkg.scripts,dependencies:pkg.dependencies,devDependencies:pkg.devDependencies}));return hash.digest('hex');
 }

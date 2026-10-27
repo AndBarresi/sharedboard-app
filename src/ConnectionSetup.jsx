@@ -2,13 +2,16 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Icon} from './Icons.jsx';
 import {WebConnectionSetup} from './WebConnectionSetup.jsx';
 import {isWebProvider,localConnectionView,webConnectionWip} from './connection-policy.mjs';
+import {BrowserBridgeSetup} from './BrowserBridgeSetup.jsx';
 
 export async function copyText(text){
   try{await navigator.clipboard.writeText(text);return;}catch{}
   const el=document.createElement('textarea');el.value=text;el.style.position='fixed';el.style.left='-9999px';document.body.append(el);el.select();const done=document.execCommand('copy');el.remove();if(!done)throw new Error('Select the instructions and copy them manually.');
 }
 const apps=[['codex','Codex','Automatic board messages'],['claude','Claude Code','MCP tools + copy to chat'],['cursor','Cursor','MCP tools + copy to chat'],['other','Other MCP app','Standard local MCP tools'],['chatgpt-web','ChatGPT','WIP · Planned web connection'],['claude-web','Claude','WIP · Planned web connection']];
-export function ConnectionSetup({connection:receivedConnection,online,begin,cancel,disconnect,onClose,onTest,browserOnly=false}){
+export function ConnectionSetup(props){return props.browserOnly?<BrowserBridgeSetup {...props}/>:<LocalConnectionSetup {...props}/>;}
+
+function LocalConnectionSetup({connection:receivedConnection,online,begin,cancel,disconnect,onClose,onTest,browserOnly=false}){
   const connection=browserOnly?null:localConnectionView(receivedConnection);
   const [provider,setProvider]=useState(connection?.provider&&!isWebProvider(connection.provider)?connection.provider:'codex'),[permission,setPermission]=useState(connection?.permission??'edit'),[pair,setPair]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(null),[copied,setCopied]=useState(''),[clock,setClock]=useState(Date.now());
   const firstConnection=useRef(connection?.id),dialog=useRef(null),close=useRef(null),opener=useRef(document.activeElement);

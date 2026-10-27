@@ -11,3 +11,5 @@ data/
 *.zip
 *.sha256
 INTEGRATION-REVIEW.md
+release/
+bridge/data/

@@ -6,7 +6,7 @@
 
 A persistent whiteboard for app screens, architecture, references, and the context behind them.
 
-**Browser beta · 0.4.x · Open source · MIT**
+**Browser beta · 0.5.x · Open source · MIT**
 
 [**Open SharedBoard.app ↗**](https://sharedboard.app) · [Source](https://github.com/AndBarresi/sharedboard-app) · [What's new](CHANGELOG.md)
 
@@ -30,7 +30,7 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 | **Organize your work** | Separate projects and boards, named areas, object search, and a minimap. |
 | **Explain the details** | Attached notes, requirements, work cards, and screenshot references. |
 | **Reuse and recover** | Editable starting blocks, your own block library, checkpoints, and automatic recovery. |
-| **Bring your existing AI** | Local Codex and MCP tools can inspect the board, reply, and propose edits. Hosted AI connections are **WIP**. |
+| **Bring your existing AI** | Connect the website to your existing Codex chat with the Windows bridge. The portable local app also supports compatible MCP clients. |
 
 <details>
 <summary><strong>Take a closer look at the planning workspace</strong></summary>
@@ -56,10 +56,12 @@ The browser edition needs no installation or local server. It is hosted on Cloud
 | Capability | Browser website | Portable Windows app |
 | --- | --- | --- |
 | Drawing, planning, projects, backups, and recovery | Available; saved in this browser | Available; saved in the app's local `data/` folder |
-| Codex board tools and mini-chat replies | **WIP** | Enabled; automatic handoff needs a queue-capable local Codex CLI |
+| Codex board tools and mini-chat replies | Windows bridge; pair an existing queue-capable Codex chat from the webpage | Enabled; automatic handoff needs a queue-capable local Codex CLI |
 | Claude Code, Cursor, and compatible local MCP clients | **WIP** | Enabled tools; **Copy to AI** handoff and an explicit reply tool |
 | ChatGPT / Claude web-chat connection | **Locked · WIP** | **Locked · WIP** |
 | SharedBoard-hosted model or AI subscription | None | None; use your existing assistant |
+
+On the website, choose **Connect Codex** for the guided bridge setup: download and install the Windows helper once, check the connection, then paste the generated pairing instruction into your existing Codex conversation. The assistant runs the command; you do not edit configuration files. Keep the board tab open during AI use. See [Bridge setup](BRIDGE.md).
 
 For the portable build, extract the whole testing ZIP and double-click **Start SharedBoard.app.cmd**. Node and app dependencies are included. Follow its **START-HERE.txt** or the [connection guide](CONNECTIONS.md) to pair an existing local client. Actual support in each AI client still needs hands-on acceptance testing.
 
@@ -83,6 +85,6 @@ See [Local development & agent tools](docs/LOCAL-DEVELOPMENT.md) for CLI example
 
 ## Read more
 
-[Connection setup](CONNECTIONS.md) · [Development guide](docs/LOCAL-DEVELOPMENT.md) · [Hosting](HOSTING.md) · [Changelog](CHANGELOG.md) · [Authorship & credits](AUTHORS.md) · [MIT license](LICENSE)
+[Bridge setup](BRIDGE.md) · [Connection setup](CONNECTIONS.md) · [Development guide](docs/LOCAL-DEVELOPMENT.md) · [Hosting](HOSTING.md) · [Changelog](CHANGELOG.md) · [Authorship & credits](AUTHORS.md) · [MIT license](LICENSE)
 
-SharedBoard.app is a **0.x testing beta**. Live voice, hosted multi-user collaboration, browser AI linkage, and automatic verification of generated code are planned or unimplemented. The project uses the [Excalidraw editor](https://github.com/excalidraw/excalidraw); third-party components retain their own [notices and licenses](THIRD_PARTY_NOTICES.md).
+SharedBoard.app is a **0.x testing beta**. Live voice, hosted multi-user collaboration, other hosted AI clients, and automatic verification of generated code are planned or unimplemented. The project uses the [Excalidraw editor](https://github.com/excalidraw/excalidraw); third-party components retain their own [notices and licenses](THIRD_PARTY_NOTICES.md).

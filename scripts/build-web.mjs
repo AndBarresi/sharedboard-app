@@ -39,7 +39,7 @@ export function installPagesFiles(directory=webDirectory){
   for(const name of ['_redirects','404.html'])copyFileSync(path.join(projectRoot,'hosting/cloudflare-pages',name),path.join(directory,name));
   const html=readFileSync(path.join(directory,'index.html'),'utf8'),hashes=[];
   for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(!/\bsrc\s*=/i.test(match[1])&&match[2])hashes.push(`'sha256-${createHash('sha256').update(match[2]).digest('base64')}'`);
-  const policy=["default-src 'self'",`script-src 'self' 'wasm-unsafe-eval' ${hashes.join(' ')}`.trim(),"style-src 'self' 'unsafe-inline'","img-src 'self' data: blob:","font-src 'self' data:","connect-src 'self'","worker-src 'self' blob:","object-src 'none'","base-uri 'self'","form-action 'self'","frame-ancestors 'none'"].join('; ');
+  const policy=["default-src 'self'",`script-src 'self' 'wasm-unsafe-eval' ${hashes.join(' ')}`.trim(),"style-src 'self' 'unsafe-inline'","img-src 'self' data: blob:","font-src 'self' data:","connect-src 'self' http://127.0.0.1:4319","worker-src 'self' blob:","object-src 'none'","base-uri 'self'","form-action 'self'","frame-ancestors 'none'"].join('; ');
   writeFileSync(path.join(directory,'_headers'),`/*\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Referrer-Policy: no-referrer\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Resource-Policy: same-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()\n  Content-Security-Policy: ${policy}\n`);
 }
 

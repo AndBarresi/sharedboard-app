@@ -1,6 +1,6 @@
 {
   "name": "sharedboard-app",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "author": {
     "name": "Andrew Barresi",
@@ -19,6 +19,7 @@
     "build:web": "node scripts/build-web.mjs",
     "preview:web": "node scripts/preview-web.mjs",
     "package:web": "node scripts/package-web.mjs",
+    "package:bridge": "node scripts/package-bridge.mjs",
     "change": "node scripts/release.mjs record",
     "start": "node server/index.mjs",
     "agent": "node server/agent-cli.mjs",

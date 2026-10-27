@@ -1,6 +1,18 @@
 {
-  "version": "0.4.1",
+  "version": "0.5.0",
   "entries": [
+    {
+      "version": "0.5.0",
+      "title": "Connect the hosted board to your local Codex chat",
+      "added": [
+        "Windows SharedBoard Bridge and guided webpage setup for pairing an existing Codex conversation without editing configuration files.",
+        "Two-way browser mini chat, exact-revision board tools, rendered context, read/edit permissions, and browser-saved AI history with safe undo.",
+        "Bundled-runtime bridge installer, Open bridge link, and versioned GitHub downloads."
+      ],
+      "fixed": [
+        "Reliable delivery receipts, durable retry IDs, cross-tab ownership and deadlines preserve browser data through disconnections and uncertain responses."
+      ]
+    },
     {
       "version": "0.4.1",
       "title": "Reliable board bookmarks on Cloudflare",
@@ -135,5 +147,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "20f5242e83845aab8b687c3c48e24187dcb5cf807edf658c114763e61d48bf5f"
+  "sourceHash": "58509af198b012e3736bbb4b9d345ad7c9ab086c05ec6a6ea2c5029b106b279e"
 }

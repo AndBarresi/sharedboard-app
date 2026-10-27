@@ -228,6 +228,8 @@ export async function connectBoard(onState) {
     async proposalAction(id,action){if(action==='accept')await waitUntilSaved();return request('/api/proposal',{method:'POST',body:JSON.stringify({id,action})});},
     async undoAgent(id){await waitUntilSaved();return request('/api/undo-agent',{method:'POST',body:JSON.stringify({id})});},
     beginPairing:input=>isWebProvider(input?.provider)?unavailableWeb():request('/api/connection/pairing',{method:'POST',body:JSON.stringify(input)}),
+    detectBridge:()=>browserTransport?browserTransport.detectBridge():Promise.resolve({available:true,local:true}),
+    bridgeStatus:()=>browserTransport?browserTransport.bridgeStatus():request('/api/connection'),
     cancelPairing:()=>request('/api/connection/cancel',{method:'POST',body:'{}'}),
     disconnect:()=>request('/api/connection/disconnect',{method:'POST',body:'{}'}),
     startWeb:unavailableWeb,

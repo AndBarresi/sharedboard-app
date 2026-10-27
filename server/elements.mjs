@@ -1,6 +1,5 @@
-import { randomBytes, randomUUID } from 'node:crypto';
-
-const nonce = () => randomBytes(4).readUInt32LE(0) >>> 1;
+const randomUUID = () => globalThis.crypto.randomUUID();
+const nonce = () => globalThis.crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
 const labelColor=(spec,base)=>{
   if(spec.textColor)return spec.textColor;
   if(base.strokeColor!==base.backgroundColor)return base.strokeColor;

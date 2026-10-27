@@ -1,5 +1,7 @@
 # Bring your AI to SharedBoard.app
 
+For the hosted website's **Windows Codex bridge**, follow [BRIDGE.md](BRIDGE.md). That connection keeps boards in browser storage and does not use the disk-backed local app described below. Other hosted providers remain WIP.
+
 The local testing beta connects to an existing local AI client and conversation. It does not host a model, bundle an AI subscription, or create a replacement chat. A local connector can still use an online flagship model.
 
 ## Available connections

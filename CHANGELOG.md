@@ -2,6 +2,18 @@
 
 Version 0.x is the development series. Minor versions add capabilities; patch versions fix or polish existing behavior. Version 1.0 will mark the first public release.
 
+## 0.5.0 — Connect the hosted board to your local Codex chat
+
+### Added
+
+- Windows SharedBoard Bridge and guided webpage setup for pairing an existing Codex conversation without editing configuration files.
+- Two-way browser mini chat, exact-revision board tools, rendered context, read/edit permissions, and browser-saved AI history with safe undo.
+- Bundled-runtime bridge installer, Open bridge link, and versioned GitHub downloads.
+
+### Fixed
+
+- Reliable delivery receipts, durable retry IDs, cross-tab ownership and deadlines preserve browser data through disconnections and uncertain responses.
+
 ## 0.4.1 — Reliable board bookmarks on Cloudflare
 
 ### Fixed

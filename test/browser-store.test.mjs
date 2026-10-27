@@ -158,9 +158,10 @@ test('quota failure rolls back drawings and safety snapshots and leaves previous
  }finally{IDBObjectStore.prototype.put=put;transport.close();}
 });
 
-test('AI actions fail visibly as WIP without creating messages, grants or reviews',async()=>{
+test('unsupported AI actions stay WIP and unpaired captures cannot create messages or reviews',async()=>{
  const config=options(),transport=await createBrowserTransport(config);try{
-  for(const route of ['/api/connection/pairing','/api/connection/web/start','/api/chat','/api/chat/retry','/api/reviews','/api/reviews/retry','/api/agent/add','/api/proposal'])await assert.rejects(call(transport,route,{text:'Please connect'}),error=>error.status===501&&error.code==='HOSTED_CONNECTOR_WIP');
+  for(const route of ['/api/connection/pairing','/api/connection/web/start','/api/agent/add','/api/proposal'])await assert.rejects(call(transport,route,{text:'Please connect'}),error=>error.status===501&&error.code==='HOSTED_CONNECTOR_WIP');
+  for(const route of ['/api/chat','/api/chat/retry','/api/reviews','/api/reviews/retry'])await assert.rejects(call(transport,route,{text:'Please connect'}),error=>error.status===400);
   assert.deepEqual((await call(transport,'/api/chat')).messages,[]);assert.deepEqual((await call(transport,'/api/reviews')).requests,[]);const connection=await call(transport,'/api/connection');assert.equal(connection.connected,false);assert.equal(connection.features.storage,'browser');assert.equal(connection.features.localConnectors,false);assert.equal(connection.features.webConnectors,false);const db=await openDb(config.indexedDB,config.dbName);try{assert.equal(db.objectStoreNames.length,3);const values=await records(db,'boards');assert.equal(JSON.stringify(values).includes('Please connect'),false);}finally{db.close();}
  }finally{transport.close();}
 });

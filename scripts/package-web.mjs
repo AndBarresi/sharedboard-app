@@ -36,7 +36,7 @@ export function packageWeb({output}={}){
   output=path.resolve(output??path.join(projectRoot,'..',`SharedBoard.app-${build.version}-cloudflare-pages.zip`));
   if(!output.toLowerCase().endsWith('.zip'))throw new Error('Choose an output filename ending in .zip.');
   if(existsSync(output)||existsSync(`${output}.sha256`))throw new Error('That release archive or checksum already exists. Choose a new output filename.');
-  mkdirSync(path.dirname(output),{recursive:true});writeStaticZip(build.files,output,{date:new Date(`${release.entries[0].date}T00:00:00Z`)});
+  mkdirSync(path.dirname(output),{recursive:true});writeStaticZip(build.files,output);
   const sha256=createHash('sha256').update(readFileSync(output)).digest('hex');writeFileSync(`${output}.sha256`,`${sha256}  ${path.basename(output)}\n`,{flag:'wx'});
   console.log(JSON.stringify({archive:output,sha256,version:build.version,storageMode:'browser',files:build.files.length,staticOnly:true},null,2));return {output,sha256};
 }
