@@ -56,6 +56,11 @@ export function isAcceptedChatMessage(message){
   // historical queued Codex receipts without accepting arbitrary truthy objects.
   return hasText(message.receipt)||Boolean(message.receipt?.provider==='codex-cli'&&hasText(message.receipt.queueMessageId));
 }
+export function shouldResetChatCapture(error){
+  // An ambiguous delivery may already be running. Preserve its original ID and
+  // attachment even when retry reports a conflict after events expire.
+  return !error?.deliveryUnknown&&error?.code!=='DELIVERY_UNCERTAIN'&&[400,409,413].includes(error?.status);
+}
 export function isPreparedContextStale(context,board,planning){
   if(!context)return false;
   const currentBoardId=board?.id??board?.boardId;

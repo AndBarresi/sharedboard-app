@@ -1,5 +1,13 @@
 # SharedBoard.app changelog
 
+## 0.8.2 — Restore mini chat for connected AI clients
+
+### Fixed
+
+- Restored Talk it through, fullscreen chat, and the message composer for Codex, Claude, Claude Code, and other connected clients, including read-only drawing access.
+- Separated Copy to AI mini chat from verified automatic delivery; expired subscriptions fall back to manual chat while preserving uncertain requests.
+- Clarified drawing edit permissions and reconnect instructions without disabling discussion or replies.
+
 ## 0.8.1 — Preserve unconfirmed mini-chat drafts
 
 ### Fixed
@@ -14,8 +22,8 @@
 
 ### Fixed
 
-- Disabled Talk it through, fullscreen chat and new-message composition unless the active connection supports verified incoming messages, while preserving saved requests and replies.
-- Used separate chat and review expiry deadlines for UI availability and delivery routing, including safe retries after subscription expiry.
+- Added connection checks and preserved saved requests and replies when automatic delivery is unavailable.
+- Used separate chat and review expiry deadlines for delivery routing, including safe retries after subscription expiry.
 
 ## 0.7.6 — Consistent UI spacing and compact layouts
 

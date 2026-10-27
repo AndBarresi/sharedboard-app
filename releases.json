@@ -1,6 +1,16 @@
 {
-  "version": "0.8.1",
+  "version": "0.8.2",
   "entries": [
+    {
+      "version": "0.8.2",
+      "title": "Restore mini chat for connected AI clients",
+      "added": [],
+      "fixed": [
+        "Restored Talk it through, fullscreen chat, and the message composer for Codex, Claude, Claude Code, and other connected clients, including read-only drawing access.",
+        "Separated Copy to AI mini chat from verified automatic delivery; expired subscriptions fall back to manual chat while preserving uncertain requests.",
+        "Clarified drawing edit permissions and reconnect instructions without disabling discussion or replies."
+      ]
+    },
     {
       "version": "0.8.1",
       "title": "Preserve unconfirmed mini-chat drafts",
@@ -16,8 +26,8 @@
         "Codex and Claude Code lead the connection choices, with distinct mini-chat availability labels and website-led Claude Code setup."
       ],
       "fixed": [
-        "Disabled Talk it through, fullscreen chat and new-message composition unless the active connection supports verified incoming messages, while preserving saved requests and replies.",
-        "Used separate chat and review expiry deadlines for UI availability and delivery routing, including safe retries after subscription expiry."
+        "Added connection checks and preserved saved requests and replies when automatic delivery is unavailable.",
+        "Used separate chat and review expiry deadlines for delivery routing, including safe retries after subscription expiry."
       ]
     },
     {
@@ -233,5 +243,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "746770e9ff42a78d086e350548e50242aa16c84057742ce5faba2dbd1d3ee794"
+  "sourceHash": "1c8ac427353f253021f3bd4e9da8d077d0fdd01ae971eedc12db6cb545cd34b1"
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage} from '../src/chat-format.mjs';
+import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture} from '../src/chat-format.mjs';
 test('chat links allow explicit web URLs and reject executable, local, disguised, credentialed and control-character destinations',()=>{
   assert.equal(safeChatHref('https://example.com/docs?q=a%20b'),'https://example.com/docs?q=a%20b');
   for(const url of ['javascript:alert(1)','data:text/html,hi','file:///C:/private.txt','//example.com',' https://example.com','https://exam\nple.com','https://user:secret@example.com','https:\\example.com','vbscript:msgbox(1)'])assert.equal(safeChatHref(url),null,url);
@@ -56,4 +56,9 @@ test('only a confirmed receipt, prepared manual instructions, or an actual reply
  assert.equal(isAcceptedChatMessage({delivery:'manual',handoffPrompt:'Read the captured request with its original ID'}),true);
  assert.equal(isAcceptedChatMessage({delivery:'uncertain',reply:'The actual assistant answer returned to this board'}),true,'an actual answer proves completion despite earlier delivery uncertainty');
  assert.equal(isAcceptedChatMessage({status:'answered',reply:'  '}),false,'a label alone is not an actual reply');
+});
+
+test('an uncertain automatic request retains its retry ID and capture after switching to manual chat',()=>{
+ for(const error of [{status:409,code:'DELIVERY_UNCERTAIN',deliveryUnknown:true},{status:409,code:'DELIVERY_UNCERTAIN'},{status:409,deliveryUnknown:true},{status:500},new Error('Network unavailable')])assert.equal(shouldResetChatCapture(error),false);
+ for(const status of [400,409,413])assert.equal(shouldResetChatCapture({status,code:'INVALID_PREVIEW'}),true);
 });

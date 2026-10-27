@@ -5,7 +5,7 @@ Start at [sharedboard.app](https://sharedboard.app). SharedBoard uses a hosted C
 ## Set up from the board
 
 1. Open the board you want to use and choose **Connect an AI**.
-2. Select **Codex**, **Claude Code**, **ChatGPT**, **Claude (web)**, or **Other MCP client**, then choose **Read only** or **Read and edit when I request changes**. Each choice shows its mini-chat availability separately from board-tool support.
+2. Select **Codex**, **Claude Code**, **ChatGPT**, **Claude (web)**, or **Other MCP client**, then choose **Read only** or **Read and edit when I request changes**. Both permissions allow mini-chat requests and replies; drawing edits require the second option.
 3. Choose **Prepare connection**. Copy the generated MCP server URL into your AI app’s remote MCP or connector settings, and enable its tools for your chosen conversation.
 4. Copy the pairing instructions from SharedBoard and paste them into that same conversation. The AI uses the board tools to pair, read the drawing, and confirm its current revision.
 5. Use the connection’s test action. Check board access, receipt of the saved request, and an actual reply returning to the mini chat separately.
@@ -18,11 +18,11 @@ For **Claude Code**, the website-led setup uses a connector added at claude.ai, 
 
 ## Messages and replies
 
-For a client without automatic incoming-message support, ask directly in your AI conversation and use its board tools. **Ask AI to look**, the understanding-check action, and the connection test can prepare a captured request with **Copy to AI** instructions. Paste those into the linked conversation. Your assistant reads the saved context, then explicitly posts its answer back to the board. Open **Connect an AI → Saved requests & replies** to view prepared requests and actual answers.
+Open **Talk it through** to draft a message, choose **Discuss** or **Request work**, and preview the drawing context. For a connection without verified automatic delivery, **Copy to AI** saves the request and prepares its instructions. Paste those instructions into the same AI conversation. Your assistant reads the captured context, then explicitly posts its actual answer back into the mini chat. **Ask AI to look**, the understanding-check action, and the connection test use the same saved-request and reply tools.
 
-**Talk it through** and the fullscreen chat control are disabled unless the active connection has verified automatic message delivery. An open panel becomes a saved-request/history view when support expires, disconnects, or is revoked; a new-message composer is available only while that capability remains active. Chat and review subscriptions have separate deadlines.
+**Talk it through** and the fullscreen chat control are available whenever the board has a connected, online AI, including Codex and both Claude clients. The composer does not depend on automatic delivery or drawing-edit permission. If an automatic message subscription expires, new messages use **Copy to AI**; an uncertain earlier send retains its original request ID and must be checked before retrying. A disconnected, offline, or revoked connection disables new messages while preserving saved requests and replies. Chat and review subscriptions have separate deadlines.
 
-Automatic mini-chat delivery requires a supported hosted Work Cloud client exposing the required MCP event capabilities. Selecting a provider or completing pairing does not prove automatic delivery. Codex and Claude Code use board tools and manual requests through the current relay. Claude Code's separate Channels mechanism is not implemented by this hosted connector. Each client/account needs a real round-trip test.
+Automatic mini-chat delivery is a separate capability of the active connection. It requires verified support for the relay’s incoming MCP events; selecting a provider or completing pairing does not prove it. When no active message subscription is verified, Codex, Claude Code, regular Claude, and other connected clients can still use manual mini chat and return replies. Claude Code's separate Channels mechanism is not implemented by this hosted connector. Each client/account needs a real round-trip test.
 
 Cursor and VS Code support remote MCP board tools, but their full automatic mini-chat workflow has not been verified for SharedBoard. Use **Other MCP client** for those setups; they are not advertised as supporting every SharedBoard feature. See [Cursor's MCP support](https://cursor.com/docs/mcp) and [VS Code's setup guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
 
@@ -35,7 +35,7 @@ The mini chat shows requests originating on this board and replies posted throug
 | **Read only** | Inspect the drawing and requested context, confirm its revision, and return replies. |
 | **Read and edit when requested** | Use the same reading/reply tools and make drawing edits you authorize, with version and conflict checks. |
 
-**Discuss** requests inspection or explanation. **Request work** authorizes the particular task you type, within the connection’s permission. Drawing text, images, notes, and requirements are project data; they do not independently authorize execution or unrelated actions. Board permissions do not control the assistant’s separate coding/filesystem tools.
+**Discuss** requests inspection or explanation. **Request work** authorizes the particular task you type, within the connection’s permission. If an edit is rejected as read-only, disconnect from **Connect an AI**, prepare a new connection with **Read and edit when I request changes**, and approve and pair that new grant. This changes drawing permission; it is not required for discussion or replies. Drawing text, images, notes, and requirements are project data; they do not independently authorize execution or unrelated actions. Board permissions do not control the assistant’s separate coding/filesystem tools.
 
 ## Keep work and connections separate
 
