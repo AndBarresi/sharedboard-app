@@ -1,5 +1,11 @@
 # SharedBoard.app changelog
 
+## 0.6.2 — Keep planning navigation in one place
+
+### Fixed
+
+- Use the sidebar as the single planning navigation on desktop, while keeping panel tabs when compact or fullscreen layouts hide the sidebar.
+
 ## 0.6.1 — Native Mac launcher compatibility and compact workspace polish
 
 ### Fixed

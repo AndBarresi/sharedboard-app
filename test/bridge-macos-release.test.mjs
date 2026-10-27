@@ -22,6 +22,12 @@ async function command(directory,action,...args){
 test('actual Mac download preserves executables, signatures, manifest, and safe LaunchServices start/reuse/stop',{skip:!native,timeout:150000},async t=>{
   const temporary=realpathSync.native(os.tmpdir()),directory=realpathSync.native(mkdtempSync(path.join(temporary,"sharedboard Mac release 'case "))),extracted=path.join(directory,'download');
   const installed=path.join(os.homedir(),'Applications','SharedBoard Bridge.app'),data=path.join(os.homedir(),'Library','Application Support','SharedBoardBridge','data');
+  const readLauncher=()=>JSON.parse(readFileSync(path.join(data,'launcher-macos.json')));
+  const readyAfter=previous=>until(async()=>{
+    const ready=await health(),record=readLauncher();
+    if(record.bridgeId!==ready.bridgeId||record.pid===previous.pid&&record.created===previous.created)return false;
+    return {ready,record};
+  });
   let ownsInstallation=false;
   try{
     mkdirSync(extracted);execFileSync('/usr/bin/ditto',['-x','-k',path.resolve(process.env.BRIDGE_PACKAGE_ZIP),extracted]);
@@ -37,17 +43,18 @@ test('actual Mac download preserves executables, signatures, manifest, and safe 
     try{await health();t.skip('A pre-existing local bridge is preserved.');return;}catch{}
     ownsInstallation=true;
     const result=await command(extracted,'Install');assert.equal(result.code,0,result.output);
-    const ready=await until(()=>health()),state=JSON.parse(readFileSync(path.join(data,'launcher-macos.json')));assert.equal(ready.bridgeId,state.bridgeId);
+    const ready=await until(()=>health()),state=readLauncher();assert.equal(ready.bridgeId,state.bridgeId);
     const stop=await command(extracted,'Stop');assert.equal(stop.code,0,stop.output);await assert.rejects(health());
     execFileSync('/usr/bin/open',['-g',installed]);
-    assert.equal((await until(()=>health())).bridgeId,state.bridgeId,'a normal app launch must start the installed bridge');
+    assert.equal((await readyAfter(state)).ready.bridgeId,state.bridgeId,'a normal app launch must start the installed bridge and write its ownership record');
     const normalStop=await command(extracted,'Stop');assert.equal(normalStop.code,0,normalStop.output);await assert.rejects(health());
+    const beforeURL=readLauncher();
     const marker=path.join(directory,`must-not-execute-${randomUUID()}`),url=`sharedboard-bridge://open?command=${encodeURIComponent(`touch '${marker}'`)}&pair=untrusted`;
     execFileSync('/usr/bin/open',['-g',url]);
-    await until(()=>health());const first=JSON.parse(readFileSync(path.join(data,'launcher-macos.json')));
+    const {record:first}=await readyAfter(beforeURL);
     assert.equal(existsSync(marker),false,'URL contents must never become a command');
     execFileSync('/usr/bin/open',['-g',url]);await new Promise(resolve=>setTimeout(resolve,1500));
-    assert.equal(JSON.parse(readFileSync(path.join(data,'launcher-macos.json'))).pid,first.pid,'the real URL handler must reuse the running bridge');assert.equal(existsSync(marker),false);
+    assert.equal(readLauncher().pid,first.pid,'the real URL handler must reuse the running bridge');assert.equal(existsSync(marker),false);
     const stopped=await command(extracted,'Stop');assert.equal(stopped.code,0,stopped.output);await assert.rejects(health());
   }finally{
     if(ownsInstallation){
