@@ -17,7 +17,7 @@ export function createCaptured(record,raw,kind,connection,at){
  const input=(kind==='chat'?chatInputSchema:captureSchema).parse(raw),list=kind==='chat'?(record.messages??=[]):(record.reviews??=[]),selectedIds=[...new Set(input.selectedIds)].sort();
  const duplicate=list.find(item=>item.id===input.id);
  if(duplicate){if(duplicate.boardRevision!==input.expectedRevision||duplicate.planningVersion!==input.expectedPlanningVersion||duplicate.scope!==input.scope||duplicate.areaId!==input.areaId||!same(duplicate.selectedIds,selectedIds)||kind==='chat'&&(duplicate.text!==input.text||duplicate.intent!==input.intent))throw browserFailure('That request ID already belongs to different content. Retry the original request.',409);return {item:duplicate,created:false};}
- if(!connection?.connected||!connection.id)throw browserFailure('Connect this board to your existing Codex chat before sending.',409,'BRIDGE_NOT_CONNECTED');
+ if(!connection?.connected||!connection.id)throw browserFailure('Connect this board to your existing AI chat before sending.',409,'BRIDGE_NOT_CONNECTED');
  if(input.boardId!==record.id)throw browserFailure('This preview belongs to another board. Prepare a new preview.');
  if(input.expectedRevision!==record.board.revision)throw browserFailure('The drawing changed before sending. Refresh the context preview.');
  if(input.expectedPlanningVersion!==record.planning.version)throw browserFailure('The planning notes changed. Refresh the context preview.');
@@ -54,5 +54,5 @@ export function prepareAgentOperation(record,operation,input={},connection,at){
   let changes;if(operation==='add'){const specs=z.array(specSchema).min(1).max(200).parse(input.elements),elements=createElements(specs);if(new Set(elements.map(e=>e.id)).size!==elements.length||elements.some(e=>record.board.elementVersions[e.id]))throw browserFailure('An object with that ID already exists. Use new IDs.');changes=elements.map(element=>({id:element.id,expectedVersion:0,element}));}else{const edits=editsSchema.parse(input.edits);if(new Set(edits.map(e=>e.id)).size!==edits.length)throw browserFailure('An object can only be edited once in a batch.',400);changes=editElements(record.board,edits);}
   return {changes,summary,operation};
  }
- throw browserFailure('This bridge operation is work in progress.',501,'HOSTED_CONNECTOR_WIP');
+ throw browserFailure('This connector operation is not supported.',501,'HOSTED_CONNECTOR_WIP');
 }

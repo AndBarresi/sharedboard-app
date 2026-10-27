@@ -21,3 +21,4 @@
 .board-chat.chat-upgraded.is-short .chat-attachment-summary>img{width:29px;height:29px}
 .board-chat.chat-upgraded.is-short .chat-context-picker>p{margin-top:5px}
 .board-chat.chat-upgraded.is-short .chat-send{padding:6px 8px}
+.chat-handoff details{margin-top:2px}.chat-handoff summary{cursor:pointer;color:#6b825b;font-size:10px}.chat-handoff details p{font-size:10px;line-height:1.6;margin:7px 0;color:#7e916e}.chat-handoff textarea{display:block;width:100%;min-height:110px;max-height:250px;resize:vertical;box-sizing:border-box;border:1px solid #d7e1cd;border-radius:7px;background:#fbfdf7;color:#40563a;padding:9px;font:10px/1.6 Inter,"Segoe UI",sans-serif}.chat-handoff textarea:focus{outline:2px solid #bccdad;outline-offset:1px}

@@ -1,5 +1,13 @@
 # SharedBoard.app changelog
 
+## 0.7.5 — Discover events and clarify chat handoff
+
+### Fixed
+
+- AI clients can discover board event types after approval and before pairing; subscribing still requires pairing.
+- Mini-chat copy actions show confirmation and selectable saved instructions when clipboard access fails.
+- Connection errors use the selected AI flow, backup guidance uses the correct menu label, and retired helper instructions are removed from earlier changelog entries.
+
 ## 0.7.4 — Recover expired connection setup
 
 ### Fixed
@@ -124,7 +132,7 @@
 
 ### Fixed
 
-- Board switching keeps grants and in-flight requests pinned to the original board; helper instructions target the correct board directory.
+- Board switching keeps grants and in-flight requests pinned to the original board.
 - Context previews and pending-review deduplication respect planning changes and empty named areas.
 - Renaming an unopened board persists correctly, and app shutdown also closes boards still starting.
 - Restore safety saves use automatic history without consuming named checkpoint slots.
