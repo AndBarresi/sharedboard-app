@@ -199,7 +199,7 @@ The next milestones are hands-on feedback on the expanded workflow, connection e
 
 Board services stay isolated inside the local app process. Browser requests use each board's stable path and private token. Local MCP setup pins WHITEBOARD_DATA_DIR to one board; helper instructions use `--data-dir` for that same directory. Switching the browser board never retargets an existing grant or an in-flight request. The app closes child board listeners when it stops.
 
-For distribution, keep application source and the dependency lockfile, and exclude `node_modules`, `data`, logs, and local runtime directories. Rebuild on the target machine. Excalidraw is MIT-licensed; retain its notices and review third-party license requirements before any release. No license for our new application code has been selected yet.
+For distribution, keep application source and the dependency lockfile, and exclude `node_modules`, `data`, logs, and local runtime directories. Rebuild on the target machine. SharedBoard.app project code uses the MIT license with copyright attributed to Andrew Barresi. Excalidraw and other third-party components retain their respective notices and licenses.
 
 ## References
 
