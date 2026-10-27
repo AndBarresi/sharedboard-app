@@ -49,7 +49,7 @@ export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,onConnect,
       <button onClick={()=>{onImportProject();setPanel(null);}}><Icon name="history"/> Restore board backup</button>
       <button onClick={()=>{onExport();setPanel(null);}}><Icon name="download"/> Export drawing (.excalidraw)</button>
       <button onClick={()=>file.current.click()}><Icon name="image"/> Import drawing</button>
-      {focused&&<button onClick={()=>{onConnect();setPanel(null);}}><Icon name="review"/>{browserOnly?'Codex connection':'AI connection'}</button>}
+      {focused&&<button onClick={()=>{onConnect();setPanel(null);}}><Icon name="review"/>{browserOnly?'AI connection':'AI connection'}</button>}
       {browserOnly&&<button onClick={()=>{onStorageDetails?.();setPanel(null);}}><Icon name="lock"/> Browser storage</button>}
       <button onClick={()=>{onReference();setPanel(null);}}><Icon name="image"/> Add screenshot reference</button>
       <button onClick={()=>{const api=getApi(),s=api.getAppState();api.updateScene({appState:{gridSize:s.gridSize?null:20}});setPanel(null);}}><Icon name="grid"/> Toggle alignment grid</button>

@@ -5,14 +5,14 @@ import * as z from 'zod/v4';
 import {same,isRenderNormalization} from '../shared/scene.mjs';
 import {APP_VERSION} from '../shared/version.mjs';
 import {browserIdSchema,browserPatchSchema,browserFailure,validateBrowserProject,validateBrowserBackup,parseBrowserBody,normalizeBrowserError,validateBrowserVisual} from './browser-validation.mjs';
-import {createBrowserBridge,validateBridgeDeadline} from './browser-bridge.mjs';
+import {createBrowserBridge,validateBridgeDeadline} from './browser-relay.mjs';
 import {createCaptured,metadata,chatView,reviewView,prepareAgentOperation} from './browser-ai.mjs';
 
 const DATABASE_VERSION=1,STORES=['meta','boards','snapshots'];
-const connectorWip='AI connections are work in progress in SharedBoard.app. This browser edition saves your boards locally; messages have not been sent to an AI.';
-const disconnected=()=>({connected:false,id:null,provider:null,label:'AI connections · WIP',permission:null,deliveryMode:null,automaticMessages:false,boardCheckedAt:null,deliveryCheckedAt:null,replyCheckedAt:null,connectedAt:null,pairingExpiresAt:null,features:{webConnectors:false,localConnectors:false,storage:'browser'},web:{phase:'locked',available:false,wip:true,provider:null,permission:null,url:null,expiresAt:null,detail:connectorWip,error:null,pending:[],chatOpen:false}});
+const connectorWip='This operation is not supported by the hosted board connection.';
+const disconnected=()=>({connected:false,id:null,provider:null,label:'Connect an AI',permission:null,deliveryMode:null,automaticMessages:false,boardCheckedAt:null,deliveryCheckedAt:null,replyCheckedAt:null,connectedAt:null,pairingExpiresAt:null,features:{webConnectors:true,localConnectors:false,storage:'browser'}});
 const reviews=()=>({requests:[],connected:false,automaticMessages:false});
-const chat=()=>({messages:[],connected:false,connectionLabel:'AI connections · WIP',automaticMessages:false});
+const chat=()=>({messages:[],connected:false,connectionLabel:'Connect an AI',automaticMessages:false});
 const clone=value=>structuredClone(value);
 const requestResult=request=>new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
 const nowIso=now=>new Date(now()).toISOString();
@@ -88,14 +88,14 @@ async function openDatabase(indexedDB,name,timeoutMs=10000){
  });
 }
 
-export async function createBrowserTransport({basePath='',indexedDB=globalThis.indexedDB,dbName='sharedboard-browser-v1',BroadcastChannel=globalThis.BroadcastChannel,origin=globalThis.location?.origin??'http://localhost',now=()=>Date.now(),randomUUID=()=>globalThis.crypto.randomUUID(),openTimeoutMs=10000,bridgeFetch=globalThis.fetch,bridgeBaseURL,bridgePollDelay=1000}={}){
+export async function createBrowserTransport({basePath='',indexedDB=globalThis.indexedDB,dbName='sharedboard-browser-v1',BroadcastChannel=globalThis.BroadcastChannel,origin=globalThis.location?.origin??'http://localhost',now=()=>Date.now(),randomUUID=()=>globalThis.crypto.randomUUID(),openTimeoutMs=10000,bridgeFetch=globalThis.fetch,bridgeWebSocket=globalThis.WebSocket,bridgeBaseURL,bridgePollDelay=1000}={}){
  let db;try{db=await openDatabase(indexedDB,dbName,openTimeoutMs);}catch(error){throw normalizeBrowserError(error);}
  const events=new BrowserEvents(),source=randomUUID();let boardId,closed=false,channel,bridge;
  const requested=basePath?(/^\/boards\/([0-9a-f-]{36})\/?$/i.exec(basePath)?.[1]??null):null;
  if(basePath&&!requested){db.close();throw browserFailure('This board address is invalid.',404);}
  const emitChanges=async({types,board:changedBoard,clientId}={})=>{
   if(closed)return;
-  try{const data=await atomic('readonly',async stores=>({catalog:checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection??disconnected()}));if(closed)return;
+  try{const data=await atomic('readonly',async stores=>({catalog:checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection??disconnected()}));if(closed)return;
    if(types.includes('board')&&changedBoard===boardId)events.emit('board',{board:data.record.board,clientId:clientId??null});
    if(types.includes('planning')&&changedBoard===boardId)events.emit('planning',planningView(data.record));
    if(types.includes('workspace'))events.emit('workspace',workspaceView(data.catalog,boardId));
@@ -134,12 +134,12 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
  }
  const renameCatalog=(catalog,id,title)=>{const board=catalog.boards.find(board=>board.id===id);if(board.title===title)return false;board.title=title;catalog.version++;return true;};
  const notify=notice=>{if(!notice.types.length||closed)return;void emitChanges(notice);channel?.postMessage({...notice,source});};
- const loadBridge=()=>atomic('readonly',async stores=>(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value??null);
- const saveBridge=async(value,{expectedToken}={})=>{const saved=await atomic('readwrite',async stores=>{const key=`bridge:${boardId}`,current=(await requestResult(stores.meta.get(key)))?.value;if(expectedToken!==undefined&&current?.browserToken!==expectedToken)return false;if(value)stores.meta.put({key,value:clone(value)});else stores.meta.delete(key);return true;});if(saved)notify({types:['connection','chat','reviews'],board:boardId});return saved;};
+ const loadBridge=()=>atomic('readonly',async stores=>(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value??null);
+ const saveBridge=async(value,{expectedToken}={})=>{const saved=await atomic('readwrite',async stores=>{const key=`relay:v1:${boardId}`,current=(await requestResult(stores.meta.get(key)))?.value;if(expectedToken!==undefined&&current?.browserToken!==expectedToken)return false;if(value)stores.meta.put({key,value:clone(value)});else stores.meta.delete(key);return true;});if(saved)notify({types:['connection','chat','reviews'],board:boardId});return saved;};
  const execute=async(command,authority)=>{
   const outcome=await atomic('readwrite',async stores=>{
    validateBridgeDeadline(command,now());
-   const privateState=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value,connection=privateState?.connection;
+   const privateState=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value,connection=privateState?.connection;
    if(privateState?.browserToken!==authority.browserToken||!connection?.connected||connection.id!==authority.connection?.id||command.connectionId&&command.connectionId!==connection.id)throw browserFailure('This board connection changed. Pair the intended board again.',403);
    const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),input=command.input??{},cacheKey=JSON.stringify({operation:command.operation,input});
    validateBridgeDeadline(command,now());
@@ -151,12 +151,12 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
    record.lastAgentAt=nowIso(now);types.add('agent');if(prepared.changes||['reply','reply_to_chat_message','complete_review','complete_review_request'].includes(command.operation))record.bridgeResults=[...(record.bridgeResults??[]),{id:command.id,connectionId:connection.id,key:cacheKey,result:clone(result)}].slice(-100);stores.boards.put(record);return {result,types:[...types]};
   });notify({types:outcome.types,board:boardId});return outcome.result;
  };
- bridge=createBrowserBridge({boardId,clientId:source,load:loadBridge,save:saveBridge,execute,fetch:bridgeFetch,baseURL:bridgeBaseURL,pollDelay:bridgePollDelay,onError:async error=>{if(error.status===409)return;const saved=await loadBridge();if(saved?.browserToken)await saveBridge({...saved,connection:{...saved.connection,connected:false,browserOnline:false,bridgeAvailable:false,bridgeError:error.message}},{expectedToken:saved.browserToken});}});
+ bridge=createBrowserBridge({boardId,clientId:source,load:loadBridge,save:saveBridge,execute,fetch:bridgeFetch,WebSocket:bridgeWebSocket,baseURL:bridgeBaseURL,pollDelay:bridgePollDelay,onError:async error=>{if(closed||error.status===409)return;const saved=await loadBridge();if(!closed&&saved?.browserToken)await saveBridge({...saved,connection:{...saved.connection,connected:false,browserOnline:false,relayAvailable:false,relayError:error.message}},{expectedToken:saved.browserToken});}});
  const connectionView=async()=>((await loadBridge())?.connection??disconnected());
  const deliver=async(kind,id,{retry=false}={})=>{
-   const pinned=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection,list=kind==='chat'?record.messages:record.reviews,item=list?.find(m=>m.id===id);if(!item)throw browserFailure('That request does not exist.',404);if(!connection?.connected||connection.id!==item.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(item.delivery==='queued'||item.delivery==='manual'&&item.handoffPrompt||['answered','reviewed'].includes(item.status))return false;if(item.delivery==='uncertain'&&connection.automaticMessages===false)throw Object.assign(browserFailure('This request has an uncertain automatic delivery. Check its original Codex conversation before sending anything again.',409,'DELIVERY_UNCERTAIN'),{deliveryUnknown:true});item.delivery='pending';delete item.deliveryError;stores.boards.put(record);return {manual:connection.automaticMessages===false,connectionId:connection.id};});
+   const pinned=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,list=kind==='chat'?record.messages:record.reviews,item=list?.find(m=>m.id===id);if(!item)throw browserFailure('That request does not exist.',404);if(!connection?.connected||connection.id!==item.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(item.delivery==='queued'||item.delivery==='manual'&&item.handoffPrompt||['answered','reviewed'].includes(item.status))return false;if(item.delivery==='uncertain'&&connection.automaticMessages===false)throw Object.assign(browserFailure('This request has an uncertain automatic delivery. Check its original Codex conversation before sending anything again.',409,'DELIVERY_UNCERTAIN'),{deliveryUnknown:true});item.delivery='pending';delete item.deliveryError;stores.boards.put(record);return {manual:connection.automaticMessages===false,connectionId:connection.id};});
    if(!pinned)return;notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});let receipt,handoffPrompt,error;try{if(pinned.manual)handoffPrompt=await bridge.handoff(kind,id);else receipt=await bridge.notify(kind,id,{retry});}catch(cause){error=cause;}
-   await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection,item=(kind==='chat'?record.messages:record.reviews).find(m=>m.id===id);if(!item||item.connectionId!==pinned.connectionId||connection?.id!==pinned.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(error){item.delivery=error.deliveryUnknown?'uncertain':'failed';item.deliveryError=error.message;}else if(pinned.manual){item.delivery='manual';item.handoffPrompt=handoffPrompt;delete item.receipt;delete item.deliveredAt;delete item.deliveryError;}else{item.delivery='queued';item.deliveredAt=nowIso(now);item.receipt=receipt;delete item.deliveryError;}stores.boards.put(record);});notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});if(pinned.manual&&error)throw error;
+   await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,item=(kind==='chat'?record.messages:record.reviews).find(m=>m.id===id);if(!item||item.connectionId!==pinned.connectionId||connection?.id!==pinned.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(error){item.delivery=error.deliveryUnknown?'uncertain':'failed';item.deliveryError=error.message;}else if(pinned.manual){item.delivery='manual';item.handoffPrompt=handoffPrompt;delete item.receipt;delete item.deliveredAt;delete item.deliveryError;}else{item.delivery='queued';item.deliveredAt=nowIso(now);item.receipt=receipt;delete item.deliveryError;}stores.boards.put(record);});notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});if(pinned.manual&&error)throw error;
  };
  const request=async(route,options={})=>{
   try{
@@ -165,16 +165,18 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
    if(url.origin!==new URL(origin).origin)throw browserFailure('Only this browser workspace can be accessed.',403);
    if(pathname==='/api/connection'&&method==='GET')return connectionView();
    if(pathname==='/api/connection/detect'&&method==='GET')return bridge.detect();
+   if(pathname==='/api/connection/oauth-request'&&method==='GET')return bridge.oauthRequest(url.searchParams.get('id'));
+   if(pathname==='/api/connection/approve'&&method==='POST')return bridge.approve(input);
    if(pathname==='/api/connection/pairing'&&method==='POST'){const title=await atomic('readonly',async stores=>checkRecord(await requestResult(stores.boards.get(boardId)),boardId).planning.project.title);return bridge.pair(input,title);}
    if(['/api/connection/disconnect','/api/connection/cancel'].includes(pathname)&&method==='POST'){await bridge.disconnect();return disconnected();}
    if(pathname==='/api/connection/web/stop'&&method==='POST')return disconnected();
-   if(['/api/chat','/api/reviews'].includes(pathname)&&method==='GET')return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection;return pathname==='/api/chat'?chatView(record,connection):reviewView(record,connection);});
+   if(['/api/chat','/api/reviews'].includes(pathname)&&method==='GET')return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection;return pathname==='/api/chat'?chatView(record,connection):reviewView(record,connection);});
    if(['/api/chat','/api/reviews'].includes(pathname)&&method==='POST'){
-     const kind=pathname==='/api/chat'?'chat':'review',created=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection,out=createCaptured(record,input,kind,connection,nowIso(now));if(out.created)stores.boards.put(record);return {id:out.item.id,created:out.created,needsHandoff:connection?.automaticMessages===false&&!out.item.handoffPrompt&&!['answered','reviewed'].includes(out.item.status)};});
+     const kind=pathname==='/api/chat'?'chat':'review',created=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,out=createCaptured(record,input,kind,connection,nowIso(now));if(out.created)stores.boards.put(record);return {id:out.item.id,created:out.created,needsHandoff:connection?.automaticMessages===false&&!out.item.handoffPrompt&&!['answered','reviewed'].includes(out.item.status)};});
      if(created.created||created.needsHandoff){notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});await deliver(kind,created.id);}
-    return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection;return kind==='chat'?chatView(record,connection):{request:metadata(record.reviews.find(r=>r.id===created.id)),connected:Boolean(connection?.connected),automaticMessages:Boolean(connection?.automaticMessages)};});
+    return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection;return kind==='chat'?chatView(record,connection):{request:metadata(record.reviews.find(r=>r.id===created.id)),connected:Boolean(connection?.connected),automaticMessages:Boolean(connection?.automaticMessages)};});
    }
-   if(['/api/chat/retry','/api/reviews/retry'].includes(pathname)&&method==='POST'){const id=safeUuid(input.id),kind=pathname==='/api/chat/retry'?'chat':'review';await deliver(kind,id,{retry:true});return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection;return kind==='chat'?chatView(record,connection):reviewView(record,connection);});}
+   if(['/api/chat/retry','/api/reviews/retry'].includes(pathname)&&method==='POST'){const id=safeUuid(input.id),kind=pathname==='/api/chat/retry'?'chat':'review';await deliver(kind,id,{retry:true});return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection;return kind==='chat'?chatView(record,connection):reviewView(record,connection);});}
    if(pathname.startsWith('/api/connection/')||pathname.startsWith('/api/agent/')||pathname.startsWith('/api/chat')||pathname.startsWith('/api/reviews')||pathname==='/api/proposal')throw browserFailure(connectorWip,501,'HOSTED_CONNECTOR_WIP');
    const readOnly=method==='GET'||['/api/presence'].includes(pathname)||['/api/checkpoint','/api/recovery'].includes(pathname)&&input.action==='read';
    const outcome=await atomic(readOnly?'readonly':'readwrite',async stores=>{
@@ -189,7 +191,7 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
      await recovery('Before restoring the board',true);const project=validateBrowserProject(snapshot.project),patch=restoreChanges(record.board,snapshot,now);drawing({...patch,summary});record.planning.project=project;record.planning.version++;writePlanning();rename(project.title);return {revision:record.board.revision};
     };
     if(pathname==='/api/session'&&method==='GET')result={boardId};
-    else if(pathname==='/api/health'&&method==='GET')result={ok:true,name:'shared-board',product:'SharedBoard.app',version:APP_VERSION,revision:record.board.revision,features:{storage:'browser',webConnectors:false,localConnectors:false}};
+    else if(pathname==='/api/health'&&method==='GET')result={ok:true,name:'shared-board',product:'SharedBoard.app',version:APP_VERSION,revision:record.board.revision,features:{storage:'browser',webConnectors:true,localConnectors:false}};
     else if(pathname==='/api/board'&&method==='GET')result=record.board;
     else if(pathname==='/api/planning'&&method==='GET')result=planningView(record);
     else if(pathname==='/api/workspaces'&&method==='GET')result=workspaceView(catalog,boardId);
@@ -243,9 +245,10 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
  // Attach listeners before taking this snapshot, so a tab cannot miss a write
  // committed between its initial reads and subscription to browser events.
  const ready=async()=>{
-  if((await loadBridge())?.browserToken)await bridge.status();
-  const snapshot=await atomic('readonly',async stores=>({catalog:checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`bridge:${boardId}`)))?.value?.connection??disconnected()}));
-  if(!closed){events.emit('connected',{board:snapshot.record.board,planning:planningView(snapshot.record),workspace:workspaceView(snapshot.catalog,boardId),connection:snapshot.connection,reviews:reviewView(snapshot.record,snapshot.connection),chat:chatView(snapshot.record,snapshot.connection),lastAgentAt:snapshot.record.lastAgentAt??null});bridge.start();}
+  // Network checks run after the drawing opens. Never invalidate another live
+  // tab's shared grant merely because this tab is opening the same board.
+  const snapshot=await atomic('readonly',async stores=>({catalog:checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection??disconnected()}));
+  if(!closed){events.emit('connected',{board:snapshot.record.board,planning:planningView(snapshot.record),workspace:workspaceView(snapshot.catalog,boardId),connection:snapshot.connection,reviews:reviewView(snapshot.record,snapshot.connection),chat:chatView(snapshot.record,snapshot.connection),lastAgentAt:snapshot.record.lastAgentAt??null});bridge.start();void bridge.status();}
  };
  return {request,events,close,boardId,ready,detectBridge:()=>bridge.detect(),bridgeStatus:()=>bridge.status()};
 }

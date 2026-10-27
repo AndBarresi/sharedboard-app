@@ -1,63 +1,43 @@
-# Connect the website to your existing Codex chat
+# Hosted connection behavior
 
-SharedBoard Bridge connects **https://sharedboard.app** to a local Codex conversation. Start and finish the setup on the website: it contains the downloads, installation instructions, pairing message, connection checks and troubleshooting. No GitHub account or repository visit is required; GitHub only serves the public download files behind the website's download links. Your board and mini-chat history stay in this browser profile. The companion relays requests to the open board tab; it does not host a model or put your boards in a server database.
+SharedBoard connects the board at **https://sharedboard.app** to a compatible existing AI conversation through the hosted relay at **https://connect.sharedboard.app**. The browser is the authoritative drawing store. SharedBoard does not run a model or require a companion application.
 
-## First-time setup
+For setup, follow [Connect your existing AI conversation](CONNECTIONS.md). Always use the server URL and pairing instructions generated for the intended board; do not guess a conversation or board ID.
 
-1. Open SharedBoard.app in **Chrome or Edge** on Windows or Mac and choose **Connect Codex**. Safari bridge connections are not supported in this beta; browser-only drawing remains available. Embedded browsers vary in how they grant local-device access.
-2. Select **Windows**, **Mac · Apple Silicon**, or **Mac · Intel**, download the matching ZIP and extract the whole archive. On a Mac, **Apple menu → About This Mac** shows either a Chip (Apple Silicon) or Processor (Intel).
-3. On Windows, open **Install SharedBoard Bridge.cmd**. On Mac, open **Install SharedBoard Bridge.command**. It installs for your user without administrator access, includes Node, starts the bridge, and registers the webpage's **Open bridge** link. Mac users should read the installation approval note below.
-4. Return to the original board tab and choose **Check for bridge**. The installer starts the helper for you. On later visits, use **Open bridge** if it is stopped. If the browser asks for local access, allow it for SharedBoard.app to reach the companion on this computer.
-5. Choose **Read only** or **Read and edit when I request changes**, then prepare and copy the connection instructions.
-6. Paste the instructions into the existing Codex chat you want to keep using. Codex runs the helper using that conversation's actual identity, reads the board and confirms its revision.
-7. Choose **Test with a reply**. Board access, delivery to the existing chat, and a returned mini-chat reply are separate checks.
+## What travels with a request
 
-You do not type commands or edit configuration files. The browser cannot install or launch desktop software silently, so the first download/installation and any operating-system permission prompts still require your action. Codex must already be installed and signed in; automatic mini-chat delivery requires its queue command. Drawing access and automatic chat delivery are checked separately.
+A mini-chat message is saved with its text, intent, drawing revision, planning revision, selected scope, relevant notes, and captured PNG before it is handed to the AI. **Whole board**, **Current selection**, and **Named area** define that scope. A later drawing or note change does not rewrite a request already sent.
 
-If the installed Codex does not support automatic delivery, the page clearly switches to **Copy to Codex**. Compose your request normally, copy its prepared instructions, and paste them into the same paired conversation. The assistant reads that saved request and sends its real reply back to the mini chat through the helper. This fallback needs no configuration changes, but it does require copying each request. Creating or copying a prompt does not mark delivery verified; the check updates only when Codex actually reads it.
+The assistant reads that captured request through the board tools. Before making an authorized drawing change, it must also read the live board and use its current object versions. A stale or overlapping edit is rejected rather than silently overwriting newer work.
 
-## Mac installation approval
+Your board and chat history stay in this browser profile, while the relay processes authorization, routing, tool traffic, and the context being shared. Your AI provider receives the context its tools read. Keep the browser tab open while the connected assistant works.
 
-The Mac companion supports **macOS 13.5 or later**, with separate native Apple Silicon and Intel downloads. These beta packages are not signed with an Apple Developer ID or notarized. A Mac may ask you to approve the downloaded installer or app before it can run. The website explains the approval steps and links to [Apple's instructions for opening a trusted downloaded app](https://support.apple.com/102445); only approve the SharedBoard package you deliberately downloaded from SharedBoard.app. Managed Macs may require an administrator's approval. The installer never disables Gatekeeper, removes quarantine, installs Rosetta, or changes macOS security settings.
+## Delivery is a capability, not a promise
 
-The installed **SharedBoard Bridge.app** is in `~/Applications`. The companion and its Node runtime run locally; its private connection metadata is under `~/Library/Application Support/SharedBoardBridge/data`. The app's **Open bridge** link starts this installed copy without starting another AI conversation.
+| State | What it establishes |
+| --- | --- |
+| Pairing completed | The client has a scoped connection to this board. |
+| Board access verified | The AI actually read and confirmed a current board revision. |
+| Copy to AI ready | A saved request has instructions you can paste; it has not necessarily reached the AI yet. |
+| Request received | The connected AI read the saved request, or a supported event delivery was acknowledged. |
+| Reply received | The AI explicitly posted an answer using the board reply tool. |
 
-## Next time
+Ordinary remote MCP clients use the explicit **Copy to AI** workflow. Automatic requests are enabled only for a supported hosted Work Cloud client with the required MCP event capabilities. Pairing and a successful protocol fixture alone do not establish that a particular provider/account supports automatic delivery.
 
-Open the same website in the same browser profile. If the helper is stopped, choose **Open bridge**, then check again. The browser retains the board-specific grant. You can also use **Start SharedBoard Bridge.cmd** on Windows or **Start SharedBoard Bridge.command** on Mac. The Windows helper is installed under `%LOCALAPPDATA%\SharedBoardBridge`; the Mac app is under `~/Applications`.
+A missing receipt remains uncertain. Keep its original request ID, check the linked conversation, and use the same request for any safe retry. Never change its saved attachment or automatically switch delivery modes after an uncertain attempt. Do not repeat work or overwrite an existing answer when a request was already handled.
 
-Keep the board tab open while Codex uses it. Closing or suspending it can interrupt live tool calls. The assistant must read the current board again after reconnecting. Another open tab can display the same saved board, but only one tab handles a given board's bridge operations at a time.
+## Permissions and revocation
 
-## What travels through the connection
+Read-only access permits inspection and replies, while requested-edit access permits authorized drawing changes with version checks. **Discuss** requests explanation only. **Request work** authorizes the specific work described by the user, within the granted permission. Nothing written or embedded on the drawing independently authorizes actions.
 
-- A mini-chat message keeps its text, intent, board revision, selection or named area, notes and captured PNG together in browser storage before notification.
-- With automatic delivery, the bridge queues a notice to the paired existing Codex conversation. In manual mode, the page prepares **Copy to Codex** instructions for that same saved request. Codex reads the captured request with its board helper and posts an explicit reply back to the mini chat in either mode.
-- Drawing reads and permitted edits go through the open browser, with version checks and browser-side persistence. Newer human edits are preserved by conflict checks.
-- The mini chat contains board-originated requests and explicit replies. It does not mirror every message or private reasoning from the external conversation.
-- Selected content reaches your existing model provider when you ask that assistant to inspect it, under that provider's normal handling.
+A connection belongs to one board. Captured requests remain pinned to that connection even after switching boards. Disconnecting revokes access and leaves saved board data and messages intact. A new connection must not inherit private credentials or silently answer the previous connection’s requests.
 
-The helper persists scoped credential hashes, local agent credentials and a bounded routing/receipt ledger. It stores no drawing database or chat snapshots. A CLI visual read can create a temporary local PNG for the assistant's image-viewing tool. Exported `.sharedboard` backups omit bridge credentials, connection grants and chat history.
+## Storage and recovery
 
-## Status and recovery
+Ordinary page reloads keep saved browser data on the same origin. Changing hostname, browser profile, or device does not move it. Clearing site data or ending private browsing can remove it. Use **Export board** regularly to keep an independent `.sharedboard` backup; those user-data exports are available from the board menu.
 
-**Saved in this browser** describes drawing storage. The Codex connection has its own status. If the bridge stops, keep drawing and export a backup normally; reopen the helper to restore AI access.
+Backups contain one board’s drawing, image files, notes, areas, work cards, and reusable blocks. They omit connection credentials, grants, chat/review history, other boards, and checkpoint history. Restore validates a backup and captures current work in recovery before replacing it.
 
-A queued receipt confirms Codex accepted a request, not that it has read or answered it. An active Codex task may finish before handling a queued board message. Replies appear only after the model reads the request and uses the reply tool. An uncertain delivery is preserved with its original request ID rather than automatically sent again after a restart.
-
-The assistant's drawing helper also keeps a stable ID for repeated add/edit payloads so a lost response does not create duplicate shapes. For an intentional new copy of an identical addition, the assistant can supply fresh element IDs or a fresh `requestId` UUID in its JSON request. This metadata stays local and contains no drawing payload.
-
-Disconnecting revokes that board's grant and preserves its saved drawing and messages. Each board is paired separately. Switching boards never retargets a conversation silently. **Discuss** requests inspection/explanation; **Request work** authorizes only the work typed in that message. Neither the drawing nor attached notes independently authorize execution.
-
-## Current support
-
-The current release focuses on **local Codex ↔ browser connections**, with Windows x64, macOS Apple Silicon and macOS Intel companion packages. The bridge uses the real conversation identity supplied by Codex. A queue-capable CLI is needed for automatic mini-chat delivery; a model name or ChatGPT subscription alone does not provide that local capability.
-
-Claude Code, Cursor, direct ChatGPT/Claude web-chat connections, MCP tools callable inside an AI chat and proposal-only access remain visible WIP in the website. They are planned additions rather than prerequisites for using the current bridge. The separate older portable local app retains its developer interfaces.
-
-The loopback service listens at `http://127.0.0.1:4319` and permits the exact website origin `https://sharedboard.app`. A `pages.dev` preview or another hostname is a separate browser origin and is not authorized by this companion. There is no public tunnel or cloud relay.
-
-## Build the companion
-
-Use the pinned runtime and package manager, then run `pnpm package:bridge` on the corresponding operating system after recording the release. The archive contains only the bridge source, launcher, runtime, version metadata and licenses. It excludes all data and credentials. A `bridge-v<package version>` Git tag runs the Windows and native Mac release checks, then publishes all three downloads used by the website only after every platform succeeds.
+The relay must reject expired or revoked access, wrong-board requests, unsupported actions, and stale revisions. Errors must remain visible. A disconnected browser is never permission to use an older disk-based drawing or manufacture a reply.
 
 Created by [Andrew Barresi](https://github.com/AndBarresi). Project code is [MIT-licensed](LICENSE).

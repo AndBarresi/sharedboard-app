@@ -1,2 +1,2 @@
-# Browser-owned boards use one static application; there are no server routes.
+# Browser-owned boards use one static application. The connector has its own origin.
 /boards/* / 200
