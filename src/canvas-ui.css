@@ -25,3 +25,7 @@
 @media(max-width:800px){.tool-button{width:32px;min-width:32px}.drawing-dock{top:12px;max-width:calc(100% - 16px)}.shared-toolbar{padding:5px;border-radius:12px}.tool-scroll{max-width:calc(100vw - 248px)}.drawing-dock .tool-divider{margin:0 1px}.drawing-dock .tool-button[aria-label="Undo"],.drawing-dock .tool-button[aria-label="Redo"]{display:none}.board-chat{right:12px;bottom:12px;width:min(374px,calc(100% - 24px));height:min(560px,calc(100% - 80px))}.chat-bubble{right:16px;bottom:16px}.dock-panel{top:59px;max-width:calc(100vw - 28px)}.save-state{display:none}.mobile-practice{display:none!important}}
 @media(max-height:540px){.board-chat{height:calc(100% - 70px);bottom:8px}.chat-header{padding:10px 14px}.chat-composer{padding:9px}.chat-composer textarea{min-height:45px}.chat-welcome{padding:0}.chat-welcome>span{display:none}.chat-welcome h3{font-size:14px}.chat-welcome p{font-size:11px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+.drawing-dock:has(.dock-panel){z-index:22}
+.drawing-dock .dock-panel{max-height:calc(100dvh - 220px)}
+@media(max-width:800px){.drawing-dock .dock-panel{max-height:calc(100dvh - 196px)}}
+.is-focused .drawing-dock .dock-panel{max-height:calc(100dvh - 112px)}

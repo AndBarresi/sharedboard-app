@@ -1,5 +1,13 @@
 # SharedBoard.app changelog
 
+## 0.7.6 — Consistent UI spacing and compact layouts
+
+### Fixed
+
+- Simplified AI provider choices and separated connection help from setup actions, with consistent instruction and field sizing.
+- Kept modal headings and close controls visible, wrapped long titles, and stacked narrow-screen action buttons.
+- Improved short-window canvas, object navigator, chat setup, and toolbar menus so controls stay clear of nearby elements.
+
 ## 0.7.5 — Discover events and clarify chat handoff
 
 ### Fixed
