@@ -14,7 +14,7 @@ const wait=async check=>{const deadline=Date.now()+10000;while(Date.now()<deadli
 
 test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK MCP round-trip without a local companion',{timeout:60000},async()=>{
  const bundle=await build({entryPoints:[`${root}cloudflare/worker.mjs`],bundle:true,format:'esm',platform:'neutral',target:'es2022',conditions:['workerd','worker','browser'],external:['node:*'],write:false,logLevel:'silent'});
- const mfOptions=convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat'],bindings:{RELAY_ORIGIN:origin,APP_ORIGIN:appOrigin,EVENT_CALLBACK_ORIGINS:''},durableObjects:{BOARD_RELAY:{className:'BoardRelay',useSQLite:true},RELAY_AUTH:{className:'RelayAuth',useSQLite:true}},durableObjectsPersist:false}),mf=new Miniflare(mfOptions);
+ const mfOptions=convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat','enable_request_signal','request_signal_passthrough'],bindings:{RELAY_ORIGIN:origin,APP_ORIGIN:appOrigin,EVENT_CALLBACK_ORIGINS:''},durableObjects:{BOARD_RELAY:{className:'BoardRelay',useSQLite:true},RELAY_AUTH:{className:'RelayAuth',useSQLite:true}},durableObjectsPersist:false}),mf=new Miniflare(mfOptions);
  let browser,client,reopened;const sockets=new Set();
  const dispatch=async(input,init)=>{const request=new Request(input,init);return mf.dispatchFetch(request.url,{method:request.method,headers:Object.fromEntries(request.headers),...(request.method==='GET'||request.method==='HEAD'?{}:{body:await request.arrayBuffer()}),redirect:request.redirect,signal:request.signal});};
  // Keep browser acceptance traffic separate from the setup-validation actor's
@@ -96,7 +96,10 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
    assert.equal((await panelCall('panel_detach')).structuredContent.linked,false);assert.equal((await browser.bridgeStatus()).automaticMessages,false);
    // Exercise a genuine pending SDK tool through workerd, then browser-owned
    // captures and replies. This proves transport behavior, not model compliance.
-   const firstWait=readCall('wait_for_board_request',{waitMs:5000});
+   // Exercise the full real default-sized empty wait once, not only requests
+   // delivered immediately after a five-second wait starts.
+   const timeoutResult=await readCall('wait_for_board_request',{waitMs:provider==='codex'?40000:20});assert.ok(!timeoutResult.isError,JSON.stringify(timeoutResult));assert.equal(timeoutResult.structuredContent.status,'timeout');assert.deepEqual(timeoutResult.structuredContent.requests,[]);assert.equal((await browser.bridgeStatus()).automaticMessages,false);
+   const firstWait=readCall('wait_for_board_request',{sessionId:timeoutResult.structuredContent.sessionId,waitMs:5000});
    await wait(async()=>(await browser.bridgeStatus())?.liveSession?.status==='waiting');
    const listening=await browser.bridgeStatus();assert.equal(listening.automaticMessages,true);assert.equal(listening.deliveryMode,'live-session');const liveSessionId=listening.liveSession.id;
    const liveInput={...readMessage,id:crypto.randomUUID(),text:`Live ${provider} captured discussion`,automaticRequired:true};

@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.10.1 — Live-session cancellation and connection diagnostics
+
+### Fixed
+
+- Propagate cancelled requests through the hosted relay and report fixed diagnostic codes without exposing private error details.
+- Pairing instructions start an explicitly authorized finite live session and explain its time and usage limits.
+
 ## 0.10.0 — Experimental live AI collaboration
 
 ### Added

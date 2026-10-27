@@ -1,6 +1,15 @@
 {
-  "version": "0.10.0",
+  "version": "0.10.1",
   "entries": [
+    {
+      "version": "0.10.1",
+      "title": "Live-session cancellation and connection diagnostics",
+      "added": [],
+      "fixed": [
+        "Propagate cancelled requests through the hosted relay and report fixed diagnostic codes without exposing private error details.",
+        "Pairing instructions start an explicitly authorized finite live session and explain its time and usage limits."
+      ]
+    },
     {
       "version": "0.10.0",
       "title": "Experimental live AI collaboration",
@@ -289,5 +298,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "46b7121c65a333ef48759345d8191cc85ae441e7a295c00b05661960c3935ef5"
+  "sourceHash": "040ecb55a05cbdb40915b0cdb6c097cb9833f27cb57cef7da30a3db17d39a2fb"
 }

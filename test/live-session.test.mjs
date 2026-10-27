@@ -82,3 +82,10 @@ test('a committed request wins over its former wait timeout without forwarding t
  f.storage.transaction=async operation=>{const result=await original(operation);if(result?.waiter&&result?.receipt){entered();await gate;}return result;};
  const input=request(active.state.id),queued=f.live.queue(input);await entering;await f.advance(40_000);release();await queued;const result=await active.pending;assert.equal(result.status,'request');assert.equal(result.requests[0].id,input.id);assert.equal((await f.storage.get(f.live.key)).requests.length,1);assert.equal((await f.live.status()).status,'processing');assert.equal(f.timers.size,0);
 });
+
+test('preparation and activation failures report fixed safe phases without persisting exception details',async()=>{
+ for(const [error,suffix] of [[new TypeError('PRIVATE TYPE DETAIL'),'TYPE_ERROR'],[new DOMException('PRIVATE ABORT DETAIL','AbortError'),'CANCELLED'],[new Error('PRIVATE UNKNOWN DETAIL'),'RUNTIME_ERROR']]){
+  const f=fixture();f.storage.transaction=async()=>{throw error;};await assert.rejects(f.live.wait({waitMs:1}),cause=>cause.code===`LIVE_WAIT_PREPARE_${suffix}`&&!cause.message.includes('PRIVATE'));assert.equal(f.live.waiter,null);assert.equal(JSON.stringify([...f.storage.map]).includes('PRIVATE'),false);
+ }
+ const f=fixture({setTimer(){throw new TypeError('PRIVATE TIMER DETAIL');}});await assert.rejects(f.live.wait({waitMs:1}),error=>error.code==='LIVE_WAIT_ACTIVATE_TYPE_ERROR'&&!error.message.includes('PRIVATE'));assert.equal(f.live.waiter,null);assert.equal((await f.live.status()).status,'processing');
+});

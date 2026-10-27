@@ -41,7 +41,7 @@ export class LiveSession{
   if(signal?.aborted)throw new DOMException('The live-session wait was cancelled.','AbortError');
   if(this.waiter)throw fail('This conversation already has a live wait in progress.',409,'LIVE_WAIT_IN_PROGRESS');
   let resolve;const promise=new Promise(yes=>{resolve=yes;}),waiter={id:crypto.randomUUID(),sessionId:sessionId??null,ready:false,cancelled:false,signal,resolve,promise};this.waiter=waiter;
-  try{
+  let phase='PREPARE';try{
    const prepared=await this.storage.transaction(async transaction=>{
     const state=await this.load(transaction);let session=state.session;
     if(sessionId&&(!session||sessionId!==session.id))throw fail('That live session belongs to a different connection or was replaced.',409,'LIVE_SESSION_REPLACED');
@@ -52,14 +52,14 @@ export class LiveSession{
     }
     session.status='waiting';session.waitId=waiter.id;session.waitExpiresAt=Math.min(this.now()+waitMs,session.expiresAt);await transaction.put(this.key,state);return {session};
    });
-   if(prepared.terminal){this.settle(waiter,prepared.terminal);return prepared.terminal;}
+   phase='ACTIVATE';if(prepared.terminal){this.settle(waiter,prepared.terminal);return prepared.terminal;}
    waiter.sessionId=prepared.session.id;waiter.expiresAt=prepared.session.expiresAt;waiter.ready=true;
    if(this.waiter!==waiter)return promise;
    if(this.closed||waiter.cancelled){await this.finish(waiter,'stopped');return promise;}
    waiter.abort=()=>{waiter.cancelled=true;void this.finish(waiter,'stopped');};signal?.addEventListener('abort',waiter.abort,{once:true});
    waiter.timer=(this.options.setTimer??setTimeout)(()=>this.finish(waiter,'timeout'),Math.max(0,prepared.session.waitExpiresAt-this.now()));
    if(signal?.aborted)waiter.abort();await this.changed();return promise;
-  }catch(error){if(this.waiter===waiter){this.waiter=null;(this.options.clearTimer??clearTimeout)(waiter.timer);if(waiter.abort)signal?.removeEventListener('abort',waiter.abort);}throw error;}
+  }catch(error){if(this.waiter===waiter){this.waiter=null;(this.options.clearTimer??clearTimeout)(waiter.timer);if(waiter.abort)signal?.removeEventListener('abort',waiter.abort);}if(typeof error?.code==='string'&&error.code.startsWith('LIVE_'))throw error;const category=error?.name==='AbortError'?'CANCELLED':error?.name==='TypeError'?'TYPE_ERROR':'RUNTIME_ERROR';throw fail('Live collaboration could not prepare or activate its bounded wait.',500,`LIVE_WAIT_${phase}_${category}`);}
  }
  async queue(input){
   if(this.closed)throw stopped();

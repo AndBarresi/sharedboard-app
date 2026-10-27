@@ -65,9 +65,45 @@ test('invalid, cross-session, and failed backend results fail closed without exp
   ()=>value({expiresAt:secret}),
  ]){
   const f=fixture(callback),result=await f.call({sessionId});
-  assert.equal(result.isError,true);assert.equal(result.structuredContent,undefined);assert.equal(JSON.stringify(result).includes(secret),false);
+  assert.equal(result.isError,true);assert.deepEqual(Object.keys(result.structuredContent),['code']);assert.equal(JSON.stringify(result).includes(secret),false);
   assert.match(result.content[0].text,/Do not restart the session or replay requests automatically/);assert.equal(f.calls.length,1);
  }
+});
+
+test('wait failures expose only a fixed diagnostic code and preserve the stop instruction',async()=>{
+ const secret='private-code-message-token-capture';
+ const cases=[
+  [{code:'LIVE_WAIT_IN_PROGRESS'},'LIVE_WAIT_IN_PROGRESS'],
+  [{code:'LIVE_SESSION_REQUIRED'},'LIVE_SESSION_REQUIRED'],
+  [{code:'LIVE_STORAGE_UNAVAILABLE'},'LIVE_STORAGE_UNAVAILABLE'],
+  [{code:'BROWSER_OFFLINE'},'BROWSER_OFFLINE'],
+  [{code:'CONNECTION_REPLACED'},'CONNECTION_REPLACED'],
+  [{code:'PAIRING_REQUIRED'},'PAIRING_REQUIRED'],
+  [{code:'LIVE_WAIT_TYPE_ERROR'},'LIVE_WAIT_TYPE_ERROR'],
+  [{code:'LIVE_WAIT_CANCELLED'},'LIVE_WAIT_CANCELLED'],
+  [{code:'LIVE_WAIT_RUNTIME_ERROR'},'LIVE_WAIT_RUNTIME_ERROR'],
+  ...['PREPARE','ACTIVATE'].flatMap(phase=>['TYPE_ERROR','CANCELLED','RUNTIME_ERROR'].map(kind=>[{code:`LIVE_WAIT_${phase}_${kind}`},`LIVE_WAIT_${phase}_${kind}`])),
+  [{name:'AbortError',code:secret},'LIVE_WAIT_CANCELLED'],
+  [{code:secret},'LIVE_BACKEND_FAILED'],
+  [{code:'LIVE_'+secret},'LIVE_BACKEND_FAILED'],
+  [{code:-32603},'LIVE_BACKEND_FAILED'],
+ ];
+ for(const [fields,code] of cases){
+  const f=fixture(()=>{throw Object.assign(new Error(secret),fields,{details:{token:secret}});}),result=await f.call({});
+  assert.equal(result.isError,true);assert.deepEqual(result.structuredContent,{code});
+  assert.match(result.content[0].text,new RegExp('Diagnostic code: '+code+'\\.'));
+  assert.match(result.content[0].text,/Do not restart the session or replay requests automatically/);
+  assert.equal(JSON.stringify(result).includes(secret),false);assert.equal(f.calls.length,1);
+ }
+ const runtime=await fixture(()=>{throw new TypeError(secret);}).call({});
+ assert.deepEqual(runtime.structuredContent,{code:'LIVE_WAIT_TYPE_ERROR'});assert.equal(JSON.stringify(runtime).includes(secret),false);
+ for(const raw of [null,value({sessionId:secret}),value({status:'request',requests:[]})]){
+  const result=await fixture(()=>raw).call({});
+  assert.equal(result.isError,true);assert.deepEqual(result.structuredContent,{code:'LIVE_RESULT_INVALID'});
+  assert.equal(JSON.stringify(result).includes(secret),false);
+ }
+ const replaced=await fixture(()=>value({sessionId:'55555555-5555-4555-8555-555555555555'})).call({sessionId});
+ assert.deepEqual(replaced.structuredContent,{code:'LIVE_RESULT_INVALID'});
 });
 
 test('actual MCP SDK legacy and current MCP 2 envelopes discover and call a normal non-UI waiting tool',async()=>{
