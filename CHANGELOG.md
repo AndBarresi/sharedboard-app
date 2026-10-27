@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.7.3 — Reliable message and review delivery checks
+
+### Fixed
+
+- Handled chat and review event subscriptions independently, preserving safe retries when one subscription expires.
+- Verified message receipt only after the AI successfully reads its captured request, separately from its eventual reply.
+
 ## 0.7.2 — Consistent deployment sources
 
 ### Fixed

@@ -1,6 +1,15 @@
 {
-  "version": "0.7.2",
+  "version": "0.7.3",
   "entries": [
+    {
+      "version": "0.7.3",
+      "title": "Reliable message and review delivery checks",
+      "added": [],
+      "fixed": [
+        "Handled chat and review event subscriptions independently, preserving safe retries when one subscription expires.",
+        "Verified message receipt only after the AI successfully reads its captured request, separately from its eventual reply."
+      ]
+    },
     {
       "version": "0.7.2",
       "title": "Consistent deployment sources",
@@ -177,5 +186,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "e164cf9291f41c0665352302ad0849017a8483328f873dacec6e57fdb52c166f"
+  "sourceHash": "c7edbf3468f92df90a8725027566958f8839bef55ac41fa641ae42b865bbf983"
 }

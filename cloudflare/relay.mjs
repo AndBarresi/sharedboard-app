@@ -68,7 +68,7 @@ export class BoardRelay{
     await this.authorized(input.grant,{connected:input.operation!=='pair'&&input.operation!=='connection'});if(input.operation==='pair')return json(await this.activate(input.input??{},input.grant));if(input.operation==='connection')return json(await this.connection());
     const args=input.input??{},operation=aliases[input.operation]??input.operation;let requestId=args.requestId;const clean={...args};delete clean.requestId;
     if(requestId)uuid(requestId,'request ID');else if(writes.has(operation))requestId=(await hash(`${this.meta.id}:${JSON.stringify(stable({operation,input:clean}))}`)).slice(0,32); // Stable retries; new copies must use new element IDs or requestId.
-    const result=await this.rpc(operation,clean,requestId);await this.authorized(input.grant);if(operation==='confirm'){this.meta.boardCheckedAt=new Date().toISOString();await this.save();await this.publish();}if(operation==='reply'){this.meta.replyCheckedAt=new Date().toISOString();await this.save();await this.publish();}return json(result);
+    const result=await this.rpc(operation,clean,requestId);await this.authorized(input.grant);const checkedField={confirm:'boardCheckedAt',chat:'deliveryCheckedAt',review:'deliveryCheckedAt',reply:'replyCheckedAt'}[operation];if(checkedField){this.meta[checkedField]=new Date().toISOString();await this.save();await this.publish();}return json(result);
    }
    if(url.pathname==='/agent/events'){await this.authorized(input.grant);const result=await handleEventRpc(input.method,input.params??{},this.eventContext());await this.publish();return json(result);}
    throw fail('Unknown connector operation.',404);
