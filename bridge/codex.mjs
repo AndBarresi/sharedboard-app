@@ -2,14 +2,44 @@
 // Copyright (c) 2026 Andrew Barresi
 // Licensed under the MIT License. See LICENSE.
 import {spawn} from 'node:child_process';
-import {existsSync,readdirSync,statSync} from 'node:fs';
+import {existsSync,readdirSync,statSync,accessSync,constants} from 'node:fs';
+import {homedir} from 'node:os';
 import path from 'node:path';
 
-export function findCodexExecutable({env=process.env,platform=process.platform}={}){
- const executable=platform==='win32'?'codex.exe':'codex',candidates=[env.CODEX_CLI_PATH];
- for(const directory of (env.PATH??'').split(path.delimiter))if(directory)candidates.push(path.join(directory,executable));
- if(platform==='win32'&&env.LOCALAPPDATA){const root=path.join(env.LOCALAPPDATA,'OpenAI','Codex','bin');try{for(const entry of readdirSync(root).filter(name=>!name.startsWith('.')).sort((a,b)=>statSync(path.join(root,b)).mtimeMs-statSync(path.join(root,a)).mtimeMs))candidates.push(path.join(root,entry,executable));}catch{}}
- return candidates.find(candidate=>{try{return candidate&&path.isAbsolute(candidate)&&path.basename(candidate).toLowerCase()===executable&&existsSync(candidate)&&statSync(candidate).isFile();}catch{return false;}})??null;
+const localFileSystem={existsSync,readdirSync,statSync,accessSync};
+
+export function codexExecutableCandidates({env=process.env,platform=process.platform,homeDirectory=homedir(),fileSystem=localFileSystem}={}){
+ const paths=platform==='win32'?path.win32:path.posix,executable=platform==='win32'?'codex.exe':'codex',candidates=[env.CODEX_CLI_PATH];
+ for(const directory of (env.PATH??'').split(platform==='win32'?';':':'))if(directory&&paths.isAbsolute(directory))candidates.push(paths.join(directory,executable));
+ if(env.CODEX_INSTALL_DIR&&paths.isAbsolute(env.CODEX_INSTALL_DIR))candidates.push(paths.join(env.CODEX_INSTALL_DIR,executable));
+ if(platform==='win32'&&env.LOCALAPPDATA){
+  candidates.push(paths.join(env.LOCALAPPDATA,'Programs','OpenAI','Codex','bin',executable));
+  const root=paths.join(env.LOCALAPPDATA,'OpenAI','Codex','bin');try{for(const entry of fileSystem.readdirSync(root).filter(name=>!name.startsWith('.')).sort((a,b)=>fileSystem.statSync(paths.join(root,b)).mtimeMs-fileSystem.statSync(paths.join(root,a)).mtimeMs))candidates.push(paths.join(root,entry,executable));}catch{}
+ }
+ if(platform!=='win32'&&paths.isAbsolute(homeDirectory))candidates.push(paths.join(homeDirectory,'.local','bin',executable));
+ // Official app troubleshooting documents this retained compatibility bundle.
+ // Do not infer another app's private resource layout or search its contents.
+ if(platform==='darwin')candidates.push('/Applications/Codex.app/Contents/Resources/codex');
+ return [...new Set(candidates)].filter(candidate=>{
+  try{if(!candidate||!paths.isAbsolute(candidate)||paths.basename(candidate).toLowerCase()!==executable||!fileSystem.existsSync(candidate)||!fileSystem.statSync(candidate).isFile())return false;if(platform!=='win32')fileSystem.accessSync(candidate,constants.X_OK);return true;}catch{return false;}
+ });
+}
+
+export function findCodexExecutable(options={}){return codexExecutableCandidates(options)[0]??null;}
+
+export function supportsCodexQueue(command,{spawnProcess=spawn,timeoutMs=5000}={}){
+ return new Promise(resolve=>{
+  let child;try{child=spawnProcess(command,['queue','--help'],{windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']});}catch{resolve(false);return;}
+  let output='',settled=false;const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);resolve(value);};
+  const timer=setTimeout(()=>{child.kill();finish(false);},timeoutMs);timer.unref?.();
+  child.stdout.on('data',chunk=>{output=(output+chunk.toString()).slice(-32000);});child.stderr.resume();
+  child.once('error',()=>finish(false));child.once('close',code=>finish(code===0&&/--thread\b/.test(output)&&/--message\b/.test(output)));
+ });
+}
+
+export async function findCodexQueueExecutable({probe=supportsCodexQueue,...options}={}){
+ for(const candidate of codexExecutableCandidates(options))try{if(await probe(candidate))return candidate;}catch{}
+ return null;
 }
 
 export function runCodexQueue(command,args,{cwd,timeoutMs=10000}={}){

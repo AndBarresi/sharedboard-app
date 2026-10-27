@@ -2,7 +2,7 @@
 
 [← SharedBoard.app overview](../README.md) · [Connections](../CONNECTIONS.md) · [Hosting](../HOSTING.md)
 
-This guide covers the portable local app and its developer tooling. The browser-storage website uses IndexedDB and keeps all AI connections visible as WIP. Its storage and deployment rules are in [HOSTING.md](../HOSTING.md). SharedBoard.app does not host a model or create a replacement AI conversation.
+This guide covers the earlier disk-backed portable local app and its developer tooling. The current product is the browser-storage website with the local Codex bridge for Windows and Mac; follow [BRIDGE.md](../BRIDGE.md) for that setup. The legacy MCP and proposal interfaces below are retained for existing local installations and development, not advertised as released website capabilities. Website storage and deployment rules are in [HOSTING.md](../HOSTING.md). SharedBoard.app does not host a model or create a replacement AI conversation.
 
 ## Start a local build
 

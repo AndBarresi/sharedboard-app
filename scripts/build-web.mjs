@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {bridgeDownloadTargets,bridgeDownloadPath,bridgeDownloadRedirect} from '../shared/bridge-downloads.mjs';
 
 export const projectRoot=fileURLToPath(new URL('../',import.meta.url));
 export const webDirectory=path.join(projectRoot,'dist-web');
@@ -32,11 +33,16 @@ export function validateWebBuild(directory=webDirectory,{version,sourceHash,maxF
     if(/(^|\/)(server|data|node_modules|functions|\.git|\.wrangler|connector-runtime)(\/|$)/i.test(name)||/(^|\/)(\.env(?:\..*)?|\.token|\.connection\.json|ai-connection\.json|agent-target\.json|\.agent-session[^/]*|_worker\.js)$/i.test(name)||/\.(log|map|exe|ps1|cmd)$/i.test(name))throw new Error(`Server, private or development artifact in static build: ${name}`);
   }
   if(!readFileSync(path.join(directory,'_redirects'),'utf8').includes('/boards/* / 200'))throw new Error('The browser build is missing its canonical board route rewrite.');
+  const redirects=readFileSync(path.join(directory,'_redirects'),'utf8');
+  for(const target of bridgeDownloadTargets){const route=bridgeDownloadPath(target);if(!redirects.includes(`${route} ${bridgeDownloadRedirect(route)} 302`))throw new Error('The browser build is missing a bridge download route.');}
   return {files,version:info.version,sourceHash:info.sourceHash,totalBytes:files.reduce((total,file)=>total+file.size,0),largestFile:files.reduce((largest,file)=>file.size>largest.size?{name:file.name,size:file.size}:largest,{name:null,size:0})};
 }
 
 export function installPagesFiles(directory=webDirectory){
-  for(const name of ['_redirects','404.html'])copyFileSync(path.join(projectRoot,'hosting/cloudflare-pages',name),path.join(directory,name));
+  copyFileSync(path.join(projectRoot,'hosting/cloudflare-pages/404.html'),path.join(directory,'404.html'));
+  const boardRoutes=readFileSync(path.join(projectRoot,'hosting/cloudflare-pages/_redirects'),'utf8').trim();
+  const downloadRoutes=bridgeDownloadTargets.map(target=>{const route=bridgeDownloadPath(target);return `${route} ${bridgeDownloadRedirect(route)} 302`;});
+  writeFileSync(path.join(directory,'_redirects'),`${boardRoutes}\n\n# Direct companion downloads; no GitHub page or account is required.\n${downloadRoutes.join('\n')}\n`);
   const html=readFileSync(path.join(directory,'index.html'),'utf8'),hashes=[];
   for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(!/\bsrc\s*=/i.test(match[1])&&match[2])hashes.push(`'sha256-${createHash('sha256').update(match[2]).digest('base64')}'`);
   const policy=["default-src 'self'",`script-src 'self' 'wasm-unsafe-eval' ${hashes.join(' ')}`.trim(),"style-src 'self' 'unsafe-inline'","img-src 'self' data: blob:","font-src 'self' data:","connect-src 'self' http://127.0.0.1:4319","worker-src 'self' blob:","object-src 'none'","base-uri 'self'","form-action 'self'","frame-ancestors 'none'"].join('; ');

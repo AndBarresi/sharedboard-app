@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {randomBytes,randomUUID,createHash,timingSafeEqual} from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
 import {defaultDataDir} from './paths.mjs';
-import {findCodexExecutable,runCodexQueue,queueReceipt} from './codex.mjs';
+import {findCodexQueueExecutable,runCodexQueue,queueReceipt} from './codex.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLIENT=/^[A-Za-z0-9_-]{1,128}$/;
@@ -43,7 +43,7 @@ function commandInput(operation,input){
  return input;
 }
 
-export async function startBridge({port=4319,dataDir=defaultDataDir(),allowedOrigins=['https://sharedboard.app'],version=packageVersion(),findCodex=findCodexExecutable,runQueue=runCodexQueue,now=()=>Date.now(),commandTimeoutMs=30000,pollTimeoutMs=20000,leaseMs=35000,installPath=path.dirname(fileURLToPath(import.meta.url))}={}){
+export async function startBridge({port=4319,dataDir=defaultDataDir(),allowedOrigins=['https://sharedboard.app'],version=packageVersion(),findCodex=findCodexQueueExecutable,runQueue=runCodexQueue,now=()=>Date.now(),commandTimeoutMs=30000,pollTimeoutMs=20000,leaseMs=35000,installPath=path.dirname(fileURLToPath(import.meta.url))}={}){
  if(!Number.isInteger(port)||port<0||port>65535)throw failure('Invalid bridge port.');
  const origins=new Set(allowedOrigins);if(!origins.size||[...origins].some(origin=>new URL(origin).origin!==origin))throw failure('Bridge origins must be exact origins.');
  dataDir=path.resolve(dataDir);mkdirSync(dataDir,{recursive:true,mode:0o700});const filename=path.join(dataDir,'bridge-state.json');
@@ -132,7 +132,10 @@ export async function startBridge({port=4319,dataDir=defaultDataDir(),allowedOri
    if(url.pathname==='/bridge/agent/command'&&request.method==='POST'){
     const grant=agentGrant(request,body),operation=body.operation,input=commandInput(operation,body.input??{});if(writes.has(operation)&&grant.permission!=='edit')throw failure('This AI has read-only drawing access. Reconnect from the board to allow edits.',403,'READ_ONLY');
     const requestId=body.requestId===undefined?undefined:uuid(body.requestId,'drawing request ID');if(requestId&&!writes.has(operation))throw failure('A stable drawing request ID is supported only for add or edit operations.');
-    const result=await rpc(grant,operation,input,requestId);if(operation==='confirm_connection'){grant.boardCheckedAt=new Date(now()).toISOString();save();publishConnection(grant);}if(operation==='reply_to_chat_message'){grant.replyCheckedAt=new Date(now()).toISOString();save();publishConnection(grant);}send(response,200,result);return;
+    const result=await rpc(grant,operation,input,requestId);if(operation==='confirm_connection'){grant.boardCheckedAt=new Date(now()).toISOString();save();publishConnection(grant);}if(operation==='reply_to_chat_message'){grant.replyCheckedAt=new Date(now()).toISOString();save();publishConnection(grant);}
+    const manualRead=operation==='read_chat_message'?result?.message:operation==='read_review_request'?result?.request:null;
+    if(manualRead&&manualRead.id===input.id&&manualRead.delivery==='manual'){grant.deliveryCheckedAt=new Date(now()).toISOString();save();publishConnection(grant);}
+    send(response,200,result);return;
    }
    const grant=browserGrant(request),current=session(grant);
    if(url.pathname==='/bridge/browser/status'&&request.method==='GET'){send(response,200,{connection:connection(grant)});return;}
@@ -151,6 +154,16 @@ export async function startBridge({port=4319,dataDir=defaultDataDir(),allowedOri
     if(client(body.clientId)!==current.owner)throw failure('This tab does not own the board connection.',409,'BOARD_IN_ANOTHER_TAB');rejectJobs(grant,'The board tab released its local AI connection. Reopen the board and retry.');finishPoll(grant);current.owner=null;current.leaseUntil=0;send(response,200,{ok:true});return;
    }
    if(url.pathname==='/bridge/browser/disconnect'&&request.method==='POST'){revoke(grant);send(response,200,{ok:true,connection:{connected:false,id:null,provider:null,label:'No AI connected',automaticMessages:false,boardId:grant.boardId,browserOnline:false}});return;}
+   if(url.pathname==='/bridge/browser/handoff'&&request.method==='POST'){
+    if(!['chat','review'].includes(body.kind))throw failure('Choose a chat message or review request.');const id=uuid(body.id,'request ID');
+    if(uuid(body.boardId,'board ID')!==grant.boardId||uuid(body.connectionId,'connection ID')!==grant.id)throw failure('This request belongs to another board connection.',403,'BRIDGE_WRONG_BOARD');
+    if(!grant.agentHash||!grant.threadId)throw failure('Pair an existing Codex conversation before preparing a handoff.',409,'AGENT_NOT_PAIRED');
+    const delivery=state.deliveries.find(entry=>entry.grantId===grant.id&&entry.kind===body.kind&&entry.id===id);
+    if(delivery&&['sending','uncertain','queued'].includes(delivery.status))throw failure('This request already used automatic delivery. Check its original Codex conversation before sending anything again.',409,'DELIVERY_UNCERTAIN');
+    if(grant.codexPath)throw failure('This connection uses automatic delivery. Retry the original request instead of preparing a manual copy.',409,'MANUAL_HANDOFF_UNAVAILABLE');
+    if(!online(grant))throw failure('Keep the connected board tab open before preparing a handoff.',503,'BROWSER_OFFLINE');
+    send(response,200,{delivery:'manual',handoffPrompt:notification(grant,body.kind,id),connection:connection(grant)});return;
+   }
    if(url.pathname==='/bridge/browser/notify'&&request.method==='POST'){
     if(!['chat','review'].includes(body.kind))throw failure('Choose a chat message or review request.');if(body.retry!==undefined&&typeof body.retry!=='boolean')throw failure('Retry must be true or false.');const id=uuid(body.id,'request ID');if(!grant.agentHash||!grant.threadId)throw failure('Pair an existing Codex conversation before sending.',409,'AGENT_NOT_PAIRED');
     const key=`${grant.id}:${body.kind}:${id}`,pending=notices.get(key);if(pending){send(response,200,await pending);return;}
@@ -158,7 +171,7 @@ export async function startBridge({port=4319,dataDir=defaultDataDir(),allowedOri
     if(delivery?.status==='queued'){send(response,200,{delivery:'queued',receipt:delivery.receipt,connection:connection(grant)});return;}
     if(delivery&&['sending','uncertain'].includes(delivery.status))throw failure('Delivery to Codex was not confirmed. Check the connected conversation before sending another request.',503,'DELIVERY_UNCERTAIN');
     if(delivery?.status==='failed'&&body.retry!==true)throw failure('The Codex command did not start. Use Retry delivery after fixing the local connection.',503,'DELIVERY_FAILED');
-    if(!online(grant))throw failure('Keep the connected board tab open before sending.',503,'BROWSER_OFFLINE');if(!grant.codexPath)throw failure('The installed Codex command was not found. Reconnect after installing a compatible Codex app.',503,'CODEX_UNAVAILABLE');
+    if(!online(grant))throw failure('Keep the connected board tab open before sending.',503,'BROWSER_OFFLINE');if(!grant.codexPath)throw failure('A compatible installed Codex queue command was not found. Install or update Codex, then reconnect this board.',503,'CODEX_UNAVAILABLE');
     if(!delivery){
      const entries=state.deliveries.filter(entry=>entry.grantId===grant.id);
      if(entries.length>=200){const removable=entries.find(entry=>['queued','failed'].includes(entry.status));if(!removable)throw failure('Too many unconfirmed deliveries are saved. Check your Codex conversation before reconnecting this board.',429,'DELIVERY_LEDGER_FULL');state.deliveries=state.deliveries.filter(entry=>entry!==removable);}

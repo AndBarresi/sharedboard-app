@@ -12,7 +12,7 @@ function fingerprint(){
   for(const name of ['index.html','vite.config.mjs','pnpm-lock.yaml','.node-version','.gitattributes','LICENSE','AUTHORS.md']){try{hash.update(name);hash.update(readFileSync(path.join(root,name)));}catch(error){if(error.code!=='ENOENT')throw error;}}
   const pkg=read('package.json');hash.update(JSON.stringify({scripts:pkg.scripts,dependencies:pkg.dependencies,devDependencies:pkg.devDependencies}));return hash.digest('hex');
 }
-function markdown(releases){return '# SharedBoard.app changelog\n\nVersion 0.x is the development series. Minor versions add capabilities; patch versions fix or polish existing behavior. Version 1.0 will mark the first public release.\n\n'+releases.entries.map(entry=>`## ${entry.version} — ${entry.title}\n\n${entry.added?.length?'### Added\n\n'+entry.added.map(text=>`- ${text}`).join('\n')+'\n\n':''}${entry.fixed?.length?'### Fixed\n\n'+entry.fixed.map(text=>`- ${text}`).join('\n')+'\n\n':''}`).join('');}
+function markdown(releases){return '# SharedBoard.app changelog\n\n'+releases.entries.map(entry=>`## ${entry.version} — ${entry.title}\n\n${entry.added?.length?'### Added\n\n'+entry.added.map(text=>`- ${text}`).join('\n')+'\n\n':''}${entry.fixed?.length?'### Fixed\n\n'+entry.fixed.map(text=>`- ${text}`).join('\n')+'\n\n':''}`).join('');}
 const [action,...args]=process.argv.slice(2),releases=read('releases.json');
 if(action==='check'){
   let notes='';try{notes=readFileSync(path.join(root,'CHANGELOG.md'),'utf8');}catch{}

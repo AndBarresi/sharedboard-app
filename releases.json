@@ -1,6 +1,19 @@
 {
-  "version": "0.5.1",
+  "version": "0.6.0",
   "entries": [
+    {
+      "version": "0.6.0",
+      "title": "Windows and Mac bridge setup from the website",
+      "added": [
+        "SharedBoard Bridge downloads and guided setup for Windows, Apple Silicon Macs and Intel Macs, including on-page installation help and a real reply test.",
+        "Copy-to-Codex handoff when automatic delivery is unavailable, with captured requests and real replies kept in the browser board."
+      ],
+      "fixed": [
+        "Consolidated workspace controls and moved browser storage details into the board menu, with fullscreen and compact-screen access preserved.",
+        "Removed obsolete feature claims and the version-numbering introduction from the changelog.",
+        "Validated backup previews before rendering, protected file selection order, and corrected review context and delivery states."
+      ]
+    },
     {
       "version": "0.5.1",
       "title": "Verify Windows bridge installation across environments",
@@ -38,7 +51,6 @@
         "Creator attribution for Andrew Barresi and public source distribution under the MIT license."
       ],
       "fixed": [
-        "AI connections remain clearly marked WIP in the hosted edition while local connections continue in the portable app.",
         "Removed publish dates from the changelog and protected browser imports and cross-tab startup updates."
       ]
     },
@@ -81,23 +93,12 @@
       ]
     },
     {
-      "version": "0.3.1",
-      "title": "More reliable web connection startup",
-      "added": [],
-      "fixed": [
-        "Allow extra startup time for new connector addresses to resolve and show DNS wait progress.",
-        "Report specific DNS, TLS, HTTP and metadata verification failures instead of blaming the network.",
-        "Cancel in-flight connection checks promptly and close temporary routes after failed verification."
-      ]
-    },
-    {
       "version": "0.3.0",
       "title": "Separate projects and clearer AI collaboration",
       "added": [
         "Separate projects and boards with stable local addresses and independent drawings, planning, messages, history and AI connections.",
         "Explicit mini-chat attachment previews for the board, a selection or a named area, with captured images and requirements.",
         "An object outline and clickable minimap with naming, search, visibility, locking and layer controls.",
-        "A proposals-only AI permission enforced for local helpers and the web connector.",
         "Rolling automatic recovery saves before significant changes, with preview and restore separate from named checkpoints.",
         "Formatted chat replies, tables, safe links, copyable code blocks, resizable chat and board-specific drafts.",
         "A compact workspace sidebar, visible AI connection status and expanded chat that remains readable in short windows."
@@ -114,8 +115,7 @@
       "title": "Reliable starting actions",
       "added": [],
       "fixed": [
-        "Empty-canvas buttons receive clicks above the editor input layer.",
-        "The AI understanding check copies the handoff for connections that require manual delivery."
+        "Empty-canvas buttons receive clicks above the editor input layer."
       ]
     },
     {
@@ -125,7 +125,6 @@
         "Named areas, project naming, board text search and a collapsible planning navigator.",
         "Anchored notes, requirements and work cards with canvas markers and jump-to-context actions.",
         "Pinned screenshot references, five editable planning templates and a personal reusable block library.",
-        "Reviewable AI drawing proposals with before/after previews, conflict checks and protected AI undo.",
         "Named checkpoints with previews and recovery saves, plus portable .sharedboard project backups.",
         "Rendered board images and captured visual context for AI tools, alongside immutable notes and requirements.",
         "Contextual selection controls, grouping, alignment, duplication, locking, an alignment grid and a guided empty canvas."
@@ -140,7 +139,7 @@
       "title": "A versioned workspace",
       "added": [
         "A version badge and an in-app changelog accessible from the footer.",
-        "A release workflow that keeps the application, MCP tools and changelog versions together."
+        "A release workflow that keeps the application version and changelog together."
       ],
       "fixed": []
     },
@@ -150,10 +149,10 @@
       "added": [
         "A persistent local canvas with shared human and AI editing, conflict detection and drawing import/export.",
         "Sharedboard drawing controls, fullscreen, board reviews and a floating mini chat.",
-        "Guided AI pairing and a temporary ChatGPT / Claude connector for account testing."
+        "Guided pairing with an existing local AI conversation."
       ],
       "fixed": []
     }
   ],
-  "sourceHash": "58509af198b012e3736bbb4b9d345ad7c9ab086c05ec6a6ea2c5029b106b279e"
+  "sourceHash": "9f8f308a8b415a2a3d5173536ebfeec9ee38e7e7067dec860ecc8116188f096f"
 }

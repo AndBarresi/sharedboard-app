@@ -8,6 +8,7 @@ import {inflateRawSync} from 'node:zlib';
 import {installPagesFiles,listStaticFiles,pagesAssetLimit,validateWebBuild} from '../scripts/build-web.mjs';
 import {writeStaticZip} from '../scripts/package-web.mjs';
 import {startWebPreview} from '../scripts/preview-web.mjs';
+import {bridgeDownloadTargets,bridgeDownloadPath,bridgeDownloadRedirect} from '../shared/bridge-downloads.mjs';
 
 function fixture(){
   const directory=mkdtempSync(path.join(os.tmpdir(),'sharedboard-static-package-'));
@@ -45,6 +46,15 @@ test('static preview serves board deep links, applies CSP bootstrap hashes and e
     const policy=root.headers.get('content-security-policy'),inline='window.EXCALIDRAW_ASSET_PATH = "/excalidraw/";';assert.ok(policy.includes(`'sha256-${createHash('sha256').update(inline).digest('base64')}'`));assert.ok(policy.includes("connect-src 'self'"));assert.equal(root.headers.get('x-content-type-options'),'nosniff');
     assert.equal((await fetch(app.url+'/api/board')).status,404);assert.equal((await fetch(app.url+'/_headers')).status,404);assert.equal((await fetch(app.url+'/_redirects')).status,404);assert.equal((await fetch(app.url+'/not-a-route')).status,404);
     assert.equal((await fetch(app.url+'/',{method:'POST',body:'{}'})).status,405);const head=await fetch(app.url+'/',{method:'HEAD'});assert.equal(head.status,200);assert.equal(await head.text(),'');
+    const routes=readFileSync(path.join(f.directory,'_redirects'),'utf8');
+    for(const target of bridgeDownloadTargets){
+      const route=bridgeDownloadPath(target),download=await fetch(app.url+route,{redirect:'manual'});
+      assert.equal(download.status,302);assert.equal(download.headers.get('location'),bridgeDownloadRedirect(route));
+      assert.ok(routes.includes(`${route} ${download.headers.get('location')} 302`),'Cloudflare and local preview must expose the same exact download');
+      assert.equal((await fetch(app.url+route,{method:'POST',redirect:'manual'})).status,405);
+    }
+    assert.equal((await fetch(app.url+'/downloads/SharedBoard-Bridge-unknown.zip',{redirect:'manual'})).status,404);
+    assert.equal((await fetch(app.url+'/downloads/https://example.com',{redirect:'manual'})).status,404);
   }finally{await app.close();f.clean();}
 });
 

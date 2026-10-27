@@ -3,6 +3,7 @@ import {createReadStream,existsSync,lstatSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {validateWebBuild,webDirectory} from './build-web.mjs';
+import {bridgeDownloadRedirect} from '../shared/bridge-downloads.mjs';
 
 const types={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.mjs':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.ico':'image/x-icon','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.otf':'font/otf','.txt':'text/plain; charset=utf-8','.md':'text/plain; charset=utf-8'};
 
@@ -15,6 +16,8 @@ export async function startWebPreview({directory=webDirectory,port=4173,validate
       if(!['GET','HEAD'].includes(request.method)){response.writeHead(405,{'Allow':'GET, HEAD',...headers});response.end();return;}
       let route;try{route=decodeURIComponent(new URL(request.url,'http://localhost').pathname);}catch{response.writeHead(400,headers);response.end('Invalid path.');return;}
       if(route.includes('\0')||route.includes('\\')){response.writeHead(400,headers);response.end('Invalid path.');return;}
+      const download=bridgeDownloadRedirect(route);
+      if(download){response.writeHead(302,{...headers,Location:download});response.end();return;}
       let file=path.resolve(directory,`.${route}`),status=200;
       if(file!==directory&&!file.startsWith(directory+path.sep)){response.writeHead(403,headers);response.end();return;}
       if(route==='/'||/^\/boards\/[^/]+(?:\/.*)?$/.test(route))file=path.join(directory,'index.html');
