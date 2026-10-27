@@ -1,6 +1,15 @@
 {
-  "version": "0.10.1",
+  "version": "0.10.2",
   "entries": [
+    {
+      "version": "0.10.2",
+      "title": "Preserve new chat drafts and diagnose transport failures",
+      "added": [],
+      "fixed": [
+        "Completing an earlier send preserves newer text typed in the mini-chat composer.",
+        "Live waits distinguish relay transport and response failures using private-data-safe diagnostic codes."
+      ]
+    },
     {
       "version": "0.10.1",
       "title": "Live-session cancellation and connection diagnostics",
@@ -298,5 +307,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "040ecb55a05cbdb40915b0cdb6c097cb9833f27cb57cef7da30a3db17d39a2fb"
+  "sourceHash": "a48a0aa4cada5c846f637b2b37178277e260ebf9c583b09667a2ba072f119cef"
 }

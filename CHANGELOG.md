@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.10.2 — Preserve new chat drafts and diagnose transport failures
+
+### Fixed
+
+- Completing an earlier send preserves newer text typed in the mini-chat composer.
+- Live waits distinguish relay transport and response failures using private-data-safe diagnostic codes.
+
 ## 0.10.1 — Live-session cancellation and connection diagnostics
 
 ### Fixed

@@ -3,7 +3,7 @@ import {createMcpHandler} from '@modelcontextprotocol/server';
 import {createBoardMcp} from '../server/tools.mjs';
 import {RelayAuthorization} from './auth.mjs';
 import {BoardRelay} from './relay.mjs';
-import {json,fail,body,failureResponse,uuid,tokenSession,internal,hash,permissionFor} from './protocol.mjs';
+import {json,fail,body,failureResponse,uuid,tokenSession,internal,internalLiveWait,hash,permissionFor} from './protocol.mjs';
 import {attachEventHandlers} from './events.mjs';
 import {attachChatPanel} from './chat-panel.mjs';
 import {attachLiveTools} from './live-tools.mjs';
@@ -76,7 +76,7 @@ export async function handleRequest(request,env){
    const handler=createMcpHandler(()=>{
     const mcp=createBoardMcp((operation,input)=>internal(stub,'/agent/call',{grant,operation,input}),{remote:true,remotePair:true,proposals:false});
     attachEventHandlers(mcp,(method,params)=>internal(stub,'/agent/events',{grant,method,params}));
-    attachLiveTools(mcp,(operation,input)=>internal(stub,'/agent/live',{grant,operation,input},{signal:request.signal}));
+    attachLiveTools(mcp,(operation,input)=>internalLiveWait(stub,{grant,operation,input},{signal:request.signal}));
     return attachChatPanel(mcp,(operation,input)=>internal(stub,'/agent/panel',{grant,operation,input}),{serverURL:`${origin}/mcp`,provider:async()=>(await internal(stub,'/agent/check',{grant,connected:false})).connection.provider});
    },{responseMode:'auto',maxRequestBodySize:4_000_000});
    const response=await handler.fetch(request,{authInfo:{token:'verified',clientId:grant.clientId,scopes:grant.scope.split(' '),extra:{grant}}});return cors(response,request,env,{publicRoute:true});

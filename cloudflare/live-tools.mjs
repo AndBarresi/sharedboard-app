@@ -1,6 +1,7 @@
 // SharedBoard.app — Copyright (c) 2026 Andrew Barresi. MIT licensed.
 // A synchronous tool for a user-started, finite active AI turn. No iframe or model API.
 import * as z from 'zod/v4';
+import {LIVE_DIAGNOSTIC_CODES} from './protocol.mjs';
 
 const inputSchema=z.object({sessionId:z.string().uuid().optional(),waitMs:z.number().int().min(1).max(45_000).default(40_000)}).strict();
 const requestSchema=z.object({id:z.string().uuid(),kind:z.enum(['chat','review']),intent:z.enum(['discuss','work'])}).refine(request=>request.kind!=='review'||request.intent==='discuss');
@@ -8,7 +9,7 @@ const resultSchema=z.object({sessionId:z.string().uuid(),boardId:z.string().uuid
 const failure='Live collaboration could not continue. Do not restart the session or replay requests automatically. Check the board connection and ask the user before starting another live session.';
 // Only fixed connector codes cross the model boundary. Never expose backend
 // exception messages, validation details, tokens, captured content or URLs.
-const backendCodes=new Set(['LIVE_STORAGE_UNAVAILABLE','LIVE_STATE_INVALID','LIVE_SCOPE_MISMATCH','LIVE_WAIT_INVALID','LIVE_WAIT_IN_PROGRESS','LIVE_SESSION_REPLACED','LIVE_SESSION_REQUIRED','LIVE_SESSION_NOT_WAITING','LIVE_REQUEST_INVALID','LIVE_REQUEST_CONFLICT','LIVE_REQUEST_LIMIT','LIVE_OPERATION_INVALID','LIVE_WAIT_TYPE_ERROR','LIVE_WAIT_CANCELLED','LIVE_WAIT_RUNTIME_ERROR','LIVE_WAIT_PREPARE_TYPE_ERROR','LIVE_WAIT_PREPARE_CANCELLED','LIVE_WAIT_PREPARE_RUNTIME_ERROR','LIVE_WAIT_ACTIVATE_TYPE_ERROR','LIVE_WAIT_ACTIVATE_CANCELLED','LIVE_WAIT_ACTIVATE_RUNTIME_ERROR','UNAUTHORIZED','CONNECTION_REPLACED','PAIRING_REQUIRED','PAIRING_EXPIRED','RELAY_DISCONNECTED','BROWSER_OFFLINE','BROWSER_NOT_PAIRED','INVALID_REQUEST']);
+const backendCodes=new Set(LIVE_DIAGNOSTIC_CODES);
 const failed=code=>({isError:true,content:[{type:'text',text:`${failure} Diagnostic code: ${code}.`}],structuredContent:{code}});
 
 export function attachLiveTools(mcp,call){
