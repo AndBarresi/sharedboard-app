@@ -54,4 +54,4 @@ A Direct Upload project cannot later switch to Git integration; create a Git-int
 
 The build generates _headers with MIME-sniffing protection, no-referrer, frame protection, restricted permissions and a CSP. Inline bootstrap scripts receive exact SHA-256 CSP hashes; fonts and drawing assets are self-contained. The local preview sends the same headers. [Pages headers](https://developers.cloudflare.com/pages/configuration/headers/)
 
-_redirects rewrites /boards/* to index.html. A top-level 404.html prevents unrelated missing URLs such as /api/board from being treated as application routes. No Pages Functions or Worker handler is included. [Serving Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/)
+_redirects rewrites /boards/* to the canonical root `/` with a 200 response. Cloudflare rejects wildcard rewrites whose destination ends in `/index` or `/index.html`, so use the root target. A top-level 404.html prevents unrelated missing URLs such as /api/board from being treated as application routes. No Pages Functions or Worker handler is included. [Serving Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/)

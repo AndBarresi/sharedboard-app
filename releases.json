@@ -1,6 +1,14 @@
 {
-  "version": "0.4.0",
+  "version": "0.4.1",
   "entries": [
+    {
+      "version": "0.4.1",
+      "title": "Reliable board bookmarks on Cloudflare",
+      "added": [],
+      "fixed": [
+        "Use the canonical root for saved-board URL rewrites so Cloudflare accepts direct board links."
+      ]
+    },
     {
       "version": "0.4.0",
       "title": "Browser beta and public source publishing",
@@ -127,5 +135,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "51ae42688bbe1a96152f51c861de0122d05c61a5a35a50978c11190fa5e700d3"
+  "sourceHash": "20f5242e83845aab8b687c3c48e24187dcb5cf807edf658c114763e61d48bf5f"
 }

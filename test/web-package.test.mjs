@@ -21,6 +21,8 @@ test('static build validation rejects stale storage stamps, private files and Pa
   const f=fixture();
   try{
     assert.equal(f.validate().files.length,5);
+    assert.match(readFileSync(path.join(f.directory,'_redirects'),'utf8'),/^\/boards\/\* \/ 200$/m);
+    writeFileSync(path.join(f.directory,'_redirects'),'/boards/* /index.html 200\n');assert.throws(()=>f.validate(),/canonical board route rewrite/);installPagesFiles(f.directory);
     assert.throws(()=>f.validate({version:'another-version'}),/stale/);
     writeFileSync(path.join(f.directory,'build-info.json'),JSON.stringify({version:'fixture',sourceHash:'fixture-hash',storageMode:'local'}));assert.throws(()=>f.validate(),/local-server storage/);
     writeFileSync(path.join(f.directory,'build-info.json'),JSON.stringify({version:'fixture',sourceHash:'fixture-hash',storageMode:'browser'}));

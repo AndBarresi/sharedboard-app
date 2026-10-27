@@ -31,7 +31,7 @@ export function validateWebBuild(directory=webDirectory,{version,sourceHash,maxF
     if(size>pagesAssetLimit)throw new Error(`Cloudflare Pages assets must be at most 25 MiB: ${name}`);
     if(/(^|\/)(server|data|node_modules|functions|\.git|\.wrangler|connector-runtime)(\/|$)/i.test(name)||/(^|\/)(\.env(?:\..*)?|\.token|\.connection\.json|ai-connection\.json|agent-target\.json|\.agent-session[^/]*|_worker\.js)$/i.test(name)||/\.(log|map|exe|ps1|cmd)$/i.test(name))throw new Error(`Server, private or development artifact in static build: ${name}`);
   }
-  if(!readFileSync(path.join(directory,'_redirects'),'utf8').includes('/boards/* /index.html 200'))throw new Error('The browser build is missing its board route rewrite.');
+  if(!readFileSync(path.join(directory,'_redirects'),'utf8').includes('/boards/* / 200'))throw new Error('The browser build is missing its canonical board route rewrite.');
   return {files,version:info.version,sourceHash:info.sourceHash,totalBytes:files.reduce((total,file)=>total+file.size,0),largestFile:files.reduce((largest,file)=>file.size>largest.size?{name:file.name,size:file.size}:largest,{name:null,size:0})};
 }
 

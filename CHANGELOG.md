@@ -2,6 +2,12 @@
 
 Version 0.x is the development series. Minor versions add capabilities; patch versions fix or polish existing behavior. Version 1.0 will mark the first public release.
 
+## 0.4.1 — Reliable board bookmarks on Cloudflare
+
+### Fixed
+
+- Use the canonical root for saved-board URL rewrites so Cloudflare accepts direct board links.
+
 ## 0.4.0 — Browser beta and public source publishing
 
 ### Added
