@@ -51,9 +51,12 @@ test('direct-only browser messages and reviews never fall back to manual deliver
   const blocked=await capture(t,{text:'Keep this direct',intent:'discuss',automaticRequired:true});
   await assert.rejects(call(t,'/api/chat',blocked),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
   await assert.rejects(call(t,'/api/reviews',await capture(t,{automaticRequired:true})),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  Object.assign(bridge.connection,{automaticMessages:true,automaticReviews:true,deliveryMode:'panel',panelConnected:true,messageExpiresAt:new Date(Date.now()+60000).toISOString()});await t.bridgeStatus();
+  await assert.rejects(call(t,'/api/chat',blocked),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  await assert.rejects(call(t,'/api/reviews',await capture(t,{automaticRequired:true})),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
   assert.equal((await call(t,'/api/chat')).messages.length,0);
   assert.equal(bridge.requests.some(request=>new URL(request.url).pathname==='/browser/handoff'),false);
-  Object.assign(bridge.connection,{automaticMessages:true,messageExpiresAt:new Date(Date.now()+60000).toISOString()});await t.bridgeStatus();
+  Object.assign(bridge.connection,{automaticMessages:true,deliveryMode:'events',messageExpiresAt:new Date(Date.now()+60000).toISOString()});await t.bridgeStatus();
   bridge.onNotify=async()=>{throw new Error('Temporary direct delivery failure');};
   const saved=await call(t,'/api/chat',blocked);assert.equal(saved.messages[0].delivery,'uncertain');
   Object.assign(bridge.connection,{automaticMessages:false});await t.bridgeStatus();

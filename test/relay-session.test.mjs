@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {BoardRelay} from '../cloudflare/relay.mjs';
 import {MemoryStorage} from './relay-fixtures.mjs';
 import {hash,manualPrompt} from '../cloudflare/protocol.mjs';
+import {panelOperation,queuePanelRequest} from '../cloudflare/panel-state.mjs';
 
 class Socket{
  constructor(ctx,handler){this.ctx=ctx;this.handler=handler;this.messages=[];this.readyState=1;this.attachment={authenticated:false,createdAt:Date.now()};ctx.sockets.push(this);}
@@ -40,6 +41,17 @@ test('a failed captured-message read does not verify receipt; a successful revie
  const failed=await f.call('read_chat_message',{id:crypto.randomUUID()});assert.equal(failed.status,404);assert.equal((await f.relay.connection()).deliveryCheckedAt,null);
  const reviewed=await f.call('read_review_request',{id:crypto.randomUUID()});assert.equal(reviewed.status,200);const connection=await f.relay.connection();assert.ok(connection.deliveryCheckedAt);assert.equal(connection.replyCheckedAt,null);assert.equal(connection.chatIdentityVerified,false);
 });
+
+test('legacy panel acknowledgements never prove model receipt, while an actual captured-request read persists new proof',async()=>{
+ const f=await fixture(),legacyAck='2026-01-01T00:00:00.000Z';f.relay.meta.deliveryCheckedAt=legacyAck;await f.relay.save();
+ const restored=new BoardRelay(f.ctx,{EVENT_CALLBACK_ORIGINS:''});await restored.ready;assert.equal(restored.meta.deliveryCheckedAt,legacyAck);assert.equal((await restored.connection()).deliveryCheckedAt,null,'a persisted old host ACK is not a model read');
+ let allowRead=false,ws;ws=await f.socket(async frame=>{if(frame.type!=='command')return;const command=frame.command;await f.relay.webSocketMessage(ws,JSON.stringify({type:'result',id:command.id,...(command.operation==='chat'&&!allowRead?{error:{message:'Captured request is unavailable.',status:404,code:'NOT_FOUND'}}:{result:command.operation==='chat'?{message:{id:command.input.id,text:'Synthetic captured message'},board:{revision:1}}:{ok:true}})}));});
+ assert.equal((await f.call('read_chat_message',{id:crypto.randomUUID()})).status,404);assert.equal((await f.relay.connection()).deliveryCheckedAt,null);assert.equal(f.relay.meta.modelRequestReadAt,undefined);
+ allowRead=true;assert.equal((await f.call('read_chat_message',{id:crypto.randomUUID()})).status,200);const readProof=f.relay.meta.modelRequestReadAt;assert.ok(readProof);assert.notEqual(readProof,legacyAck);assert.equal((await f.relay.connection()).deliveryCheckedAt,readProof);assert.equal(f.relay.meta.deliveryCheckedAt,legacyAck,'legacy metadata need not be erased or trusted');
+ const afterRead=new BoardRelay(f.ctx,{EVENT_CALLBACK_ORIGINS:''});await afterRead.ready;assert.equal((await afterRead.connection()).deliveryCheckedAt,readProof);assert.equal((await afterRead.connection()).automaticMessages,false);
+ assert.equal((await f.call('reply_to_chat_message',{id:crypto.randomUUID(),text:'Actual synthetic fixture reply.'})).status,200);assert.ok((await f.relay.connection()).replyCheckedAt);assert.equal((await f.relay.connection()).automaticMessages,false,'an explicit read and reply cannot establish future automatic submission');
+ delete f.relay.meta.modelRequestReadAt;assert.equal((await f.relay.connection()).deliveryCheckedAt,f.relay.meta.replyCheckedAt,'a previously saved actual reply remains valid receipt evidence');
+});
 test('multiple browser tabs cannot execute the same board commands concurrently',async()=>{
  const f=await fixture(),owner=await f.socket(),other=await f.socket();assert.equal(other.closed.code,4009);assert.equal(f.relay.owner(),owner);await f.relay.webSocketMessage(owner,JSON.stringify({type:'ping'}));assert.equal(owner.messages.at(-1).type,'pong');
 });
@@ -49,4 +61,53 @@ test('stable write retries use the same command ID and secrets/drawing bodies ar
 });
 test('manual board handoff pins the captured request and uses MCP tools without a local helper command',()=>{
  const id=crypto.randomUUID(),boardId=crypto.randomUUID(),chat=manualPrompt('chat',id,boardId),review=manualPrompt('review',id,boardId);assert.match(chat,/read_chat_message/);assert.match(chat,/reply_to_chat_message/);assert.match(review,/read_review_request/);assert.ok(chat.includes(id)&&chat.includes(boardId));assert.ok(!chat.includes('node.exe'));assert.ok(!chat.includes('agent-cli'));
+});
+
+const relayRequest=async(f,path,input)=>{const response=await f.relay.fetch(new Request(`https://internal${path}`,{method:'POST',headers:{'content-type':'application/json',...(path.startsWith('/browser/')?{'x-sharedboard-browser':f.created.browserToken}:{})},body:JSON.stringify(input)}));return {status:response.status,data:await response.json()};};
+async function cachedPanel(f){
+ // Seed routing metadata created by the previous panel implementation. The
+ // production API must not reactivate, claim or confirm these old requests.
+ const options=f.relay.panelContext(),opened=await panelOperation('open',{},options);await panelOperation('attach',{viewKey:opened.viewKey},options);
+ const pendingId=crypto.randomUUID(),claimedId=crypto.randomUUID();await queuePanelRequest({id:pendingId,kind:'chat',intent:'discuss'},options);await queuePanelRequest({id:claimedId,kind:'chat',intent:'discuss'},options);
+ const claimed=await panelOperation('claim',{viewKey:opened.viewKey,id:claimedId,kind:'chat'},options);
+ return {viewKey:opened.viewKey,pendingId,claimedId,receipt:claimed.receipt,key:`panel:v1:${options.boardId}:${options.connectionId}:${options.familyId}`};
+}
+
+test('cached panel presence never advertises automatic submission and blocked operations preserve original receipts',async()=>{
+ const f=await fixture('read'),panel=await cachedPanel(f),before=await f.storage.get(panel.key),status=await f.relay.connection();
+ assert.equal(status.panelConnected,true);assert.ok(status.panelExpiresAt);assert.equal(status.panelAutomaticDelivery,false);assert.match(status.panelDeliveryReason,/draft/i);assert.equal(status.automaticMessages,false);assert.equal(status.automaticReviews,false);assert.equal(status.messageExpiresAt,null);assert.equal(status.reviewExpiresAt,null);assert.equal(status.deliveryMode,'manual');assert.equal(status.deliveryCheckedAt,null);
+ for(const [operation,input] of [['attach',{}],['claim',{id:panel.pendingId,kind:'chat'}],['confirm',{receipt:panel.receipt}]]){
+  const result=await relayRequest(f,'/agent/panel',{grant:f.grant,operation,input:{viewKey:panel.viewKey,...input}});assert.equal(result.status,409);assert.equal(result.data.code,'PANEL_DIRECT_DELIVERY_UNAVAILABLE');assert.match(result.data.error,/draft/i);
+  assert.deepEqual(await f.storage.get(panel.key),before,'blocked cached-panel operations must not consume or reset receipts');
+ }
+ const wrongBoard=await relayRequest(f,'/agent/panel',{grant:{...f.grant,boardId:crypto.randomUUID()},operation:'claim',input:{viewKey:panel.viewKey,id:panel.pendingId,kind:'chat'}});assert.equal(wrongBoard.status,403);assert.equal(wrongBoard.data.code,'CONNECTION_REPLACED');assert.deepEqual(await f.storage.get(panel.key),before);
+ const state=await relayRequest(f,'/agent/panel',{grant:f.grant,operation:'state',input:{viewKey:panel.viewKey}});assert.equal(state.status,200);assert.equal(state.data.directDeliveryAvailable,false);assert.match(state.data.directDeliveryReason,/draft/i);assert.equal(state.data.linked,false,'an old cached iframe must see an expired route and pause');assert.deepEqual(state.data.pending,[]);assert.equal(state.data.expiresAt,null);assert.equal((await f.relay.connection()).deliveryCheckedAt,null);
+ const expired=await f.storage.get(panel.key);assert.equal(expired.lease.expiresAt,0);assert.deepEqual(expired.requests,before.requests);assert.deepEqual(expired.views,before.views);assert.equal((await f.relay.connection()).panelConnected,false);await relayRequest(f,'/agent/panel',{grant:f.grant,operation:'state',input:{viewKey:panel.viewKey}});assert.deepEqual(await f.storage.get(panel.key),expired,'repeated polling cannot renew the disabled lease');
+ const detached=await relayRequest(f,'/agent/panel',{grant:f.grant,operation:'detach',input:{viewKey:panel.viewKey}});assert.equal(detached.status,200);assert.equal(detached.data.linked,false);assert.deepEqual((await f.storage.get(panel.key)).requests,before.requests,'diagnostic detach retains pending and claimed request identities');
+});
+
+test('a disabled cached view polling state expires only its own lease and preserves another view and all receipts',async()=>{
+ const f=await fixture(),first=await cachedPanel(f),options=f.relay.panelContext(),second=await panelOperation('open',{},options);await panelOperation('attach',{viewKey:second.viewKey},options);await queuePanelRequest({id:crypto.randomUUID(),kind:'review',intent:'discuss'},options);const before=await f.storage.get(first.key);
+ const stale=await relayRequest(f,'/agent/panel',{grant:f.grant,operation:'state',input:{viewKey:first.viewKey}});assert.equal(stale.status,200);assert.equal(stale.data.linked,false);assert.deepEqual(stale.data.pending,[]);assert.deepEqual(await f.storage.get(first.key),before,'a stale view cannot expire the newer view lease');assert.equal((await f.relay.connection()).panelConnected,true);
+ const current=await relayRequest(f,'/agent/panel',{grant:f.grant,operation:'state',input:{viewKey:second.viewKey}});assert.equal(current.status,200);assert.equal(current.data.linked,false);assert.equal(current.data.expiresAt,null);assert.deepEqual(current.data.pending,[]);const after=await f.storage.get(first.key);assert.equal(after.lease.expiresAt,0);assert.deepEqual(after.requests,before.requests);assert.deepEqual(after.views,before.views);assert.equal(after.generation,before.generation);
+});
+
+test('notify rejects a panel-only route without manual fallback or replay while historical handoff remains explicit',async()=>{
+ const f=await fixture(),panel=await cachedPanel(f),before=await f.storage.get(panel.key);let ws;
+ ws=await f.socket(async frame=>{if(frame.type==='command')await f.relay.webSocketMessage(ws,JSON.stringify({type:'result',id:frame.command.id,result:{messages:[{id:panel.pendingId,connectionId:f.created.sessionId,intent:'discuss'}]}}));});
+ const input={kind:'chat',id:panel.pendingId,connectionId:f.created.sessionId};
+ for(let attempt=0;attempt<2;attempt++){
+  const notify=await relayRequest(f,'/browser/notify',input);assert.equal(notify.status,409);assert.equal(notify.data.code,'DIRECT_DELIVERY_UNAVAILABLE');assert.equal(notify.data.handoffPrompt,undefined);assert.deepEqual(await f.storage.get(panel.key),before);
+ }
+ const historical=await relayRequest(f,'/browser/handoff',input);assert.equal(historical.status,200);assert.equal(historical.data.delivery,'manual');assert.match(historical.data.handoffPrompt,new RegExp(panel.pendingId));assert.equal(historical.data.connection.automaticMessages,false);assert.equal((await f.relay.connection()).deliveryCheckedAt,null);
+});
+
+test('an informational cached panel does not block verified Events or replace their delivery deadlines',async()=>{
+ const f=await fixture(),panel=await cachedPanel(f),before=await f.storage.get(panel.key),requests=[],baseContext=f.relay.eventContext.bind(f.relay);
+ f.relay.eventContext=()=>({...baseContext(),allowedCallbackOrigins:['https://events.example'],callbackFetch:async(url,init)=>{const body=JSON.parse(init.body);requests.push(body);return Response.json(body.type==='verification'?{challenge:body.challenge}:{accepted:true});}});
+ const subscription={name:'sharedboard.message.created',arguments:{boardId:f.grant.boardId},delivery:{mode:'webhook',url:'https://events.example/callback',secret:`whsec_${Buffer.alloc(32,7).toString('base64')}`}};
+ const subscribed=await relayRequest(f,'/agent/events',{grant:f.grant,method:'events/subscribe',params:subscription});assert.equal(subscribed.status,200,JSON.stringify(subscribed.data));
+ const status=await f.relay.connection();assert.equal(status.panelConnected,true);assert.equal(status.panelAutomaticDelivery,false);assert.equal(status.automaticMessages,true);assert.equal(status.automaticReviews,false);assert.equal(status.deliveryMode,'events');assert.equal(status.messageExpiresAt,subscribed.data.refreshBefore);assert.equal(status.reviewExpiresAt,null);assert.notEqual(status.messageExpiresAt,status.panelExpiresAt);
+ let ws;ws=await f.socket(async frame=>{if(frame.type==='command')await f.relay.webSocketMessage(ws,JSON.stringify({type:'result',id:frame.command.id,result:{messages:[{id:panel.pendingId,connectionId:f.created.sessionId,intent:'discuss'}]}}));});
+ const notified=await relayRequest(f,'/browser/notify',{kind:'chat',id:panel.pendingId,connectionId:f.created.sessionId});assert.equal(notified.status,200,JSON.stringify(notified.data));assert.equal(notified.data.delivery,'queued');assert.match(notified.data.receipt,/^evt_chat_/);assert.equal(requests.filter(request=>request.type!=='verification').length,1);assert.deepEqual(await f.storage.get(panel.key),before,'Events never claim or replay the legacy panel queue');assert.equal(notified.data.connection.deliveryCheckedAt,null,'a webhook ACK does not prove that a model read the captured request');assert.equal(f.relay.meta.modelRequestReadAt,undefined);
 });

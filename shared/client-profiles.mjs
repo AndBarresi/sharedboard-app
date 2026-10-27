@@ -1,12 +1,13 @@
 // Copyright (c) 2026 Andrew Barresi. SPDX-License-Identifier: MIT
 // Client names never prove a working route into an existing conversation.
-// Mini chat only sends through an active panel lease or verified event route.
+// An MCP App can accept text while only filling a draft. Only a verified
+// incoming-event route is eligible for automatic mini-chat delivery.
 export const CLIENT_PROFILES=Object.freeze([
- {id:'codex',label:'Codex',miniChat:'link',miniChatLabel:'Direct mini chat · Link in your AI',detail:'Board tools work independently. Direct chat needs a supported conversation panel or incoming messages.'},
- {id:'claude-code',label:'Claude Code',miniChat:'link',miniChatLabel:'Direct mini chat · Link in your AI',detail:'Connect your existing session. Direct chat depends on its messaging capabilities.'},
- {id:'chatgpt',label:'ChatGPT',miniChat:'link',miniChatLabel:'Direct mini chat · Link in your AI',detail:'Link the conversation panel or use a verified incoming-message connection.'},
- {id:'claude',label:'Claude (web)',miniChat:'link',miniChatLabel:'Direct mini chat · Link in your AI',detail:'Open the SharedBoard conversation panel and link it in the chat you want to use.'},
- {id:'other',label:'Other MCP client',miniChat:'link',miniChatLabel:'Direct mini chat · Link in your AI',detail:'Requires remote board tools and a supported direct-message route.'},
+ {id:'codex',label:'Codex',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. A no-download incoming-message route has not been verified.'},
+ {id:'claude-code',label:'Claude Code',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. A no-download incoming-message route has not been verified.'},
+ {id:'chatgpt',label:'ChatGPT',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. Automatic chat requires a client with verified incoming-event support.'},
+ {id:'claude',label:'Claude (web)',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. App messages fill a draft in Claude and do not start its model.'},
+ {id:'other',label:'Other MCP client',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools require remote MCP. Automatic messages depend on verified incoming events.'},
 ].map(profile=>Object.freeze(profile)));
 export const clientProfile=id=>CLIENT_PROFILES.find(profile=>profile.id===id)??null;
 export const isClientProvider=id=>Boolean(clientProfile(id));
@@ -14,11 +15,11 @@ export const isClientProvider=id=>Boolean(clientProfile(id));
 export function miniChatState(connection,now=Date.now()){
  if(connection?.connected!==true||connection.revoked)return {enabled:false,automatic:false,mode:'unavailable',reason:'Connect an AI to use Talk it through.'};
  if(connection.browserOnline===false||connection.relayAvailable===false)return {enabled:false,automatic:false,mode:'unavailable',reason:'Mini chat is offline. Keep this board connected and try again.'};
- const needsLink={enabled:false,automatic:false,mode:'unavailable',reason:'Open the SharedBoard conversation panel in your AI chat and click Link this chat. Keep the panel and this board open. Your AI app must support panel messages or verified incoming messages.'};
- if(connection.automaticMessages!==true)return needsLink;
- const mode=connection.deliveryMode==='panel'?'panel':'events';
- const deadline=connection.messageExpiresAt??(mode==='panel'?connection.panelExpiresAt:connection.eventExpiresAt);
+ const reason=connection.provider==='claude'?'Automatic mini chat is unavailable for this Claude connection. App messages fill a draft; they do not submit it or start the model. Board tools remain available in your AI chat.':['codex','claude-code'].includes(connection.provider)?`Automatic mini chat is a work in progress. A no-download incoming-message route has not been verified for this ${clientProfile(connection.provider).label} connection. Board tools remain available in your AI chat.`:'Automatic mini chat requires a supported, verified incoming-message connection. Board tools remain available in your AI chat.';
+ const unavailable={enabled:false,automatic:false,mode:'unavailable',reason};
+ if(connection.automaticMessages!==true||connection.deliveryMode!=='events')return unavailable;
+ const deadline=connection.messageExpiresAt??connection.eventExpiresAt;
  const expires=typeof deadline==='number'?deadline:typeof deadline==='string'?Date.parse(deadline):NaN;
- if(!Number.isFinite(expires)||expires<=now)return needsLink;
- return {enabled:true,automatic:true,mode,reason:mode==='panel'?'Direct mini chat is linked. Keep the conversation panel and this board open.':'Direct mini chat is available through verified incoming messages.'};
+ if(!Number.isFinite(expires)||expires<=now)return unavailable;
+ return {enabled:true,automatic:true,mode:'events',reason:'Automatic mini chat is available through verified incoming messages.'};
 }

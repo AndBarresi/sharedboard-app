@@ -18,17 +18,20 @@ Your board and chat history stay in this browser profile, while the relay proces
 | --- | --- |
 | Pairing completed | The client has a scoped connection to this board. |
 | Board access verified | The AI actually read and confirmed a current board revision. |
-| Conversation panel linked | A host-mounted MCP Apps panel passed its text-messaging capability check and the user clicked **Link this chat**. |
-| Request queued | Its ID is waiting for the linked panel; the assistant has not necessarily received it. |
-| Host accepted the message | The panel’s host acknowledged insertion into its existing conversation. This is not an assistant answer. |
+| Panel rendered or composer filled | A diagnostic UI operation succeeded. This does not show that a message was sent or an assistant turn started. |
+| Incoming events verified | The active connection has a supported subscription and a real delivery test. Pairing alone does not establish this. |
+| Request queued | Its ID is waiting for a supported delivery route; the assistant has not necessarily received it. |
+| Delivery acknowledged | The supported route accepted the event. This is not an assistant answer. |
 | Request read | The connected AI used the board tools to read the saved request. |
 | Reply received | The AI explicitly posted an answer using the board reply tool. |
 
-The assistant opens **`open_sharedboard_chat`** inside the existing conversation. Its MCP Apps panel checks **`hostCapabilities.message.text`**, then lets the user link forwarding to that conversation. While the linked panel and browser board remain open, it claims a queued request ID, asks its host to add the saved request instructions as a user message, and records the host’s acknowledgement. The assistant retrieves the actual captured context from the browser through its tools and posts its answer with **`reply_to_chat_message`**. Individual messages do not require copying and pasting. Both read-only and requested-edit drawing access permit this reply path.
+The current working connection exposes board tools to the existing AI conversation. The user asks the assistant there to read the drawing or make a requested change. For an existing saved mini-chat request, the assistant retrieves its capture with the board tools and posts its actual answer using **`reply_to_chat_message`**. Both read-only and requested-edit drawing grants permit replies.
 
-A host without MCP Apps text messaging can still have working board tools, but those tools do not provide idle-chat wakeup. This matters for ordinary remote MCP connections in local Codex and Claude Code. Do not infer full messaging support from a client name, pairing, or protocol fixtures: each host/account needs a real send and reply test. New mini-chat sends stop when the supported route is unavailable; they do not silently become copied requests.
+Automatic mini chat and **Ask AI to look** require a separately verified incoming-event route. Ordinary remote MCP tools in local Codex and Claude Code do not provide idle-chat wakeup. The committed deployment has no approved event callback origins configured, so an automatic production path is not verified. New board-originated sends remain unavailable without a live supported subscription; they do not become copied messages or composer drafts.
 
-Incoming MCP Events are a separate possible route for hosts such as ChatGPT Work Cloud. The committed deployment has no approved callback origins configured, and this route has not been verified as active. It must not be presented as a working fallback for a closed or unsupported panel.
+The experimental **`open_sharedboard_chat`** MCP Apps panel remains diagnostic WIP. In a native Claude test on **2026-10-27**, it rendered and **`ui/message`** filled the composer, but the user still needed to press Send. No assistant turn or automatic reply resulted. A **`hostCapabilities.message.text`** flag and a successful RPC response therefore do not prove automatic delivery. [Anthropic’s explanation](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671) describes that composer behavior; an [open request to change it](https://github.com/anthropics/claude-ai-mcp/issues/1111) also distinguishes drafting from starting a turn.
+
+ChatGPT Work Cloud MCP Events remain a separate possible route to configure and test. No provider name, successful pairing, UI rendering, or protocol fixture replaces a real host/account send/read/reply test. SharedBoard does not introduce a downloaded helper or replacement hosted model to work around unsupported delivery.
 
 A missing receipt remains uncertain. Keep its original request ID, check the linked conversation, and use the same request for any safe retry. Never change its saved attachment or automatically switch delivery modes after an uncertain attempt. Do not repeat work or overwrite an existing answer when a request was already handled.
 

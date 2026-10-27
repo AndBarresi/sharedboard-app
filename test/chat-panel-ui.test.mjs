@@ -28,6 +28,8 @@ test('only the host metadata receives the opaque panel capability, and app tools
  const f=registered(),result=await f.tools.get('open_sharedboard_chat').callback({});
  assert.equal(f.tools.size,6);
  assert.deepEqual(result._meta.sharedboardPanel,metadata.sharedboardPanel);
+ assert.equal(result.structuredContent.automaticMessages,false);assert.equal(result.structuredContent.diagnosticOnly,true);
+ assert.match(result.content[0].text,/unavailable/);assert.match(result.content[0].text,/fill a draft without submitting/);assert.doesNotMatch(result.content[0].text,/Click Link/);
  assert.equal(JSON.stringify({content:result.content,structuredContent:result.structuredContent}).includes(viewKey),false);
  assert.deepEqual(f.tools.get('open_sharedboard_chat').config._meta.ui,{resourceUri:CHAT_PANEL_URI});
  for(const name of appTools){
@@ -90,141 +92,68 @@ test('the MCP 2.4 SDK preserves app visibility and hidden result metadata throug
  }finally{await client.close();await handler.close();}
 });
 
-// This is a protocol-only host double. It does not operate a browser, contact a
-// provider, or prove that an actual AI app starts a model turn after ui/message.
+// This is a protocol-only host double. It does not operate a browser or contact
+// an AI provider. Text support never establishes automatic turn submission.
 async function host(options={}){
- const elements=new Map(),listeners=new Map(),timers=new Map(),intervals=new Map();
- const sent=[],toolCalls=[],timeline=[];let serial=0,linked=Boolean(options.priorLease),pendingMessage=null;
- const current={...state(),pending:[entry()],...options.state};
+ const elements=new Map(),listeners=new Map(),timers=new Map(),sent=[];let serial=0,intervals=0;
  const element=id=>{if(!elements.has(id))elements.set(id,{textContent:'',hidden:false,disabled:false,onclick:null});return elements.get(id);};
  const flush=()=>new Promise(resolve=>setImmediate(resolve));
- const reply=(id,result,error)=>queueMicrotask(()=>listeners.get('message')?.({source:parent,data:{jsonrpc:'2.0',id,...(error?{error}:{result})}}));
- const parent={postMessage:message=>{
-  sent.push(message);timeline.push(message.method??'response');
-  if(message.id===undefined)return;
-  if(message.method==='ui/initialize'){reply(message.id,{hostCapabilities:options.capabilities??{message:{text:{}}}});return;}
-  if(message.method==='ui/message'){
-   pendingMessage=message;
-   if(options.ack==='defer')return;
-   if(options.ack==='error'){reply(message.id,undefined,{code:-32603,message:'Host refused this message'});return;}
-   reply(message.id,options.ack==='decline'?{isError:true}:options.ack==='missing'?undefined:{});return;
-  }
-  if(message.method!=='tools/call')return;
-  const {name,arguments:input}=message.params;toolCalls.push({name,input});
-  assert.equal(input.viewKey,viewKey);
-  if(name==='panel_attach')linked=true;
-  if(name==='panel_detach')linked=false;
-  const result=name==='panel_claim'?{receipt:'receipt-'+input.id,prompt:'Read the saved Discuss request with read_chat_message; do not change the drawing.'}:{...current,linked};
-  reply(message.id,{structuredContent:result});
- }};
+ const emit=message=>listeners.get('message')?.({source:parent,data:{jsonrpc:'2.0',...message}});
+ const reply=(id,result,error)=>queueMicrotask(()=>emit({id,...(error?{error}:{result})}));
+ const parent={postMessage:message=>{sent.push(message);if(message.method==='ui/initialize'&&!options.deferInitialize)reply(message.id,{hostCapabilities:options.capabilities??{message:{text:{}}}});}};
  const window={parent,addEventListener:(name,callback)=>listeners.set(name,callback)};
- const context={window,document:{getElementById:element},setTimeout:(callback,delay)=>{const id=++serial;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id),setInterval:(callback,delay)=>{const id=++serial;intervals.set(id,{callback,delay});return id;},clearInterval:id=>intervals.delete(id)};
- await vm.runInNewContext('(async()=>{'+script+'})()',context);
- const notify=(params,source=parent)=>listeners.get('message')({source,data:{jsonrpc:'2.0',method:'ui/notifications/tool-result',params}});
- notify({_meta:metadata});await flush();
- return {
-  sent,toolCalls,timeline,current,element,flush,
-  count:name=>toolCalls.filter(call=>call.name===name).length,
-  messages:()=>sent.filter(message=>message.method==='ui/message'),
-  async link(){await element('link').onclick();await flush();},
-  async poll(){for(const {callback} of intervals.values())callback();await flush();},
-  async acknowledge(result={}){assert.ok(pendingMessage);reply(pendingMessage.id,result);await flush();},
-  async hostMessage(message){listeners.get('message')({source:parent,data:{jsonrpc:'2.0',...message}});await flush();},
-  async expireRequest(){for(const [id,{callback,delay}] of [...timers])if(delay===20_000){timers.delete(id);callback();}await flush();},
-  async notify(params){notify(params);await flush();},
-  async foreignNotify(params){notify(params,{});await flush();},
-  async close(id='teardown-request'){listeners.get('message')({source:parent,data:{jsonrpc:'2.0',id,method:'ui/resource-teardown',params:{}}});await flush();},
-  intervalCount:()=>intervals.size,
+ const context={window,document:{getElementById:element},setTimeout:(callback,delay)=>{const id=++serial;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id),setInterval:()=>{intervals++;return intervals;},clearInterval:()=>{}};
+ const running=vm.runInNewContext('(async()=>{'+script+'})()',context);
+ if(!options.deferInitialize)await running;
+ emit({method:'ui/notifications/tool-result',params:{_meta:metadata,structuredContent:opened}});await flush();
+ return {sent,element,flush,running,emit,
+  count:method=>sent.filter(message=>message.method===method).length,
+  toolCalls:()=>sent.filter(message=>message.method==='tools/call'),
+  intervalCount:()=>intervals,
+  async link(){await element('link').onclick?.();await flush();},
+  async close(id='teardown-request'){emit({id,method:'ui/resource-teardown',params:{}});await flush();await running;},
+  async foreign(message){listeners.get('message')({source:{},data:{jsonrpc:'2.0',...message}});await flush();},
+  async initialize(){const request=sent.find(message=>message.method==='ui/initialize');reply(request.id,{hostCapabilities:{message:{text:{}}}});await running;await flush();},
  };
 }
 
-test('forwarding requires an explicit link, makes one claim, and waits for host acknowledgement before confirmation',async()=>{
- const h=await host({ack:'defer'});
- assert.equal(h.count('panel_attach'),0);assert.equal(h.count('panel_claim'),0);assert.equal(h.messages().length,0);
- await h.link();
- assert.equal(h.count('panel_attach'),1);assert.equal(h.count('panel_claim'),1);assert.equal(h.messages().length,1);assert.equal(h.count('panel_confirm'),0);
- assert.equal(h.messages()[0].params.role,'user');
- assert.match(h.messages()[0].params.content[0].text,/Discuss/);
- const heartbeats=h.count('panel_state');await h.poll();
- assert.ok(h.count('panel_state')>heartbeats,'lease heartbeats continue while the host message awaits acknowledgement');
- assert.equal(h.count('panel_claim'),1);
- await h.acknowledge({});
- assert.equal(h.count('panel_confirm'),1,'the documented empty success object is a valid acknowledgement');
- assert.deepEqual(structuredClone(h.toolCalls.find(call=>call.name==='panel_confirm').input),{viewKey,receipt:'receipt-'+messageId});
- await h.poll();await h.poll();
- assert.equal(h.messages().length,1,'even a stale repeated queue entry must not be forwarded twice');
- assert.equal(h.count('panel_claim'),1);assert.equal(h.count('panel_confirm'),1);
- await h.close();assert.equal(h.count('panel_detach'),1);assert.equal(h.intervalCount(),0);
- assert.ok(h.sent.some(message=>message.id==='teardown-request'&&message.result));
-});
-
-test('a remounted panel does not renew an earlier lease until this instance is explicitly linked',async()=>{
- const h=await host({priorLease:true});
- await h.poll();await h.poll();await h.poll();
- assert.equal(h.count('panel_state'),0,'even a previously linked view must not heartbeat before a fresh Link click');
- assert.equal(h.count('panel_attach'),0);assert.equal(h.count('panel_claim'),0);assert.equal(h.messages().length,0);
- await h.link();
- assert.equal(h.count('panel_attach'),1);assert.ok(h.count('panel_state')>0);assert.equal(h.messages().length,1);
-});
-
-test('only a response envelope with result or error can settle an in-flight app RPC',async()=>{
- const h=await host({ack:'defer'});await h.link();const {id}=h.messages()[0];
- await h.hostMessage({id});
- await h.hostMessage({id,method:'host/request',result:{}});
- await h.hostMessage({id,result:{},error:{message:'Invalid mixed response'}});
- assert.equal(h.count('panel_confirm'),0);assert.equal(h.count('panel_detach'),0);
- await h.acknowledge({});assert.equal(h.count('panel_confirm'),1);
-});
-
-test('a host teardown with the same ID as an in-flight app request closes the panel instead of resolving that request',async()=>{
- const h=await host({ack:'defer'});await h.link();
- const message=h.messages()[0];assert.ok(message);assert.equal(h.count('panel_confirm'),0);
- await h.close(message.id);
- assert.equal(h.intervalCount(),0,'the host request must run teardown even when its ID collides with an app request');
- assert.equal(h.count('panel_detach'),1);
- assert.equal(h.count('panel_confirm'),0,'teardown is never a successful ui/message acknowledgement');
- const responses=h.sent.filter(item=>item.id===message.id&&item.method===undefined&&Object.hasOwn(item,'result'));
- assert.equal(responses.length,1,'the independent host teardown request receives its own response');
- await h.acknowledge({});await h.poll();
- assert.equal(h.count('panel_confirm'),0,'a late host acknowledgement cannot reactivate the disposed panel');
- assert.equal(h.messages().length,1);
-});
-
-for(const ack of ['decline','error','missing','defer'])test(`a ${ack==='defer'?'timed-out':ack} host acknowledgement pauses, detaches, and never automatically retries`,async()=>{
- const h=await host({ack});await h.link();
- if(ack==='defer')await h.expireRequest();
- assert.equal(h.messages().length,1);assert.equal(h.count('panel_claim'),1);assert.equal(h.count('panel_confirm'),0);
- assert.equal(h.count('panel_detach'),1);assert.equal(h.element('status').textContent,'Forwarding paused');
- assert.match(h.element('error').textContent,/duplicate/);
- await h.poll();await h.poll();assert.equal(h.messages().length,1);assert.equal(h.count('panel_claim'),1);
- if(ack==='defer'){await h.acknowledge({});assert.equal(h.count('panel_confirm'),0,'a late response after timeout must not revive the request');}
-});
-
-test('hosts without an explicit text-message capability cannot attach or claim requests',async()=>{
- for(const capabilities of [{},{message:{}},{message:{text:true}},{message:{text:null}}]){
-  const h=await host({capabilities});
-  assert.equal(h.element('link').disabled,true);assert.match(h.element('status').textContent,/does not expose chat messaging/);
-  await h.link();await h.poll();
-  assert.equal(h.count('panel_attach'),0);assert.equal(h.count('panel_claim'),0);assert.equal(h.messages().length,0);
- }
-});
-
-test('queue entries for other delivery methods or non-pending statuses never trigger a claim',async()=>{
- for(const changes of [{delivery:'manual'},{delivery:'uncertain'},{delivery:'app'},{status:'reading'},{status:'answered'},{status:'reviewed'},{kind:'other'}]){
-  const h=await host({state:{pending:[entry(changes)]}});await h.link();await h.poll();
-  assert.equal(h.count('panel_claim'),0);assert.equal(h.messages().length,0);
- }
-});
-
-test('wrong board IDs, connection IDs, replacement metadata, and foreign windows cannot retarget forwarding',async()=>{
- for(const changes of [{boardId:'other-board'},{connectionId:'other-connection'}]){
-  const h=await host({state:changes});await h.link();await h.poll();
-  assert.equal(h.count('panel_claim'),0);assert.equal(h.messages().length,0);assert.match(h.element('error').textContent,/original board connection/);
- }
+test('advertised text messaging leaves the panel diagnostic only, without attach, polling, claim, send or replay',async()=>{
  const h=await host();
- await h.foreignNotify({_meta:{sharedboardPanel:{...metadata.sharedboardPanel,viewKey:'b'.repeat(64)}}});
- assert.doesNotMatch(h.element('status').textContent,/paused/i,'unrelated windows are ignored');
- await h.notify({_meta:{sharedboardPanel:{...metadata.sharedboardPanel,connectionId:'replacement'}}});
- assert.equal(h.element('status').textContent,'Forwarding paused');assert.match(h.element('error').textContent,/replaced this panel/);
- assert.equal(h.messages().length,0);
+ assert.equal(h.element('link').disabled,true);
+ assert.match(h.element('status').textContent,/Text messaging advertised.*automatic sending unavailable/);
+ assert.match(h.element('detail').textContent,/draft instead of a model turn/);
+ await h.link();
+ h.emit({method:'ui/notifications/tool-result',params:{_meta:metadata,structuredContent:{...opened,linked:true,pending:[entry()]}}});await h.flush();
+ assert.equal(h.toolCalls().length,0,'no state heartbeat may renew an old panel lease');
+ assert.equal(h.intervalCount(),0);
+ assert.equal(h.count('ui/message'),0);
+ assert.equal(h.count('ui/notifications/initialized'),1);
+ await h.close();assert.ok(h.sent.some(message=>message.id==='teardown-request'&&message.result));
+});
+
+test('missing text capabilities cannot enable automatic mini chat or forwarding',async()=>{
+ for(const capabilities of [{},{message:{}},{message:{text:true}},{message:{text:null}}]){
+  const h=await host({capabilities});await h.link();
+  assert.equal(h.element('link').disabled,true);assert.match(h.element('status').textContent,/text support not advertised/);
+  assert.equal(h.toolCalls().length,0);assert.equal(h.count('ui/message'),0);
+ }
+});
+
+test('a host teardown ID colliding with initialization is handled as a host request, never an RPC response',async()=>{
+ const h=await host({deferInitialize:true}),initial=h.sent.find(message=>message.method==='ui/initialize');
+ assert.ok(initial);await h.close(initial.id);
+ assert.equal(h.count('ui/notifications/initialized'),0);
+ assert.equal(h.toolCalls().length,0);assert.equal(h.count('ui/message'),0);
+ assert.equal(h.sent.filter(message=>message.id===initial.id&&message.method===undefined&&Object.hasOwn(message,'result')).length,1);
+ await h.initialize();assert.equal(h.count('ui/notifications/initialized'),0,'a late response cannot revive disposed diagnostics');
+});
+
+test('bare IDs, method-bearing envelopes, mixed responses and foreign windows cannot settle initialization',async()=>{
+ const h=await host({deferInitialize:true}),{id}=h.sent.find(message=>message.method==='ui/initialize');
+ h.emit({id});h.emit({id,method:'host/request',result:{hostCapabilities:{message:{text:{}}}}});
+ h.emit({id,result:{},error:{message:'Invalid mixed response'}});
+ await h.foreign({id,result:{hostCapabilities:{message:{text:{}}}}});
+ assert.equal(h.count('ui/notifications/initialized'),0);
+ await h.initialize();assert.equal(h.count('ui/notifications/initialized'),1);
+ assert.equal(h.element('link').disabled,true);assert.equal(h.toolCalls().length,0);assert.equal(h.count('ui/message'),0);
 });
