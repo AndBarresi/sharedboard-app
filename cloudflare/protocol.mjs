@@ -25,6 +25,29 @@ export function tokenSession(token){const match=typeof token==='string'&&token.m
 export function stable(value){return Array.isArray(value)?value.map(stable):object(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;}
 export function errorData(error){return {message:error.message,status:error.status??400,code:error.code??'RELAY_ERROR',...(error.conflicts?{conflicts:error.conflicts}:{})};}
 export async function internal(stub,path,input,{signal}={}){const result=await stub.fetch(new Request(`https://internal${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input??{}),...(signal?{signal}:{})}));const data=await result.json();if(!result.ok)throw Object.assign(fail(data.error??'The connector could not finish this request.',result.status,data.code),{conflicts:data.conflicts,data:safeErrorDetails(data.data)});return data;}
+// Live waits need transport diagnostics without exposing platform exceptions or
+// response bodies. This boundary deliberately does not change other relay calls.
+export const LIVE_DIAGNOSTIC_CODES=Object.freeze(['LIVE_STORAGE_UNAVAILABLE','LIVE_STATE_INVALID','LIVE_SCOPE_MISMATCH','LIVE_WAIT_INVALID','LIVE_WAIT_IN_PROGRESS','LIVE_SESSION_REPLACED','LIVE_SESSION_REQUIRED','LIVE_SESSION_NOT_WAITING','LIVE_REQUEST_INVALID','LIVE_REQUEST_CONFLICT','LIVE_REQUEST_LIMIT','LIVE_OPERATION_INVALID','LIVE_WAIT_TYPE_ERROR','LIVE_WAIT_CANCELLED','LIVE_WAIT_RUNTIME_ERROR','LIVE_WAIT_PREPARE_TYPE_ERROR','LIVE_WAIT_PREPARE_CANCELLED','LIVE_WAIT_PREPARE_RUNTIME_ERROR','LIVE_WAIT_ACTIVATE_TYPE_ERROR','LIVE_WAIT_ACTIVATE_CANCELLED','LIVE_WAIT_ACTIVATE_RUNTIME_ERROR','UNAUTHORIZED','CONNECTION_REPLACED','PAIRING_REQUIRED','PAIRING_EXPIRED','RELAY_DISCONNECTED','BROWSER_OFFLINE','BROWSER_NOT_PAIRED','INVALID_REQUEST','LIVE_BINDING_FETCH_FAILED','LIVE_BINDING_RESPONSE_INVALID','LIVE_RELAY_ERROR','LIVE_IO_CONTEXT_MISMATCH','LIVE_CPU_LIMIT','LIVE_OBJECT_RESET','LIVE_RESPONSE_STALLED']);
+const liveCodes=new Set(LIVE_DIAGNOSTIC_CODES);
+function liveFailureCode(error,fallback){
+ if(error?.name==='AbortError')return 'LIVE_WAIT_CANCELLED';
+ if(liveCodes.has(error?.code))return error.code;
+ const message=typeof error?.message==='string'?error.message:'';
+ if(/Cannot perform I\/O on behalf of a different (?:request|Durable Object)/i.test(message))return 'LIVE_IO_CONTEXT_MISMATCH';
+ if(/\bCPU(?: time)? limit\b|\bexceeded\b.{0,60}\bCPU(?: time)?\b/i.test(message))return 'LIVE_CPU_LIMIT';
+ if(/\bDurable Object\b.{0,120}\b(?:reset|restarted|replaced|updated)\b|\b(?:reset|restart|replace)\b.{0,100}\bDurable Object\b/i.test(message))return 'LIVE_OBJECT_RESET';
+ if(/\bhung and would never generate a response\b|\bscript will never generate a response\b|\bPromise will never complete\b/i.test(message))return 'LIVE_RESPONSE_STALLED';
+ return fallback;
+}
+export async function internalLiveWait(stub,input,{signal}={}){
+ let response;
+ try{response=await stub.fetch(new Request('https://internal/agent/live',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input??{}),...(signal?{signal}:{})}));}
+ catch(error){throw fail('The live wait transport could not finish its request.',503,liveFailureCode(error,'LIVE_BINDING_FETCH_FAILED'));}
+ let data;try{data=await response.json();}catch(error){throw fail('The live wait transport returned an invalid response.',502,liveFailureCode(error,'LIVE_BINDING_RESPONSE_INVALID'));}
+ if(!object(data))throw fail('The live wait transport returned an invalid response.',502,'LIVE_BINDING_RESPONSE_INVALID');
+ if(!response.ok){const error={code:data.code,message:data.error};throw fail('The live wait relay could not finish its request.',response.status,liveFailureCode(error,'LIVE_RELAY_ERROR'));}
+ return data;
+}
 export const scopes=raw=>new Set(String(raw??'').split(' ').filter(Boolean));
 export function allowedScope(raw){const set=scopes(raw);if(!set.size||!set.has('board.read')||[...set].some(s=>!['board.read','board.write'].includes(s)))throw fail('Choose supported board access.',400,'INVALID_SCOPE');return [...set].sort().join(' ');}
 export function permissionFor(scope){return scopes(scope).has('board.write')?'edit':'read';}

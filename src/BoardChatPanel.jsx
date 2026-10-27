@@ -72,7 +72,7 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
     else setStorageWarning(Boolean(JSON.parse(value).attachmentNotStored));
   },[pending]);
   useEffect(()=>{
-    if(pending&&messages.some(m=>m.id===pending.id&&acceptedDirectMessage(m))){if(draft.trim()===pending.text)setDraft('');setPending(null);}
+    if(pending&&messages.some(m=>m.id===pending.id&&acceptedDirectMessage(m))){setDraft(current=>current.trim()===pending.text?'':current);setPending(current=>current?.id===pending.id?null:current);}
     if(open){lastSeen.current=lastReply;writeStorage(scoped('seen'),lastReply);bottom.current?.scrollIntoView({block:'nearest'});}
   },[open,messages,lastReply]);
   useEffect(()=>{if(open)composer.current?.focus();},[open]);
@@ -112,7 +112,7 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
       if(existing&&!result)return;
       const message=result?.messages?.find(m=>m.id===input.id);
       if(!acceptedDirectMessage(message))throw new Error(message?.deliveryError||'Automatic submission could not be confirmed. Your text and original request are kept. Check the AI conversation before retrying.');
-      if(active.current){setDraft('');setPending(null);}
+      if(active.current){setDraft(current=>current.trim()===input.text?'':current);setPending(current=>current?.id===input.id?null:current);}
     }catch(err){
       if(!active.current)return;
       if(shouldResetChatCapture(err)){setPending(null);setPrepared(null);}

@@ -4,6 +4,7 @@ import {McpServer,createMcpHandler,PROTOCOL_VERSION_META_KEY,CLIENT_INFO_META_KE
 import {Client,StreamableHTTPClientTransport} from '@modelcontextprotocol/client';
 import {attachLiveTools} from '../cloudflare/live-tools.mjs';
 import {handleRequest} from '../cloudflare/worker.mjs';
+import {internalLiveWait} from '../cloudflare/protocol.mjs';
 
 const origin='https://connect.sharedboard.app/mcp';
 const sessionId='11111111-1111-4111-8111-111111111111',boardId='22222222-2222-4222-8222-222222222222',connectionId='33333333-3333-4333-8333-333333333333',requestId='44444444-4444-4444-8444-444444444444';
@@ -104,6 +105,57 @@ test('wait failures expose only a fixed diagnostic code and preserve the stop in
  }
  const replaced=await fixture(()=>value({sessionId:'55555555-5555-4555-8555-555555555555'})).call({sessionId});
  assert.deepEqual(replaced.structuredContent,{code:'LIVE_RESULT_INVALID'});
+});
+
+test('the live-only binding boundary separates fetch, JSON and relay failures without exposing response text',async()=>{
+ const secret='private-live-binding-token-capture';
+ const reject=message=>async()=>{throw new Error(message+' '+secret);};
+ const cases=[
+  [reject('Network connection lost'),'LIVE_BINDING_FETCH_FAILED'],
+  [async()=>{throw new TypeError(secret);},'LIVE_BINDING_FETCH_FAILED'],
+  [async()=>{throw Object.assign(new Error(secret),{name:'AbortError'});},'LIVE_WAIT_CANCELLED'],
+  [reject('Cannot perform I/O on behalf of a different request.'),'LIVE_IO_CONTEXT_MISMATCH'],
+  [reject('Cannot perform I/O on behalf of a different Durable Object.'),'LIVE_IO_CONTEXT_MISMATCH'],
+  [reject('Worker exceeded CPU time limit.'),'LIVE_CPU_LIMIT'],
+  [reject('The Durable Object was reset because its code was updated.'),'LIVE_OBJECT_RESET'],
+  [reject("The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response."),'LIVE_RESPONSE_STALLED'],
+  [async()=>new Response('<html>'+secret+'</html>',{status:500}),'LIVE_BINDING_RESPONSE_INVALID'],
+  [async()=>Response.json(null,{status:500}),'LIVE_BINDING_RESPONSE_INVALID'],
+  [async()=>Response.json({error:secret,code:'RELAY_ERROR'},{status:500}),'LIVE_RELAY_ERROR'],
+  [async()=>Response.json({error:secret,code:'LIVE_'+secret},{status:500}),'LIVE_RELAY_ERROR'],
+  [async()=>Response.json({error:secret,code:'LIVE_WAIT_PREPARE_RUNTIME_ERROR'},{status:500}),'LIVE_WAIT_PREPARE_RUNTIME_ERROR'],
+  [async()=>Response.json({error:'CPU time limit exceeded. '+secret,code:'RELAY_ERROR'},{status:500}),'LIVE_CPU_LIMIT'],
+  [async()=>Response.json({error:'Cannot perform I/O on behalf of a different request. '+secret,code:'RELAY_ERROR'},{status:500}),'LIVE_IO_CONTEXT_MISMATCH'],
+ ];
+ for(const [fetch,code] of cases){
+  const f=fixture(()=>internalLiveWait({fetch},{grant:{token:secret},operation:'wait',input:{waitMs:1}}));
+  const result=await f.call({});assert.equal(result.isError,true);assert.deepEqual(result.structuredContent,{code});
+  assert.equal(JSON.stringify(result).includes(secret),false);assert.match(result.content[0].text,/Do not restart the session or replay requests automatically/);
+  await assert.rejects(internalLiveWait({fetch},{operation:'wait',input:{}}),error=>{
+   assert.equal(error.code,code);assert.equal(error.message.includes(secret),false);
+   assert.equal(JSON.stringify(error).includes(secret),false);assert.equal(error.cause,undefined);assert.equal(error.data,undefined);return true;
+  });
+ }
+ let received;const expected=value(),actual=await internalLiveWait({async fetch(request){received=request;return Response.json(expected);}},{operation:'wait',input:{waitMs:1}});
+ assert.deepEqual(actual,expected);assert.equal(new URL(received.url).pathname,'/agent/live');assert.deepEqual(await received.json(),{operation:'wait',input:{waitMs:1}});
+});
+
+test('the actual Worker MCP wait route returns safe binding diagnostics to the model',async()=>{
+ const secret='private-worker-live-error-body',grant={sessionId:connectionId,boardId,clientId:'live-diagnostic-client',familyId:'55555555-5555-4555-8555-555555555555',scope:'board.read'};
+ for(const [outcome,code] of [
+  [()=>{throw new Error('Network connection lost '+secret);},'LIVE_BINDING_FETCH_FAILED'],
+  [()=>new Response('<html>'+secret+'</html>',{status:500}),'LIVE_BINDING_RESPONSE_INVALID'],
+  [()=>Response.json({error:secret,code:'RELAY_ERROR'},{status:500}),'LIVE_RELAY_ERROR'],
+ ]){
+  const stub={async fetch(request){const path=new URL(request.url).pathname;if(path==='/agent/check')return Response.json({connection:{provider:'chatgpt',connected:true}});assert.equal(path,'/agent/live');return outcome();}};
+  const env={RELAY_AUTH:{idFromName:name=>name,get:()=>({fetch:async()=>Response.json(grant)})},BOARD_RELAY:{idFromName:id=>id,get:()=>stub}};
+  const client=new Client({name:'worker-live-diagnostic-test',version:'1'});
+  try{
+   await client.connect(new StreamableHTTPClientTransport(new URL(origin),{requestInit:{headers:{authorization:'Bearer '+'a'.repeat(64)}},fetch:(input,init)=>handleRequest(new Request(input,init),env)}));
+   const result=await client.callTool({name:'wait_for_board_request',arguments:{waitMs:1}});
+   assert.equal(result.isError,true);assert.deepEqual(result.structuredContent,{code});assert.equal(JSON.stringify(result).includes(secret),false);
+  }finally{await client.close();}
+ }
 });
 
 test('actual MCP SDK legacy and current MCP 2 envelopes discover and call a normal non-UI waiting tool',async()=>{
