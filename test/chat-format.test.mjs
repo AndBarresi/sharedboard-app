@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture} from '../src/chat-format.mjs';
+import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,clearDeletedBoardChatStorage,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture} from '../src/chat-format.mjs';
 test('chat links allow explicit web URLs and reject executable, local, disguised, credentialed and control-character destinations',()=>{
   assert.equal(safeChatHref('https://example.com/docs?q=a%20b'),'https://example.com/docs?q=a%20b');
   for(const url of ['javascript:alert(1)','data:text/html,hi','file:///C:/private.txt','//example.com',' https://example.com','https://exam\nple.com','https://user:secret@example.com','https:\\example.com','vbscript:msgbox(1)'])assert.equal(safeChatHref(url),null,url);
@@ -38,6 +38,14 @@ test('large attachments retain the original retry identity without filling per-b
   const stored=JSON.parse(serializePendingChat(pending));assert.equal(stored.id,pending.id);assert.equal(stored.text,pending.text);assert.equal(stored.attachmentNotStored,true);assert.equal(stored.capturedContext,undefined);
 });
 
+test('confirmed board deletion removes only its scoped drafts and legacy copies',()=>{
+ const values=new Map([[chatStorageKey('delete-me','draft'),'private draft'],[chatStorageKey('delete-me','pending'),'captured context'],[chatStorageKey('keep-me','draft'),'keep draft'],['sharedboard-chat-draft','legacy draft'],['other-app-preference','keep preference']]);
+ const storage={get length(){return values.size;},key:index=>[...values.keys()][index],removeItem:key=>values.delete(key)};
+ clearDeletedBoardChatStorage(['delete-me'],{legacyBoardId:'delete-me',storage});
+ assert.deepEqual([...values],[[chatStorageKey('keep-me','draft'),'keep draft'],['other-app-preference','keep preference']]);
+ assert.doesNotThrow(()=>clearDeletedBoardChatStorage(['delete-me'],{storage:{get length(){throw new Error('storage blocked');}}}));
+});
+
 test('pending, failed, and uncertain delivery never acknowledge a draft merely because automatic support was selected',()=>{
  for(const delivery of ['pending','failed','uncertain']){
   const attempted={id:'same-request',delivery,receipt:'attempted-event',handoffPrompt:'Old copied instructions',automaticMessages:true};
@@ -59,6 +67,6 @@ test('only a confirmed receipt, prepared manual instructions, or an actual reply
 });
 
 test('an uncertain automatic request retains its retry ID and capture after switching to manual chat',()=>{
- for(const error of [{status:409,code:'DELIVERY_UNCERTAIN',deliveryUnknown:true},{status:409,code:'DELIVERY_UNCERTAIN'},{status:409,deliveryUnknown:true},{status:500},new Error('Network unavailable')])assert.equal(shouldResetChatCapture(error),false);
+ for(const error of [{status:409,code:'DIRECT_CHAT_NOT_LINKED'},{status:409,code:'DELIVERY_UNCERTAIN',deliveryUnknown:true},{status:409,code:'DELIVERY_UNCERTAIN'},{status:409,deliveryUnknown:true},{status:500},new Error('Network unavailable')])assert.equal(shouldResetChatCapture(error),false);
  for(const status of [400,409,413])assert.equal(shouldResetChatCapture({status,code:'INVALID_PREVIEW'}),true);
 });

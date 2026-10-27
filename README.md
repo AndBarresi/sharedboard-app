@@ -27,7 +27,7 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 | Make the plan | Keep it useful |
 | --- | --- |
 | **Draw freely** | Shapes, text, arrows, images, freehand drawing, and a canvas-only view. |
-| **Organize your work** | Separate projects and boards, named areas, object search, and a minimap. |
+| **Organize your work** | Separate projects and boards, named areas, object search, a minimap, and confirmed deletion of work you no longer need. |
 | **Explain the details** | Attached notes, requirements, work cards, and screenshot references. |
 | **Reuse and recover** | Editable starting blocks, your own block library, checkpoints, and automatic recovery. |
 | **Bring your existing AI** | Connect a compatible AI chat through SharedBoard’s hosted MCP relay, with read-only or requested-edit access. |
@@ -57,10 +57,13 @@ Choose **Connect an AI**, select your app and its board access, then prepare the
 
 Your AI app must support remote MCP tools; availability depends on its capabilities and your plan. Selecting Codex, ChatGPT, Claude, or another client in SharedBoard does not enable tools that the client does not support.
 
-- **Mini chat for connected clients:** draft in **Talk it through**, then use **Copy to AI** and paste the saved request into your linked chat. The assistant reads its captured context and posts an actual reply back to the mini chat. This works with both read-only and requested-edit drawing access.
-- **Automatic delivery:** available when the active connection’s incoming MCP event capabilities are connected and verified. A successful pairing or provider choice alone does not prove automatic delivery works; manual mini chat remains available without it.
+For direct mini chat, ask the assistant to open **`open_sharedboard_chat`** in that conversation, then click **Link this chat** in its connection panel. In a host that exposes MCP Apps text messaging, the linked panel forwards new board requests into that same conversation. The assistant reads each saved capture and posts its actual answer back to **Talk it through**. Keep the panel and board tab open; no copying of individual messages is part of this flow.
+
+Direct messaging depends on the host’s verified capabilities. Ordinary remote MCP tools alone do not wake an idle local Codex or Claude Code chat. If the host cannot send messages from its panel, board tools may still work, but new mini-chat sends remain unavailable. This requires real client/account testing; it is not a promise that every Codex, Claude, or other MCP client supports the panel. A separate MCP Events route for ChatGPT Work Cloud is not configured or verified in the committed deployment.
 
 Keep the board tab open while your AI reads or edits it. The board saves context before sending, shows delivery and replies separately, and preserves conflicts for you to resolve. SharedBoard connects your existing model; it does not host another model or include an AI subscription. Context you share passes through the Cloudflare relay to the connected AI service.
+
+Use **Projects & boards** to delete a board or project only after reviewing its confirmation. Project deletion includes every board it contains and revokes those boards’ connections. This permanently removes their local drawings, notes, saved messages, and recovery history. Export wanted backups first. Unrelated boards remain available, and deleting the final board creates a blank board to continue in.
 
 ## Build and contribute
 

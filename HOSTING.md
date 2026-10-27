@@ -2,7 +2,7 @@
 
 SharedBoard has two hosted parts: the browser app at **https://sharedboard.app** and the Cloudflare relay at **https://connect.sharedboard.app**. Users work from the website and connect their existing AI through its generated remote MCP URL. No end-user application installation is part of this flow.
 
-Drawings, images, planning details, and board history remain in IndexedDB in each visitor’s browser profile. The relay handles connection authorization and live board/tool traffic; selected content passes through Cloudflare to the connected AI service. SharedBoard does not host a model. Normal hosting requests still reach Cloudflare, and this is not a claim of zero access logs.
+Drawings, images, planning details, board history, and actual mini-chat content remain in IndexedDB in each visitor’s browser profile. The relay handles connection authorization, request IDs and delivery metadata, and live board/tool traffic; selected content passes through Cloudflare when the connected AI reads or writes it. SharedBoard does not host a model. Normal hosting requests still reach Cloudflare, and this is not a claim of zero access logs.
 
 ## Build the browser app
 
@@ -43,7 +43,9 @@ pnpm relay:deploy
 
 Its Durable Object bindings are **`BOARD_RELAY` → `BoardRelay`** for scoped live board sessions and **`RELAY_AUTH` → `RelayAuth`** for authorization metadata. Wrangler applies the configured migrations. `APP_ORIGIN` and `RELAY_ORIGIN` identify the exact frontend and relay origins; keep production values scoped to the two public addresses above. `EVENT_CALLBACK_ORIGINS` starts empty, so automatic event callbacks require explicit operator-approved provider origins rather than arbitrary callback URLs.
 
-The relay provides the hosted MCP endpoint, short-lived board pairing, scoped authorization, live browser transport, and revocation. Connected clients can draft mini-chat messages and use an explicit copied request, including with read-only drawing access. Automatic mini-chat delivery is gated separately to the active connection’s verified MCP event capabilities, with real delivery/read/reply checks. A missing or expired automatic subscription must not disable the manual composer.
+The relay provides the hosted MCP endpoint, short-lived board pairing, scoped authorization, live browser transport, revocation, and an optional host-mounted MCP Apps conversation panel. The **`open_sharedboard_chat`** tool opens that panel in the existing AI conversation. It checks **`hostCapabilities.message.text`** before enabling **Link this chat**. The linked panel forwards queued request IDs through the host’s user-message API while the panel and browser board remain open. Actual captures and replies stay in browser storage; tool calls carry them through the relay as needed. Read-only board grants still permit replies.
+
+The no-copy message flow needs host support and a real client/account acceptance test. Ordinary remote MCP tools in local Codex or Claude Code do not independently wake an idle session. Do not expose a manual copy fallback for new messages when direct delivery is unavailable, and do not advertise all clients as supporting panel messages. Existing saved requests and replies remain readable. MCP Events for ChatGPT Work Cloud are a separate possible delivery route; with **`EVENT_CALLBACK_ORIGINS` empty**, they are not configured or verified as an active deployment feature. Only add explicit approved callback origins after reviewing and testing the intended provider.
 
 For development, `pnpm relay:dev` starts Wrangler on port **8787**. Its production origin defaults are still strict: a local integration requires development-only `APP_ORIGIN` and `RELAY_ORIGIN` values matching the exact preview/relay origins, plus the frontend pointing to that test relay. Do not weaken the production allowlist to make a local preview work. Verify the deployed relay before the frontend advertises a working connection; a successful static build does not prove the relay, authorization, or an AI account works.
 
@@ -66,8 +68,10 @@ Use isolated browser profiles/databases and synthetic drawings, not the develope
 - Create a board, draw, add a note/reference, wait for saved state, reload, and reopen a direct board URL.
 - Confirm a separate profile begins independently; export/import a test backup and preserve current work on rejected imports.
 - Pair a real supported AI client through the website, approve the chosen board permission, read/confirm its revision, and return an actual mini-chat reply.
-- Check explicit handoff for ordinary clients and capability-gated event delivery separately. A delivery acknowledgement is not an AI answer.
+- Open the connection panel in that same conversation, verify text messaging, click **Link this chat**, send from the board without copying the message, and confirm the assistant posts its actual answer back. Test read-only and requested-edit grants separately.
+- Check unsupported hosts, panel closure/pause/expiry, offline boards, and uncertain delivery. New messages must stop without copied-message fallbacks or automatic duplicate sends. Test any separately configured MCP Events route on its own; a delivery acknowledgement is not an AI answer.
 - Verify expiry, wrong-board isolation, revocation, reconnect, uncertain retry handling, and newer human-edit preservation.
+- Cancel a board/project deletion and confirm nothing changes. Confirm deletion in a synthetic workspace, check the affected board count, target-grant revocation and snapshot/draft cleanup, and preserve unrelated boards. Delete the final board and check the blank fallback and stopped saves in another deleted-board tab. Export wanted backups before permanent deletion.
 - Check the website on Windows and Mac browsers without a SharedBoard installation.
 
 Static checks and protocol fixtures prepare for these acceptance tests; they do not replace them. See [Connections](CONNECTIONS.md), [Connection behavior](BRIDGE.md), and [Development](docs/LOCAL-DEVELOPMENT.md).

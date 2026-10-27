@@ -1,6 +1,7 @@
 import {fail,json,body,failureResponse,uuid,secret,hash,tokenSession,object,stable,MAX_RESULT,errorData,manualPrompt,permissionFor} from './protocol.mjs';
 import {dispatchEvent,eventStatus,clearEventSubscriptions,handleEventRpc} from './events.mjs';
 import {clientProfile,isClientProvider} from '../shared/client-profiles.mjs';
+import {panelStatus,panelOperation,queuePanelRequest,clearPanel} from './panel-state.mjs';
 
 const supported=new Set(['connection','pair','confirm','read','read_full','visual','reviews','review','complete_review','add','chats','chat','reply','edit']);
 const writes=new Set(['add','edit']);
@@ -9,11 +10,15 @@ const defaultOrigin='https://connect.sharedboard.app';
 export class BoardRelay{
  constructor(ctx,env){this.ctx=ctx;this.env=env;this.pending=new Map();this.ready=ctx.blockConcurrencyWhile(async()=>{this.meta=await ctx.storage.get('session')??null;});if(typeof WebSocketRequestResponsePair==='function')ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}
  eventContext(){return {principal:this.meta.id,boardId:this.meta.boardId,storage:this.ctx.storage,callbackFetch:fetch,allowedCallbackOrigins:this.env.EVENT_CALLBACK_ORIGINS??''};}
- async connection(){const events=this.meta?await eventStatus(this.eventContext()):{};return {connected:Boolean(this.meta?.activatedAt&&!this.meta.revoked),id:this.meta?.id??null,boardId:this.meta?.boardId??null,provider:this.meta?.provider??null,label:this.meta?.label??'Connect an AI',permission:this.meta?.authorizedScope?permissionFor(this.meta.authorizedScope):this.meta?.permission??null,automaticMessages:Boolean(events.automaticMessages),automaticReviews:Boolean(events.automaticReviews),eventExpiresAt:events.eventExpiresAt??null,messageExpiresAt:events.messageExpiresAt??null,reviewExpiresAt:events.reviewExpiresAt??null,browserOnline:Boolean(this.owner()),boardCheckedAt:this.meta?.boardCheckedAt??null,deliveryCheckedAt:this.meta?.deliveryCheckedAt??null,replyCheckedAt:this.meta?.replyCheckedAt??null,connectedAt:this.meta?.activatedAt??null,authorized:Boolean(this.meta?.authorizedClient),chatIdentityVerified:false,deliveryMode:events.automaticMessages?'events':'manual',...(this.meta?.revoked?{revoked:true}:{})};}
+ panelContext(){return {storage:this.ctx.storage,boardId:this.meta.boardId,connectionId:this.meta.id,familyId:this.meta.authorizedFamily,label:this.meta.label,permission:permissionFor(this.meta.authorizedScope)};}
+ async connection(){
+  const events=this.meta?await eventStatus(this.eventContext()):{},panel=this.meta?.activatedAt&&this.meta.authorizedFamily&&!this.meta.revoked?await panelStatus(this.panelContext()):{linked:false};
+  return {connected:Boolean(this.meta?.activatedAt&&!this.meta.revoked),id:this.meta?.id??null,boardId:this.meta?.boardId??null,provider:this.meta?.provider??null,label:this.meta?.label??'Connect an AI',permission:this.meta?.authorizedScope?permissionFor(this.meta.authorizedScope):this.meta?.permission??null,automaticMessages:Boolean(panel.linked||events.automaticMessages),automaticReviews:Boolean(panel.linked||events.automaticReviews),panelConnected:Boolean(panel.linked),panelExpiresAt:panel.expiresAt??null,eventExpiresAt:events.eventExpiresAt??null,messageExpiresAt:panel.linked?panel.expiresAt:events.messageExpiresAt??null,reviewExpiresAt:panel.linked?panel.expiresAt:events.reviewExpiresAt??null,browserOnline:Boolean(this.owner()),boardCheckedAt:this.meta?.boardCheckedAt??null,deliveryCheckedAt:this.meta?.deliveryCheckedAt??null,replyCheckedAt:this.meta?.replyCheckedAt??null,connectedAt:this.meta?.activatedAt??null,authorized:Boolean(this.meta?.authorizedClient),chatIdentityVerified:false,deliveryMode:panel.linked?'panel':events.automaticMessages?'events':'manual',...(this.meta?.revoked?{revoked:true}:{})};
+ }
  sockets(){return this.ctx.getWebSockets().filter(ws=>{try{return ws.readyState===1&&ws.deserializeAttachment()?.authenticated===true;}catch{return false;}});}
  owner(){return this.sockets().find(ws=>ws.deserializeAttachment().owner===true);}
  async save(){await this.ctx.storage.put('session',this.meta);}
- async revoke(){this.meta.revoked=true;delete this.meta.codeHash;await this.save();await clearEventSubscriptions(this.eventContext());for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(fail('This board connection ended.',403,'RELAY_DISCONNECTED'));}this.pending.clear();for(const ws of this.ctx.getWebSockets())try{ws.close(1000,'Disconnected from the board');}catch{}return {ok:true};}
+ async revoke(){this.meta.revoked=true;delete this.meta.codeHash;await this.save();await clearEventSubscriptions(this.eventContext());if(this.meta.authorizedFamily)await clearPanel(this.panelContext());for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(fail('This board connection ended.',403,'RELAY_DISCONNECTED'));}this.pending.clear();for(const ws of this.ctx.getWebSockets())try{ws.close(1000,'Disconnected from the board');}catch{}return {ok:true};}
  async publish(){const message=JSON.stringify({type:'connection',connection:await this.connection()});for(const ws of this.sockets())try{ws.send(message);}catch{}}
  alive(){if(!this.meta||this.meta.revoked||this.meta.expiresAt<=Date.now())throw fail('This board connection ended. Connect it again from SharedBoard.app.',401,'RELAY_DISCONNECTED');}
  async browser(token){this.alive();if(tokenSession(token)!==this.meta.id||await hash(token)!==this.meta.browserHash)throw fail('Reconnect this browser board from SharedBoard.app.',401,'BROWSER_NOT_PAIRED');return this.meta;}
@@ -40,7 +45,9 @@ export class BoardRelay{
  async handoff(input,{notify=false}={}){
   if(!this.meta.activatedAt)throw fail('Connect this board to your AI before sending a request.',409,'PAIRING_REQUIRED');if(!['chat','review'].includes(input.kind))throw fail('Choose a chat message or board review.');uuid(input.id,'request ID');if(input.connectionId&&input.connectionId!==this.meta.id)throw fail('This request belongs to another board connection.',403);
   const list=await this.rpc(input.kind==='chat'?'chats':'reviews'),item=(list[input.kind==='chat'?'messages':'requests']??[]).find(item=>item.id===input.id);if(!item||item.connectionId!==this.meta.id)throw fail('That saved request does not belong to this board connection.',404);
-  if(notify){const delivered=await dispatchEvent({id:input.id,kind:input.kind,intent:item.intent},this.eventContext());if(delivered.delivery!=='manual'){if(delivered.delivery==='queued'){this.meta.deliveryCheckedAt=new Date().toISOString();await this.save();await this.publish();}return {...delivered,connection:await this.connection()};}}
+  if(notify){
+   if((await panelStatus(this.panelContext())).linked){const queued=await queuePanelRequest({id:input.id,kind:input.kind,intent:item.intent??'discuss'},this.panelContext());return {delivery:'queued',automaticMessages:true,receipt:queued.receipt,connection:await this.connection()};}
+   const delivered=await dispatchEvent({id:input.id,kind:input.kind,intent:item.intent},this.eventContext());if(delivered.delivery!=='manual'){if(delivered.delivery==='queued'){this.meta.deliveryCheckedAt=new Date().toISOString();await this.save();await this.publish();}return {...delivered,connection:await this.connection()};}}
   return {delivery:'manual',handoffPrompt:manualPrompt(input.kind,input.id,this.meta.boardId),connection:await this.connection()};
  }
  async fetch(request){
@@ -56,7 +63,7 @@ export class BoardRelay{
     if(url.pathname==='/browser/owner')return json({id:this.meta.id,boardId:this.meta.boardId,permission:this.meta.permission,authorizedClient:this.meta.authorizedClient??null,activated:Boolean(this.meta.activatedAt)});
     if(url.pathname==='/browser/authorize'){
      if(this.meta.activatedAt&&this.meta.authorizedFamily!==input.familyId)throw fail('This board is already connected. Use its existing connector or disconnect it before authorizing again.',409,'CONNECTION_REPLACED');if(this.meta.authorizedClient&&this.meta.authorizedClient!==input.clientId)throw fail('This board already authorizes another AI client. Disconnect it before connecting a different client.',409,'CONNECTION_REPLACED');
-     if(this.meta.authorizedFamily&&this.meta.authorizedFamily!==input.familyId)await clearEventSubscriptions(this.eventContext());this.meta.authorizedClient=input.clientId;this.meta.authorizedScope=input.scope;this.meta.authorizedFamily=input.familyId;await this.save();await this.publish();return json({ok:true});
+     if(this.meta.authorizedFamily&&this.meta.authorizedFamily!==input.familyId){await clearEventSubscriptions(this.eventContext());await clearPanel(this.panelContext());}this.meta.authorizedClient=input.clientId;this.meta.authorizedScope=input.scope;this.meta.authorizedFamily=input.familyId;await this.save();await this.publish();return json({ok:true});
     }
     if(url.pathname==='/browser/handoff'||url.pathname==='/browser/notify')return json(await this.handoff(input,{notify:url.pathname.endsWith('/notify')}));
     if(url.pathname==='/browser/disconnect'){
@@ -71,7 +78,14 @@ export class BoardRelay{
     if(requestId)uuid(requestId,'request ID');else if(writes.has(operation))requestId=(await hash(`${this.meta.id}:${JSON.stringify(stable({operation,input:clean}))}`)).slice(0,32); // Stable retries; new copies must use new element IDs or requestId.
     const result=await this.rpc(operation,clean,requestId);await this.authorized(input.grant);const checkedField={confirm:'boardCheckedAt',chat:'deliveryCheckedAt',review:'deliveryCheckedAt',reply:'replyCheckedAt'}[operation];if(checkedField){this.meta[checkedField]=new Date().toISOString();await this.save();await this.publish();}return json(result);
    }
-   if(url.pathname==='/agent/events'){await this.authorized(input.grant,{connected:input.method!=='events/list'});const result=await handleEventRpc(input.method,input.params??{},this.eventContext());await this.publish();return json(result);}
+   if(url.pathname==='/agent/panel'){
+    await this.authorized(input.grant);const result=await panelOperation(input.operation,input.input??{},this.panelContext());
+    if(input.operation==='attach')await clearEventSubscriptions(this.eventContext());
+    await this.authorized(input.grant);
+    if(input.operation==='confirm'){this.meta.deliveryCheckedAt=new Date().toISOString();await this.save();}
+    if(input.operation!=='open')await this.publish();return json(result);
+   }
+   if(url.pathname==='/agent/events'){await this.authorized(input.grant,{connected:input.method!=='events/list'});if(input.method==='events/subscribe'&&(await panelStatus(this.panelContext())).linked)throw fail('Pause the connected conversation panel before choosing a different incoming-message route.',409,'PANEL_ALREADY_CONNECTED');const result=await handleEventRpc(input.method,input.params??{},this.eventContext());await this.publish();return json(result);}
    throw fail('Unknown connector operation.',404);
   }catch(error){return failureResponse(error);}
  }

@@ -1,18 +1,35 @@
 # SharedBoard.app changelog
 
-## 0.8.2 — Restore mini chat for connected AI clients
+## 0.9.1 — Reliable conversation panel lifecycle
 
 ### Fixed
 
-- Restored Talk it through, fullscreen chat, and the message composer for Codex, Claude, Claude Code, and other connected clients, including read-only drawing access.
-- Separated Copy to AI mini chat from verified automatic delivery; expired subscriptions fall back to manual chat while preserving uncertain requests.
-- Clarified drawing edit permissions and reconnect instructions without disabling discussion or replies.
+- Pause forwarding when the conversation panel closes and require a fresh Link action after it is reopened.
+
+## 0.9.0 — Confirmed workspace deletion and direct conversation panels
+
+### Added
+
+- Delete boards or whole projects from the workspace picker, with a named confirmation and affected-board count.
+- A SharedBoard panel can forward mini-chat requests into the existing AI conversation when its host supports MCP Apps text messages; link it once and keep the panel and browser board open.
+
+### Fixed
+
+- Require an active direct-chat route before sending; preserve drafts and original request IDs when a link expires, with no per-message copy-and-paste fallback.
+- Revoke affected board connections before deletion, preserve unrelated work, and prevent deleted tabs from restoring removed boards.
+
+## 0.8.2 — Clarify drawing access and saved replies
+
+### Fixed
+
+- Clarified drawing edit permissions and reconnect instructions for connected AI clients.
+- Preserved saved conversations independently of drawing edit permission.
 
 ## 0.8.1 — Preserve unconfirmed mini-chat drafts
 
 ### Fixed
 
-- Keep pending text, captured context and original request IDs until an actual reply, manual handoff or queued-delivery receipt confirms acceptance, including subscription expiry during sending.
+- Keep pending text, captured context and original request IDs until a queued-delivery receipt or actual reply confirms acceptance, including connection expiry during sending.
 
 ## 0.8.0 — Clear client capabilities and verified mini chat
 
@@ -33,12 +50,11 @@
 - Kept modal headings and close controls visible, wrapped long titles, and stacked narrow-screen action buttons.
 - Improved short-window canvas, object navigator, chat setup, and toolbar menus so controls stay clear of nearby elements.
 
-## 0.7.5 — Discover events and clarify chat handoff
+## 0.7.5 — Discover events and clarify connection setup
 
 ### Fixed
 
 - AI clients can discover board event types after approval and before pairing; subscribing still requires pairing.
-- Mini-chat copy actions show confirmation and selectable saved instructions when clipboard access fails.
 - Connection errors use the selected AI flow, backup guidance uses the correct menu label, and retired helper instructions are removed from earlier changelog entries.
 
 ## 0.7.4 — Recover expired connection setup
