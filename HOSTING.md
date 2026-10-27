@@ -1,6 +1,6 @@
 # SharedBoard.app browser beta on Cloudflare Pages
 
-This build hosts the application files. Boards, images, notes and history stay in IndexedDB in each visitor's browser profile. There is no board database, local Node service, account system or live AI connection on the hosted site. AI connectors remain visible as WIP. Normal web requests still reach Cloudflare to load the application; this design is not a claim that hosting produces no access logs.
+This build hosts the application files. Boards, images, notes and history stay in IndexedDB in each visitor's browser profile. The site has no cloud board database, account system or hosted model. An optional locally installed SharedBoard Bridge for Windows or Mac connects the open browser board to the user's existing local Codex conversation. Direct web-chat and in-chat MCP connectors remain visible as planned WIP. Normal web requests still reach Cloudflare to load the application; this design is not a claim that hosting produces no access logs.
 
 SharedBoard.app is created by **Andrew Barresi** ([AndBarresi on GitHub](https://github.com/AndBarresi)) and released under the **MIT license**. The static deployment includes LICENSE, AUTHORS.md and collected third-party/font notices; those components retain their own licenses.
 
@@ -26,7 +26,7 @@ The build checks the recorded version/source fingerprint, includes fonts and dep
 3. Set the framework preset to **None**, the root directory to this application's repository root, the build command to **pnpm test && pnpm run build:web**, and the build output directory to **dist-web**.
 4. Set **NODE_VERSION=24.22.1** and **PNPM_VERSION=11.25.0** in both Production and Preview environment settings. The browser-storage flag is set by the build script; no model API key or other secret is needed. Cloudflare Pages v3 supports the version overrides and does not infer pnpm from the lockfile format or engines field. [Build image documentation](https://developers.cloudflare.com/pages/configuration/build-image/)
 5. Save and deploy. Cloudflare builds each eligible push to the configured production branch; other branches can create previews. Preserve the production branch setting when configuring preview rules. [Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/)
-6. Verify the resulting site: create a board, draw and add a note, wait for the saved indicator, reload, reopen a /boards/<id>/ URL, and confirm persistence. Open a separate browser profile to confirm it starts independently. Check that AI connections are locked as WIP and export/import a board backup.
+6. Verify the resulting site: create an isolated test board, draw and add a note, wait for the saved indicator, reload, reopen a /boards/<id>/ URL, and confirm persistence. Open a separate browser profile to confirm it starts independently. Check the platform-specific Codex bridge setup and that other client choices stay locked as WIP; export/import a board backup using test data. Test live bridge pairing only on the exact authorized production origin and chosen existing conversation, following [BRIDGE.md](BRIDGE.md).
 
 Choose a **Pages Git-integrated project**, not a Workers application or a Direct Upload project, for automatic deployment from GitHub. Keep deployment previews for testing; send testers the stable production address.
 
@@ -53,5 +53,7 @@ A Direct Upload project cannot later switch to Git integration; create a Git-int
 ## Security and routing
 
 The build generates _headers with MIME-sniffing protection, no-referrer, frame protection, restricted permissions and a CSP. Inline bootstrap scripts receive exact SHA-256 CSP hashes; fonts and drawing assets are self-contained. The local preview sends the same headers. [Pages headers](https://developers.cloudflare.com/pages/configuration/headers/)
+
+The three exact `/downloads/SharedBoard-Bridge-<platform>.zip` routes redirect to public release-file downloads. Users stay in the website's setup flow and need no GitHub account or repository visit. These are fixed routes generated from `shared/bridge-downloads.mjs`, not a general redirect endpoint; the local preview mirrors them. ZIP bytes are served by GitHub's release infrastructure rather than copied into the Cloudflare static build, where individual assets are limited to 25 MiB.
 
 _redirects rewrites /boards/* to the canonical root `/` with a 200 response. Cloudflare rejects wildcard rewrites whose destination ends in `/index` or `/index.html`, so use the root target. A top-level 404.html prevents unrelated missing URLs such as /api/board from being treated as application routes. No Pages Functions or Worker handler is included. [Serving Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/)

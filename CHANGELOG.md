@@ -1,6 +1,36 @@
 # SharedBoard.app changelog
 
-Version 0.x is the development series. Minor versions add capabilities; patch versions fix or polish existing behavior. Version 1.0 will mark the first public release.
+## 0.6.3 — Clarify local-bridge browser compatibility
+
+### Fixed
+
+- Include supported browser guidance in the on-page setup help so Mac and Windows testers know to use Chrome or Edge for the local connection.
+
+## 0.6.2 — Keep planning navigation in one place
+
+### Fixed
+
+- Use the sidebar as the single planning navigation on desktop, while keeping panel tabs when compact or fullscreen layouts hide the sidebar.
+
+## 0.6.1 — Native Mac launcher compatibility and compact workspace polish
+
+### Fixed
+
+- Build the Mac companion with a native launcher targeting macOS 13.5, and validate platform paths and preserved download metadata accurately.
+- Use the space freed by consolidated controls to keep the board title readable in compact windows.
+
+## 0.6.0 — Windows and Mac bridge setup from the website
+
+### Added
+
+- SharedBoard Bridge downloads and guided setup for Windows, Apple Silicon Macs and Intel Macs, including on-page installation help and a real reply test.
+- Copy-to-Codex handoff when automatic delivery is unavailable, with captured requests and real replies kept in the browser board.
+
+### Fixed
+
+- Consolidated workspace controls and moved browser storage details into the board menu, with fullscreen and compact-screen access preserved.
+- Removed obsolete feature claims and the version-numbering introduction from the changelog.
+- Validated backup previews before rendering, protected file selection order, and corrected review context and delivery states.
 
 ## 0.5.1 — Verify Windows bridge installation across environments
 
@@ -36,7 +66,6 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 
 ### Fixed
 
-- AI connections remain clearly marked WIP in the hosted edition while local connections continue in the portable app.
 - Removed publish dates from the changelog and protected browser imports and cross-tab startup updates.
 
 ## 0.3.5 — SharedBoard.app branding
@@ -71,14 +100,6 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 - Keep ChatGPT and Claude web connectors visible but locked as WIP in both the interface and backend.
 - Isolate each extracted copy and exclude personal boards, chats, credentials and developer dependencies from distribution.
 
-## 0.3.1 — More reliable web connection startup
-
-### Fixed
-
-- Allow extra startup time for new connector addresses to resolve and show DNS wait progress.
-- Report specific DNS, TLS, HTTP and metadata verification failures instead of blaming the network.
-- Cancel in-flight connection checks promptly and close temporary routes after failed verification.
-
 ## 0.3.0 — Separate projects and clearer AI collaboration
 
 ### Added
@@ -86,7 +107,6 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 - Separate projects and boards with stable local addresses and independent drawings, planning, messages, history and AI connections.
 - Explicit mini-chat attachment previews for the board, a selection or a named area, with captured images and requirements.
 - An object outline and clickable minimap with naming, search, visibility, locking and layer controls.
-- A proposals-only AI permission enforced for local helpers and the web connector.
 - Rolling automatic recovery saves before significant changes, with preview and restore separate from named checkpoints.
 - Formatted chat replies, tables, safe links, copyable code blocks, resizable chat and board-specific drafts.
 - A compact workspace sidebar, visible AI connection status and expanded chat that remains readable in short windows.
@@ -103,7 +123,6 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 ### Fixed
 
 - Empty-canvas buttons receive clicks above the editor input layer.
-- The AI understanding check copies the handoff for connections that require manual delivery.
 
 ## 0.2.0 — A workspace for real app planning
 
@@ -112,7 +131,6 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 - Named areas, project naming, board text search and a collapsible planning navigator.
 - Anchored notes, requirements and work cards with canvas markers and jump-to-context actions.
 - Pinned screenshot references, five editable planning templates and a personal reusable block library.
-- Reviewable AI drawing proposals with before/after previews, conflict checks and protected AI undo.
 - Named checkpoints with previews and recovery saves, plus portable .sharedboard project backups.
 - Rendered board images and captured visual context for AI tools, alongside immutable notes and requirements.
 - Contextual selection controls, grouping, alignment, duplication, locking, an alignment grid and a guided empty canvas.
@@ -127,7 +145,7 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 ### Added
 
 - A version badge and an in-app changelog accessible from the footer.
-- A release workflow that keeps the application, MCP tools and changelog versions together.
+- A release workflow that keeps the application version and changelog together.
 
 ## 0.1.0 — Shared editing foundation
 
@@ -135,5 +153,5 @@ Version 0.x is the development series. Minor versions add capabilities; patch ve
 
 - A persistent local canvas with shared human and AI editing, conflict detection and drawing import/export.
 - Sharedboard drawing controls, fullscreen, board reviews and a floating mini chat.
-- Guided AI pairing and a temporary ChatGPT / Claude connector for account testing.
+- Guided pairing with an existing local AI conversation.
 

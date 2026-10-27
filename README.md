@@ -6,7 +6,7 @@
 
 A persistent whiteboard for app screens, architecture, references, and the context behind them.
 
-**Browser beta · 0.5.x · Open source · MIT**
+**Browser beta · 0.6.x · Open source · MIT**
 
 [**Open SharedBoard.app ↗**](https://sharedboard.app) · [Source](https://github.com/AndBarresi/sharedboard-app) · [What's new](CHANGELOG.md)
 
@@ -30,7 +30,7 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 | **Organize your work** | Separate projects and boards, named areas, object search, and a minimap. |
 | **Explain the details** | Attached notes, requirements, work cards, and screenshot references. |
 | **Reuse and recover** | Editable starting blocks, your own block library, checkpoints, and automatic recovery. |
-| **Bring your existing AI** | Connect the website to your existing Codex chat with the Windows bridge. The portable local app also supports compatible MCP clients. |
+| **Bring your existing AI** | Connect the website to your existing local Codex chat with SharedBoard Bridge for Windows or Mac. |
 
 <details>
 <summary><strong>Take a closer look at the planning workspace</strong></summary>
@@ -47,23 +47,25 @@ Keep requirements, named areas, and reusable building blocks beside the drawing 
 2. Draw something, add a reference or note, and wait for the saved indicator.
 3. Use **Export board** to keep a `.sharedboard` backup outside the browser.
 
-The browser edition needs no installation or local server. It is hosted on Cloudflare Pages at **sharedboard.app**; pushes to this repository's `main` branch run tests and automatically deploy updates. Build and domain settings are documented in [Hosting](HOSTING.md).
+Drawing in the browser needs no installation. To connect a local Codex chat, install the small bridge companion once. The website is hosted on Cloudflare Pages at **sharedboard.app**; pushes to this repository's `main` branch run tests and automatically deploy updates. Build and domain settings are documented in [Hosting](HOSTING.md).
 
 > **Your boards stay in your browser.** They are saved on this device in this browser profile, with no account or cross-device sync. Clearing site data or leaving private browsing can remove them. Export regularly; each backup contains one board's drawing and planning details. Another domain or preview address has separate storage.
 
-## Choose the right edition
+## Connect your local Codex chat
 
-| Capability | Browser website | Portable Windows app |
-| --- | --- | --- |
-| Drawing, planning, projects, backups, and recovery | Available; saved in this browser | Available; saved in the app's local `data/` folder |
-| Codex board tools and mini-chat replies | Windows bridge; pair an existing queue-capable Codex chat from the webpage | Enabled; automatic handoff needs a queue-capable local Codex CLI |
-| Claude Code, Cursor, and compatible local MCP clients | **WIP** | Enabled tools; **Copy to AI** handoff and an explicit reply tool |
-| ChatGPT / Claude web-chat connection | **Locked · WIP** | **Locked · WIP** |
-| SharedBoard-hosted model or AI subscription | None | None; use your existing assistant |
+SharedBoard's current focus is **your browser board ↔ your existing local Codex conversation**. The mini chat sends a captured board request to that conversation, and Codex posts an explicit answer back to the board. A queue-capable Codex installation receives requests automatically; other installations get a working **Copy to Codex** handoff for each saved request. Your drawings and chat history stay in your browser profile. No extra model subscription or API key is required.
 
-On the website, choose **Connect Codex** for the guided bridge setup: download and install the Windows helper once, check the connection, then paste the generated pairing instruction into your existing Codex conversation. The assistant runs the command; you do not edit configuration files. Keep the board tab open during AI use. See [Bridge setup](BRIDGE.md).
+| Your computer | Bridge download |
+| --- | --- |
+| Windows x64 | [Windows ZIP](https://sharedboard.app/downloads/SharedBoard-Bridge-windows-x64.zip) |
+| Mac with Apple Silicon · macOS 13.5+ | [Mac Apple Silicon ZIP](https://sharedboard.app/downloads/SharedBoard-Bridge-macos-arm64.zip) |
+| Mac with Intel · macOS 13.5+ | [Mac Intel ZIP](https://sharedboard.app/downloads/SharedBoard-Bridge-macos-x64.zip) |
 
-For the portable build, extract the whole testing ZIP and double-click **Start SharedBoard.app.cmd**. Node and app dependencies are included. Follow its **START-HERE.txt** or the [connection guide](CONNECTIONS.md) to pair an existing local client. Actual support in each AI client still needs hands-on acceptance testing.
+Use **Chrome or Edge** for the local bridge on Windows or Mac; Safari bridge connections are not supported in this beta. Choose **Connect Codex** on the website for the guided setup. Select your computer, download and install the helper once, check the connection, then paste the generated pairing instruction into your existing Codex conversation. Downloads and instructions start on the website; no GitHub account or repository visit is required. The assistant runs its helper command; you do not edit configuration files. Keep the board tab open during AI use. See [Bridge setup](BRIDGE.md) for permissions, Mac installation approval, and troubleshooting.
+
+Direct ChatGPT/Claude web-chat connections, other clients, and MCP tools inside an AI chat are **planned WIP**. These are not required for the local bridge workflow. SharedBoard does not host an AI model or create a replacement conversation.
+
+The earlier disk-backed portable app remains available for development and existing local installations. Its legacy interfaces are documented separately in [Local development & agent tools](docs/LOCAL-DEVELOPMENT.md).
 
 ## Run from source
 

@@ -1,42 +1,107 @@
 name: Publish SharedBoard Bridge
 on:
+  pull_request:
+    paths:
+      - 'bridge/**'
+      - 'packaging/bridge*/**'
+      - 'packaging/runtime*.json'
+      - 'scripts/package-bridge.mjs'
+      - 'test/bridge*.test.mjs'
+      - '.github/workflows/bridge-release.yml'
+      - 'package.json'
+      - 'releases.json'
   push:
     tags:
       - 'bridge-v*'
 permissions:
-  contents: write
+  contents: read
 jobs:
-  windows-bridge:
-    runs-on: windows-latest
+  build-bridge:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: windows-x64
+            arch: x64
+          - runner: macos-15
+            target: macos-arm64
+            arch: arm64
+          - runner: macos-15-intel
+            target: macos-x64
+            arch: x64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
+          architecture: ${{ matrix.arch }}
       - name: Verify the release tag matches the application version
+        if: startsWith(github.ref, 'refs/tags/bridge-v')
         shell: pwsh
         env:
           BRIDGE_TAG: ${{ github.ref_name }}
         run: |
           $bridgeVersion = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
           if ($env:BRIDGE_TAG -cne "bridge-v$bridgeVersion") { throw 'The bridge tag must match the version recorded in package.json.' }
-      - name: Test bridge protocol and isolated Windows installation
-        run: node --test test/bridge-server.test.mjs test/bridge-launcher.test.mjs
-      - name: Build the private-data-free Windows companion
-        run: node scripts/package-bridge.mjs --output release/SharedBoard-Bridge-windows-x64.zip
+      - name: Install the pinned test dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test browser storage, bridge protocol and native installation lifecycle
+        run: pnpm test
+      - name: Build the private-data-free native companion
+        run: node scripts/package-bridge.mjs --target ${{ matrix.target }} --output release/SharedBoard-Bridge-${{ matrix.target }}.zip
+      - name: Verify the extracted Mac download and LaunchServices handoff
+        if: runner.os == 'macOS'
+        env:
+          BRIDGE_PACKAGE_ZIP: ${{ github.workspace }}/release/SharedBoard-Bridge-${{ matrix.target }}.zip
+        run: node --test test/bridge-macos-release.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-${{ matrix.target }}
+          path: |
+            release/*.zip
+            release/*.zip.sha256
+          if-no-files-found: error
+  publish-bridge:
+    needs: build-bridge
+    if: startsWith(github.ref, 'refs/tags/bridge-v')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bridge-*
+          merge-multiple: true
+          path: release
+      - name: Verify all native downloads are present
+        shell: pwsh
+        run: |
+          foreach ($bridgeTarget in @('windows-x64','macos-arm64','macos-x64')) {
+            $bridgeFile = "release/SharedBoard-Bridge-$bridgeTarget.zip"
+            if (-not (Test-Path -LiteralPath $bridgeFile) -or -not (Test-Path -LiteralPath "$bridgeFile.sha256")) { throw "Missing bridge download: $bridgeTarget" }
+            $bridgeExpectedHash = (Get-Content -LiteralPath "$bridgeFile.sha256").Split(' ')[0]
+            if ((Get-FileHash -LiteralPath $bridgeFile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $bridgeExpectedHash) { throw "Bridge checksum mismatch: $bridgeTarget" }
+          }
       - name: Publish the webpage download
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           BRIDGE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
         run: |
           @'
           SharedBoard Bridge connects the hosted webpage to an existing local Codex conversation.
 
-          Extract the ZIP and open **Install SharedBoard Bridge.cmd**, then return to https://sharedboard.app and choose **Connect Codex**.
+          Download the Windows x64, macOS Apple Silicon, or macOS Intel ZIP for your computer. Extract the entire ZIP, then open **Install SharedBoard Bridge.cmd** on Windows or **Install SharedBoard Bridge.command** on macOS. Return to https://sharedboard.app and choose **Connect Codex**.
 
-          Boards and mini-chat history stay in your browser. Keep the board tab open during AI interaction. This testing build supports Codex on Windows x64 and includes its Node runtime; it does not include anyone's saved board or connection credentials.
+          Boards and mini-chat history stay in your browser. Keep the board tab open during AI interaction. Each testing build includes its own Node runtime and excludes saved boards and connection credentials. macOS13.5 or later is required. The Mac beta is ad-hoc sealed for integrity, without Developer ID signing or notarization; macOS may require user approval. See https://support.apple.com/en-us/102445 . No Gatekeeper settings or quarantine attributes are changed by the installer.
 
           Created by Andrew Barresi: https://github.com/AndBarresi
           '@ | Set-Content -LiteralPath release/NOTES.md
-          gh release create $env:BRIDGE_TAG release/SharedBoard-Bridge-windows-x64.zip release/SharedBoard-Bridge-windows-x64.zip.sha256 --title "SharedBoard Bridge $env:BRIDGE_TAG - Windows testing beta" --notes-file release/NOTES.md --latest
+          $bridgeAssets = Get-ChildItem -LiteralPath release -File | Where-Object { $_.Name -match '\.zip(\.sha256)?$' } | ForEach-Object { $_.FullName }
+          gh release create $env:BRIDGE_TAG @bridgeAssets --repo $env:GH_REPO --title "SharedBoard Bridge $env:BRIDGE_TAG - Windows and Mac testing beta" --notes-file release/NOTES.md --latest

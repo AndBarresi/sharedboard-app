@@ -181,3 +181,42 @@ test('stable drawing IDs share in-flight RPC and survive restart without accepti
   const state=JSON.parse(await readFile(path.join(f.dataDir,'bridge-state.json'),'utf8'));assert.deepEqual(Object.keys(state.requests[0]).sort(),['fingerprint','grantId','id','operation']);assert.equal(JSON.stringify(state.requests).includes('stable_box'),false);
  }finally{await f.close();}
 });
+
+test('pairing without a compatible queue command preserves helper access but never claims automatic delivery',async()=>{
+ let calls=0;const f=await fixture({findCodex:()=>null,runQueue:()=>{calls++;}});try{
+  const grant=await f.pair(),status=(await f.browser(grant,'status')).value.connection;assert.equal(status.connected,true);assert.equal(status.automaticMessages,false);
+  const {poll}=await f.activate(grant);assert.equal((await f.browser(grant,'notify',{kind:'chat',id:randomUUID()})).value.code,'CODEX_UNAVAILABLE');assert.equal(calls,0);
+  const reading=f.command(grant,'read_board'),command=(await poll).value.commands[0];await f.browser(grant,'result',{id:command.id,clientId:'tab_a',result:{revision:2}});assert.equal((await reading).value.revision,2);
+ }finally{await f.close();}
+});
+
+test('manual handoff returns only a scoped helper prompt without queueing or a delivery receipt',async()=>{
+ let calls=0;const f=await fixture({findCodex:()=>null,runQueue:()=>{calls++;}});try{
+  const grant=await f.pair('read'),id=randomUUID(),input={kind:'chat',id,boardId:grant.boardId,connectionId:grant.connectionId};
+  assert.equal((await f.call('/bridge/browser/handoff',input)).status,401);
+  assert.equal((await f.browser(grant,'handoff',input)).value.code,'BROWSER_OFFLINE');
+  const {poll}=await f.activate(grant);
+  for(const change of [{boardId:randomUUID()},{connectionId:randomUUID()}])assert.equal((await f.browser(grant,'handoff',{...input,...change})).value.code,'BRIDGE_WRONG_BOARD');
+  assert.equal((await f.browser(grant,'handoff',{...input,kind:'other'})).status,400);
+  const prepared=await f.browser(grant,'handoff',input),again=await f.browser(grant,'handoff',input);
+  assert.equal(prepared.status,200);assert.equal(prepared.value.delivery,'manual');assert.equal(prepared.value.receipt,undefined);assert.equal(prepared.value.connection.automaticMessages,false);
+  assert.equal(prepared.value.connection.deliveryCheckedAt,null);assert.equal(again.value.handoffPrompt,prepared.value.handoffPrompt);
+  for(const value of [grant.boardId,id,f.dataDir,f.bridge.url,'--board-id','--data-dir',`chat ${id}`,'Discuss','Request work','reply'])assert.ok(prepared.value.handoffPrompt.includes(value));
+  assert.equal(prepared.value.handoffPrompt.includes(grant.agentKey),false);assert.equal(prepared.value.handoffPrompt.includes(grant.browserToken),false);
+  const reviewId=randomUUID(),review=await f.browser(grant,'handoff',{...input,kind:'review',id:reviewId});
+  assert.ok(review.value.handoffPrompt.includes(`review ${reviewId}`));assert.ok(review.value.handoffPrompt.includes('inspection and explanation only'));assert.ok(review.value.handoffPrompt.includes('complete_review'));
+  assert.equal(calls,0);const saved=JSON.parse(await readFile(path.join(f.dataDir,'bridge-state.json'),'utf8'));assert.deepEqual(saved.deliveries,[]);
+  await f.browser(grant,'release',{clientId:'tab_a'});await poll;
+ }finally{await f.close();}
+});
+
+test('automatic and uncertain sends cannot be converted into a manual handoff',async()=>{
+ let calls=0;const f=await fixture({runQueue:async()=>{calls++;throw new Error('Ambiguous queue fixture');}});try{
+  const grant=await f.pair(),{poll}=await f.activate(grant),id=randomUUID(),input={kind:'chat',id,boardId:grant.boardId,connectionId:grant.connectionId};
+  assert.equal((await f.browser(grant,'handoff',input)).value.code,'MANUAL_HANDOFF_UNAVAILABLE');
+  assert.equal((await f.browser(grant,'notify',{kind:'chat',id})).value.code,'DELIVERY_UNCERTAIN');
+  assert.equal((await f.browser(grant,'handoff',input)).value.code,'DELIVERY_UNCERTAIN');assert.equal(calls,1);
+  assert.equal(JSON.parse(await readFile(path.join(f.dataDir,'bridge-state.json'),'utf8')).deliveries[0].status,'uncertain');
+  await f.browser(grant,'release',{clientId:'tab_a'});await poll;
+ }finally{await f.close();}
+});

@@ -1,6 +1,12 @@
 # Bring your AI to SharedBoard.app
 
-For the hosted website's **Windows Codex bridge**, follow [BRIDGE.md](BRIDGE.md). That connection keeps boards in browser storage and does not use the disk-backed local app described below. Other hosted providers remain WIP.
+The current supported direction is **your browser board ↔ your existing local Codex chat**, using SharedBoard Bridge for Windows or Mac. Follow [BRIDGE.md](BRIDGE.md) for webpage-led setup, permissions, mini-chat delivery and replies. Boards stay in browser storage; no cloud drawing database or SharedBoard-hosted model is used.
+
+Direct web-chat connectors and MCP tools callable inside an AI chat are planned WIP. They are not required to use the local bridge.
+
+## Legacy portable local app
+
+The remainder of this document describes the earlier disk-backed portable app retained for existing installations and development. These interfaces do not describe the current website's supported client list.
 
 The local testing beta connects to an existing local AI client and conversation. It does not host a model, bundle an AI subscription, or create a replacement chat. A local connector can still use an online flagship model.
 
