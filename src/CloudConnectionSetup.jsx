@@ -51,7 +51,7 @@ export function CloudConnectionSetup({connection,online,begin,cancel,disconnect,
         <p className="cloud-limit">To choose another conversation or change its access, disconnect this link. Your drawing and saved messages stay here.</p>
       </section>:<>
         <div className="setup-section-heading"><span>01</span><h3>Choose your AI app</h3></div>
-        <div className="ai-choices">{providers.map(([id,label])=><button type="button" key={id} disabled={Boolean(busy)} aria-pressed={provider===id} className={provider===id?'chosen':''} onClick={()=>void choose(id,permission)}><strong>{label}</strong><small>Remote MCP connection</small></button>)}</div>
+        <div className="ai-choices">{providers.map(([id,label])=><button type="button" key={id} disabled={Boolean(busy)} aria-pressed={provider===id} className={provider===id?'chosen':''} onClick={()=>void choose(id,permission)}><strong>{label}</strong></button>)}</div>
         <p className="cloud-limit">Your AI app needs support for a remote MCP server. Connector availability and the steps to add one depend on that app and your plan. Choosing a provider here does not sign you in or connect a chat by itself.</p>
         <label className="access-choice">Board access<select aria-label="AI board access" value={permission} disabled={Boolean(busy)} onChange={event=>void choose(provider,event.target.value)}><option value="read">Read only</option><option value="edit">Read and edit when I request changes</option></select></label>
         <button type="button" className="connect-primary create-pair" disabled={Boolean(busy)||!online} onClick={prepare}>{busy==='prepare'?'Preparing…':pair?'Create fresh connection instructions':'Prepare connection'}</button>

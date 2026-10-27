@@ -1,6 +1,16 @@
 {
-  "version": "0.7.5",
+  "version": "0.7.6",
   "entries": [
+    {
+      "version": "0.7.6",
+      "title": "Consistent UI spacing and compact layouts",
+      "added": [],
+      "fixed": [
+        "Simplified AI provider choices and separated connection help from setup actions, with consistent instruction and field sizing.",
+        "Kept modal headings and close controls visible, wrapped long titles, and stacked narrow-screen action buttons.",
+        "Improved short-window canvas, object navigator, chat setup, and toolbar menus so controls stay clear of nearby elements."
+      ]
+    },
     {
       "version": "0.7.5",
       "title": "Discover events and clarify chat handoff",
@@ -204,5 +214,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "70b21f313f85f79703ea8107d4266027c25f26aabd927e69373c2998b2f727f4"
+  "sourceHash": "3fce1943e1cc34f24868dae195738d2bdcc3bb906ac287e559278a91df31f931"
 }
