@@ -145,8 +145,8 @@ function App() {
     const result=await sync.current.sendChat({id,intent:'discuss',text:'Connection check only. Please read the live board and confirm its exact revision with confirm_connection, then reply to this mini chat to acknowledge that the connection works. No drawing changes are requested.'});
     setChatVisibility(true);
     const message=result.messages.find(item=>item.id===id);
-    if(message?.handoffPrompt){try{await copyText(message.handoffPrompt);}catch{setReviewError('The test is saved in the mini chat. Choose Copy to Codex there, then paste it into your linked conversation.');}}
-    else if(!view.connection?.automaticMessages&&!message?.reply)throw new Error(message?.deliveryError||'The test is saved, but its copy-to-Codex instructions could not be prepared. Retry preparation from the mini chat.');
+    if(message?.handoffPrompt){try{await copyText(message.handoffPrompt);}catch{setReviewError('The test is saved in the mini chat. Copy its instructions there, then paste them into your linked conversation.');}}
+    else if(!view.connection?.automaticMessages&&!message?.reply)throw new Error(message?.deliveryError||'The test is saved, but its Copy to AI instructions could not be prepared. Retry preparation from the mini chat.');
   };
   const latestReview = view.reviews[0];
   const reviewCurrent=latestReview&&(!latestReview.connectionId||latestReview.connectionId===view.connection?.id);

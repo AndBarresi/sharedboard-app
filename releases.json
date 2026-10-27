@@ -1,6 +1,16 @@
 {
-  "version": "0.7.4",
+  "version": "0.7.5",
   "entries": [
+    {
+      "version": "0.7.5",
+      "title": "Discover events and clarify chat handoff",
+      "added": [],
+      "fixed": [
+        "AI clients can discover board event types after approval and before pairing; subscribing still requires pairing.",
+        "Mini-chat copy actions show confirmation and selectable saved instructions when clipboard access fails.",
+        "Connection errors use the selected AI flow, backup guidance uses the correct menu label, and retired helper instructions are removed from earlier changelog entries."
+      ]
+    },
     {
       "version": "0.7.4",
       "title": "Recover expired connection setup",
@@ -144,7 +154,7 @@
         "A compact workspace sidebar, visible AI connection status and expanded chat that remains readable in short windows."
       ],
       "fixed": [
-        "Board switching keeps grants and in-flight requests pinned to the original board; helper instructions target the correct board directory.",
+        "Board switching keeps grants and in-flight requests pinned to the original board.",
         "Context previews and pending-review deduplication respect planning changes and empty named areas.",
         "Renaming an unopened board persists correctly, and app shutdown also closes boards still starting.",
         "Restore safety saves use automatic history without consuming named checkpoint slots."
@@ -194,5 +204,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "e1855e25280e6e86e34e54c7608cadb7d5e1a6def0726d6db2c6fdfca5297ac4"
+  "sourceHash": "70b21f313f85f79703ea8107d4266027c25f26aabd927e69373c2998b2f727f4"
 }

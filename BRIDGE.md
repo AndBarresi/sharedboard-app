@@ -34,7 +34,7 @@ A connection belongs to one board. Captured requests remain pinned to that conne
 
 ## Storage and recovery
 
-Ordinary page reloads keep saved browser data on the same origin. Changing hostname, browser profile, or device does not move it. Clearing site data or ending private browsing can remove it. Use **Export board** regularly to keep an independent `.sharedboard` backup; those user-data exports are available from the board menu.
+Ordinary page reloads keep saved browser data on the same origin. Changing hostname, browser profile, or device does not move it. Clearing site data or ending private browsing can remove it. Use **Download board backup** regularly to keep an independent `.sharedboard` backup; those user-data exports are available from the board menu.
 
 Backups contain one board’s drawing, image files, notes, areas, work cards, and reusable blocks. They omit connection credentials, grants, chat/review history, other boards, and checkpoint history. Restore validates a backup and captures current work in recovery before replacing it.
 
