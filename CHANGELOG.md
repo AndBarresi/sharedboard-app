@@ -1,5 +1,11 @@
 # SharedBoard.app changelog
 
+## 0.10.5 — Diagnose native event activation safely
+
+### Fixed
+
+- Connection diagnostics distinguish native event activation attempts from discovery and report fixed outcomes without storing private callback paths, signing keys or request content.
+
 ## 0.10.4 — Keep chat drafts accessible while the AI is busy
 
 ### Fixed

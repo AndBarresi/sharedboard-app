@@ -1,6 +1,14 @@
 {
-  "version": "0.10.4",
+  "version": "0.10.5",
   "entries": [
+    {
+      "version": "0.10.5",
+      "title": "Diagnose native event activation safely",
+      "added": [],
+      "fixed": [
+        "Connection diagnostics distinguish native event activation attempts from discovery and report fixed outcomes without storing private callback paths, signing keys or request content."
+      ]
+    },
     {
       "version": "0.10.4",
       "title": "Keep chat drafts accessible while the AI is busy",
@@ -324,5 +332,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "c9f72d103172343d60426ca4c6aae4114d9a84eafa897ed0eca81ae6e176adfc"
+  "sourceHash": "e794444060dbda1e0d730dc545a708d672384471b2e99ebe25389a805b1ddb8f"
 }

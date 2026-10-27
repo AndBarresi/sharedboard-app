@@ -5,6 +5,26 @@ const SUBSCRIPTIONS='events.subscriptions.v1',DELIVERIES='events.deliveries.v1',
 const DEFAULT_TTL=60*60*1000,MAX_TTL=24*60*60*1000,MIN_TTL=60*1000,VERIFY_CACHE=5*60*1000;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const encoder=new TextEncoder();
+const activationReasons=new Set(['subscription_received','callback_verified','callback_not_approved','invalid_callback','challenge_failed','timeout','callback_unavailable','redirect_blocked','conversation_already_connected','scope_mismatch','invalid_parameters','connection_changed','callback_failed','internal_error']);
+const activationKey=options=>`events.activation.v1:${options.principal}:${options.boardId}`;
+function activationOrigin(params,options){
+  if(!params||typeof params!=='object'||Array.isArray(params)||!params.arguments||typeof params.arguments!=='object'||Array.isArray(params.arguments)||Object.keys(params.arguments).length!==1||params.arguments.boardId!==options.boardId)return undefined;
+  try{const value=params.delivery?.url;if(typeof value!=='string'||value.length>2048)return undefined;const url=new URL(value);if(url.protocol==='https:'&&!url.username&&!url.password&&!url.port)return url.origin;}catch{}
+}
+async function saveActivation(options,value,expectedId){
+  // Diagnostics must never prevent or replace the original protocol result.
+  try{const write=async storage=>{if(expectedId&&(await storage.get(activationKey(options)))?.id!==expectedId)return;await storage.put(activationKey(options),value);};if(typeof options.storage.transaction==='function')await options.storage.transaction(write);else await write(options.storage);}catch{}
+}
+async function activationStatus(options){
+  const value=await options.storage.get(activationKey(options));
+  if(!value||!['pending','rejected','verified'].includes(value.outcome)||!activationReasons.has(value.reason)||typeof value.attemptedAt!=='string'||!Number.isFinite(Date.parse(value.attemptedAt)))return null;
+  let origin;try{const parsed=new URL(value.callbackOrigin);if(parsed.protocol==='https:'&&parsed.origin===value.callbackOrigin&&!parsed.username&&!parsed.password&&!parsed.port)origin=parsed.origin;}catch{}
+  return {attemptedAt:new Date(value.attemptedAt).toISOString(),outcome:value.outcome,reason:value.reason,...(origin?{callbackOrigin:origin}:{})};
+}
+function activationReason(error){
+  if(activationReasons.has(error?.data?.reason))return error.data.reason;
+  return error?.code===-32001?'scope_mismatch':error?.code===-32602?'invalid_parameters':error?.code===-32000?'connection_changed':error?.code===-32015?'callback_failed':'internal_error';
+}
 const failure=(message,code=-32602,data)=>Object.assign(new Error(message),{code,...(data?{data}:{})});
 const inputSchema={type:'object',properties:{boardId:{type:'string',format:'uuid'}},required:['boardId'],additionalProperties:false};
 const payloadSchema={type:'object',properties:{boardId:{type:'string',format:'uuid'},id:{type:'string',format:'uuid'},kind:{enum:['chat','review']},intent:{enum:['discuss','work']}},required:['boardId','id','kind','intent'],additionalProperties:false};
@@ -103,6 +123,13 @@ async function verify(subscription,options){
 
 export async function handleEventRpc(method,params,configuration){
   const options=context(configuration);
+  if(method!=='events/subscribe')return eventRpc(method,params,options);
+  const origin=activationOrigin(params,options),attempt={id:crypto.randomUUID(),attemptedAt:new Date(options.now()).toISOString(),outcome:'pending',reason:'subscription_received',...(origin?{callbackOrigin:origin}:{})};
+  await saveActivation(options,attempt);
+  try{const result=await eventRpc(method,params,options);await saveActivation(options,{...attempt,outcome:'verified',reason:'callback_verified'},attempt.id);return result;}
+  catch(error){await saveActivation(options,{...attempt,outcome:'rejected',reason:activationReason(error)},attempt.id);throw error;}
+}
+async function eventRpc(method,params,options){
   if(method==='events/list')return {events:eventCatalog};
   if(!['events/subscribe','events/unsubscribe'].includes(method))throw failure('Unknown event method.',-32601);
   const input=eventInput(params,options,{unsubscribe:method==='events/unsubscribe'}),entries=await subscriptions(options);
@@ -129,11 +156,12 @@ export async function handleEventRpc(method,params,configuration){
 export async function eventStatus(configuration){
   const options=context(configuration),entries=(await subscriptions(options)).filter(entry=>matches(entry,options)&&allowedOrigins(options.allowedCallbackOrigins).has(new URL(entry.url).origin));
   const message=entries.find(entry=>entry.name==='sharedboard.message.created'),review=entries.find(entry=>entry.name==='sharedboard.review.requested');
-  return {automaticMessages:Boolean(message),automaticReviews:Boolean(review),eventSubscriptions:entries.length,eventExpiresAt:entries.length?new Date(Math.min(...entries.map(entry=>entry.expiresAt))).toISOString():null,messageExpiresAt:message?new Date(message.expiresAt).toISOString():null,reviewExpiresAt:review?new Date(review.expiresAt).toISOString():null};
+  return {automaticMessages:Boolean(message),automaticReviews:Boolean(review),eventSubscriptions:entries.length,eventActivation:await activationStatus(options),eventExpiresAt:entries.length?new Date(Math.min(...entries.map(entry=>entry.expiresAt))).toISOString():null,messageExpiresAt:message?new Date(message.expiresAt).toISOString():null,reviewExpiresAt:review?new Date(review.expiresAt).toISOString():null};
 }
 
 export async function clearEventSubscriptions(configuration){
   const options=context(configuration),entries=await subscriptions(options);
+  if(typeof options.storage.delete==='function')await options.storage.delete(activationKey(options));else await options.storage.put(activationKey(options),null);
   await options.storage.put(GENERATION,(await options.storage.get(GENERATION)??0)+1);
   await options.storage.put(SUBSCRIPTIONS,entries.filter(entry=>!matches(entry,options)));
   const receipts=await options.storage.get(DELIVERIES);
