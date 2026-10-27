@@ -1,5 +1,16 @@
 # SharedBoard.app changelog
 
+## 0.10.0 — Experimental live AI collaboration
+
+### Added
+
+- An experimental live session lets a compatible AI wait for mini-chat and board-review requests during an active conversation turn.
+- Live session status and Pause controls keep requests tied to the correct board and session.
+
+### Fixed
+
+- Drafts remain available while an AI is busy; sending requires an actual pending wait or verified incoming-event connection.
+
 ## 0.9.3 — Retire stale experimental panel links
 
 ### Fixed

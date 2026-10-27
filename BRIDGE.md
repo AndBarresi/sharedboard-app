@@ -19,6 +19,8 @@ Your board and chat history stay in this browser profile, while the relay proces
 | Pairing completed | The client has a scoped connection to this board. |
 | Board access verified | The AI actually read and confirmed a current board revision. |
 | Panel rendered or composer filled | A diagnostic UI operation succeeded. This does not show that a message was sent or an assistant turn started. |
+| Live session actually waiting | An active model turn has a pending `wait_for_board_request` call for this board and session. New sends can be accepted while that wait remains valid. |
+| Live session processing | A waiting call returned a request, or no new pending wait is observed. New sends stay unavailable; the current draft is retained. |
 | Incoming events verified | The active connection has a supported subscription and a real delivery test. Pairing alone does not establish this. |
 | Request queued | Its ID is waiting for a supported delivery route; the assistant has not necessarily received it. |
 | Delivery acknowledged | The supported route accepted the event. This is not an assistant answer. |
@@ -27,11 +29,27 @@ Your board and chat history stay in this browser profile, while the relay proces
 
 The current working connection exposes board tools to the existing AI conversation. The user asks the assistant there to read the drawing or make a requested change. For an existing saved mini-chat request, the assistant retrieves its capture with the board tools and posts its actual answer using **`reply_to_chat_message`**. Both read-only and requested-edit drawing grants permit replies.
 
-Automatic mini chat and **Ask AI to look** require a separately verified incoming-event route. Ordinary remote MCP tools in local Codex and Claude Code do not provide idle-chat wakeup. The committed deployment has no approved event callback origins configured, so an automatic production path is not verified. New board-originated sends remain unavailable without a live supported subscription; they do not become copied messages or composer drafts.
+Mini chat and **Ask AI to look** can use an actual pending wait in the experimental finite Live collaboration session, or a separately verified incoming-event route. Ordinary remote MCP tools in local Codex and Claude Code do not provide idle-chat wakeup. New board-originated sends remain unavailable without an active route; they do not become copied messages or composer drafts.
 
-The experimental **`open_sharedboard_chat`** MCP Apps panel remains diagnostic WIP. In a native Claude test on **2026-10-27**, it rendered and **`ui/message`** filled the composer, but the user still needed to press Send. No assistant turn or automatic reply resulted. A **`hostCapabilities.message.text`** flag and a successful RPC response therefore do not prove automatic delivery. [Anthropic’s explanation](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671) describes that composer behavior; an [open request to change it](https://github.com/anthropics/claude-ai-mcp/issues/1111) also distinguishes drafting from starting a turn.
+## Experimental finite Live collaboration
 
-ChatGPT Work Cloud MCP Events remain a separate possible route to configure and test. No provider name, successful pairing, UI rendering, or protocol fixture replaces a real host/account send/read/reply test. SharedBoard does not introduce a downloaded helper or replacement hosted model to work around unsupported delivery.
+After pairing, the website supplies one-time **Copy start instructions** under **Start live collaboration · experimental**. The user sends them in the existing AI conversation. This explicitly asks that AI run to keep using a normal remote waiting tool; no iframe, downloaded helper, scheduled monitor, or replacement model is involved.
+
+The first **`wait_for_board_request`** call omits `sessionId` and starts a session scoped to the board, connection, and authorization. Later calls must supply the exact returned ID. A wait defaults to **40 seconds**, is bounded to **45 seconds**, and the session has a **20-minute hard deadline** that repeated waits do not extend. The result contains session and request routing metadata, not a cloud copy of message bodies or drawings.
+
+When a browser request arrives during an actual wait, the relay durably claims its ID before returning it to that waiting tool call. The model must then read the immutable capture, respect its intent, and use **`reply_to_chat_message`** or **`complete_review_request`** for its actual answer. It can enter another wait using the same session ID. A routing receipt or successful wait result does not prove that the capture was read or an answer was generated.
+
+Only an actual, unexpired pending wait enables new mini-chat sends and board reviews. While the AI processes a request or stops waiting, a draft can remain in the page but Send stays unavailable. **Pause live collaboration** on the website releases a pending wait and stops new live delivery. Pause does not delete the board or undo work already performed, and it is not a guarantee that the host aborts an action already running. `stopped`, `expired`, errors, explicit stops, and ended AI runs must terminate the loop without an automatic replacement session or replay of old requests.
+
+This is an active-turn experiment, not an idle-chat wakeup mechanism. The host must keep the run and tool connection alive. Tool approvals, network failures, host timeouts, context or tool limits, and the model deciding to finish can end it sooner. Empty timeout results still require model continuations, so waiting can consume subscription usage and context without new board messages. The browser remains the authoritative store and must stay open.
+
+**Real provider acceptance of the full repeated wait/read/reply loop is outstanding.** Unit, SDK, browser-storage, and Worker transport tests cannot establish that a particular Claude, Codex, or ChatGPT account will keep its model turn running. A provider needs a real repeated-message and review test, including an empty wait, background use, pause, and expiry, before that workflow is described as verified.
+
+## Other delivery paths and observed limits
+
+The experimental **`open_sharedboard_chat`** MCP Apps panel remains diagnostic WIP. In a native Claude test on **2026-10-27**, it rendered and **`ui/message`** filled the composer, but the user still needed to press Send. A **`hostCapabilities.message.text`** flag and a successful RPC response therefore do not prove automatic model execution or a reply. The [composer-behavior explanation in Anthropic's MCP issue tracker](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671) and an [open request to change it](https://github.com/anthropics/claude-ai-mcp/issues/1111) distinguish drafting from starting a turn. This panel is not used by the live waiting-tool flow.
+
+Native MCP Events remain a separate possible route to configure and test. In both the older and fresh ChatGPT Work Cloud conversations tested on this account, no incoming-event subscription interface was exposed. This does not establish a limitation for every account or host. The committed callback-origin allowlist is empty, and no native production event path is verified. No provider name, successful pairing, UI rendering, or protocol fixture replaces a real host/account send/read/reply test. SharedBoard does not introduce a downloaded helper or replacement hosted model to work around unsupported delivery.
 
 A missing receipt remains uncertain. Keep its original request ID, check the linked conversation, and use the same request for any safe retry. Never change its saved attachment or automatically switch delivery modes after an uncertain attempt. Do not repeat work or overwrite an existing answer when a request was already handled.
 

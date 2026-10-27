@@ -1,6 +1,17 @@
 {
-  "version": "0.9.3",
+  "version": "0.10.0",
   "entries": [
+    {
+      "version": "0.10.0",
+      "title": "Experimental live AI collaboration",
+      "added": [
+        "An experimental live session lets a compatible AI wait for mini-chat and board-review requests during an active conversation turn.",
+        "Live session status and Pause controls keep requests tied to the correct board and session."
+      ],
+      "fixed": [
+        "Drafts remain available while an AI is busy; sending requires an actual pending wait or verified incoming-event connection."
+      ]
+    },
     {
       "version": "0.9.3",
       "title": "Retire stale experimental panel links",
@@ -278,5 +289,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "ad27b346b7fd45b31b617edddfb8a4f3d46ab753bcedcac9637dee1313e1f854"
+  "sourceHash": "46b7121c65a333ef48759345d8191cc85ae441e7a295c00b05661960c3935ef5"
 }

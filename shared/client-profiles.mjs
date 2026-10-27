@@ -1,13 +1,13 @@
 // Copyright (c) 2026 Andrew Barresi. SPDX-License-Identifier: MIT
 // Client names never prove a working route into an existing conversation.
-// An MCP App can accept text while only filling a draft. Only a verified
-// incoming-event route is eligible for automatic mini-chat delivery.
+// MCP App text support can mean draft-only. Mini chat needs verified events
+// or an actual pending wait in a finite, active AI collaboration session.
 export const CLIENT_PROFILES=Object.freeze([
- {id:'codex',label:'Codex',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. A no-download incoming-message route has not been verified.'},
- {id:'claude-code',label:'Claude Code',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. A no-download incoming-message route has not been verified.'},
- {id:'chatgpt',label:'ChatGPT',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. Automatic chat requires a client with verified incoming-event support.'},
- {id:'claude',label:'Claude (web)',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools are available. App messages fill a draft in Claude and do not start its model.'},
- {id:'other',label:'Other MCP client',miniChat:'wip',miniChatLabel:'Automatic mini chat · Work in progress',detail:'Board tools require remote MCP. Automatic messages depend on verified incoming events.'},
+ {id:'codex',label:'Codex',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Requires remote board tools and an active wait in your existing AI run.'},
+ {id:'claude-code',label:'Claude Code',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Requires remote board tools and an active wait in your existing AI run.'},
+ {id:'chatgpt',label:'ChatGPT',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Your host must keep the wait tool running; its limits need a real test.'},
+ {id:'claude',label:'Claude (web)',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental active-run mode. Claude app messages alone only fill a composer draft.'},
+ {id:'other',label:'Other MCP client',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Requires remote MCP and a host that can keep the wait tool active.'},
 ].map(profile=>Object.freeze(profile)));
 export const clientProfile=id=>CLIENT_PROFILES.find(profile=>profile.id===id)??null;
 export const isClientProvider=id=>Boolean(clientProfile(id));
@@ -15,11 +15,17 @@ export const isClientProvider=id=>Boolean(clientProfile(id));
 export function miniChatState(connection,now=Date.now()){
  if(connection?.connected!==true||connection.revoked)return {enabled:false,automatic:false,mode:'unavailable',reason:'Connect an AI to use Talk it through.'};
  if(connection.browserOnline===false||connection.relayAvailable===false)return {enabled:false,automatic:false,mode:'unavailable',reason:'Mini chat is offline. Keep this board connected and try again.'};
- const reason=connection.provider==='claude'?'Automatic mini chat is unavailable for this Claude connection. App messages fill a draft; they do not submit it or start the model. Board tools remain available in your AI chat.':['codex','claude-code'].includes(connection.provider)?`Automatic mini chat is a work in progress. A no-download incoming-message route has not been verified for this ${clientProfile(connection.provider).label} connection. Board tools remain available in your AI chat.`:'Automatic mini chat requires a supported, verified incoming-message connection. Board tools remain available in your AI chat.';
+ const deadline=value=>typeof value==='number'?value:typeof value==='string'?Date.parse(value):NaN;
+ const live=connection.liveSession,sessionActive=Boolean(typeof live?.id==='string'&&live.id.trim()&&['waiting','processing'].includes(live.status)&&Number.isFinite(deadline(live.expiresAt))&&deadline(live.expiresAt)>now);
+ if(connection.deliveryMode==='live-session'){
+  if(sessionActive&&live.status==='processing')return {enabled:false,automatic:false,mode:'live-session',phase:'processing',sessionActive:true,reason:'The AI is not waiting right now; your draft is kept until it resumes. New sends open when the same live session calls the wait tool again.'};
+  if(sessionActive&&live.status==='waiting'&&connection.automaticMessages===true&&Number.isFinite(deadline(live.waitExpiresAt))&&deadline(live.waitExpiresAt)>now)return {enabled:true,automatic:true,mode:'live-session',phase:'waiting',sessionActive:true,reason:'Your active AI session is waiting for a board request. Keep that run and this board open.'};
+  return {enabled:false,automatic:false,mode:'live-session',phase:live?.status??'inactive',sessionActive,reason:'Start or resume live collaboration once in your AI conversation. Mini chat opens while its wait tool is active; it cannot wake an ended or closed AI run. Board tools remain available.'};
+ }
+ const reason='Start live collaboration once in your AI conversation, or use a verified incoming-event connection. A live session must keep its wait tool active; it cannot wake an ended or closed run. Board tools remain available in your AI chat.';
  const unavailable={enabled:false,automatic:false,mode:'unavailable',reason};
  if(connection.automaticMessages!==true||connection.deliveryMode!=='events')return unavailable;
- const deadline=connection.messageExpiresAt??connection.eventExpiresAt;
- const expires=typeof deadline==='number'?deadline:typeof deadline==='string'?Date.parse(deadline):NaN;
+ const expires=deadline(connection.messageExpiresAt??connection.eventExpiresAt);
  if(!Number.isFinite(expires)||expires<=now)return unavailable;
  return {enabled:true,automatic:true,mode:'events',reason:'Automatic mini chat is available through verified incoming messages.'};
 }

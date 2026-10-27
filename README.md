@@ -59,9 +59,21 @@ Your AI app must support remote MCP tools; availability depends on its capabilit
 
 Once connected, ask the assistant **in your existing AI conversation** to read the board, explain the current plan, or make a drawing change you request. Read-only access supports inspection and replies; drawing changes require requested-edit access. Keep the browser board open while it uses the tools.
 
-**Automatic mini chat and Ask AI to look are still WIP.** They require a verified incoming-event subscription, and the committed deployment has no active, verified production callback route. Ordinary remote MCP tools alone do not wake an idle local Codex or Claude Code chat. Unsupported connections keep new board-originated sends unavailable rather than requiring you to copy each message.
+### Experimental Live collaboration
 
-A native Claude test on **2026-10-27** rendered the experimental MCP Apps panel, but its message call only filled Claude’s composer and still required the user to press Send. It did not start a model turn or return an automatic reply. The panel remains diagnostic WIP; successful rendering or a provider selection does not establish automatic chat support. See [connection behavior and the test boundary](BRIDGE.md).
+After pairing, open **Start live collaboration · experimental** in the website's connection details and use **Copy start instructions** once in that same AI conversation. This asks the existing AI run to wait for board requests. Individual mini-chat messages and **Ask AI to look** requests need no copying while the session is actually waiting.
+
+| During a live session | What to expect |
+| --- | --- |
+| **Active AI run required** | The assistant waits through a normal remote MCP tool; SharedBoard cannot wake a closed or ended run. |
+| **Finite session** | Each wait defaults to 40 seconds, is capped at 45 seconds, and the session ends after at most 20 minutes. |
+| **Send when waiting** | New sends open only while the backend observes an actual wait. Your draft stays when the AI is processing or no longer waiting. |
+| **Pause from the website** | Choose **Pause live collaboration** in connection details or the mini chat. Restart only when you choose to start another session. |
+| **Normal AI usage** | Empty waits still require model continuations and can use subscription allowance and context. |
+
+**Real provider acceptance of the repeating live wait/read/reply loop is still outstanding.** Implementation and transport tests do not yet establish that a particular ChatGPT, Codex, or Claude account will keep the session running. This is an experimental active-session technique, with no SharedBoard downloads or hosted replacement model. Follow [the connection guide](CONNECTIONS.md) for the test boundary.
+
+The other delivery paths remain unverified. In both the older and fresh ChatGPT Work Cloud conversations tested on this account, no native incoming-event subscription interface was exposed; this does not establish a limitation for every account. The committed native-event callback allowlist is empty. In the Claude MCP Apps test, `ui/message` filled a composer draft and still required Send in Claude. That panel remains diagnostic and does not enable automatic mini chat. See [connection behavior](BRIDGE.md).
 
 Keep the board tab open while your AI reads or edits it. Saved requests retain their captured context, delivery and replies are separate states, and overlapping drawing edits remain visible for you to resolve. SharedBoard connects your existing model; it does not host another model or include an AI subscription. Context you share passes through the Cloudflare relay to the connected AI service.
 
