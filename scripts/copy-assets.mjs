@@ -1,0 +1,13 @@
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const storageMode=process.env.VITE_STORAGE_MODE==='browser'?'browser':'local';
+const output=path.join(root,storageMode==='browser'?'dist-web':'dist');
+mkdirSync(path.join(output, 'excalidraw'), { recursive: true });
+cpSync(path.join(root, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts'), path.join(output, 'excalidraw/fonts'), { recursive: true });
+cpSync(path.join(root, 'node_modules/@excalidraw/excalidraw/dist/prod/locales'), path.join(output, 'excalidraw/locales'), { recursive: true });
+console.log('Excalidraw fonts and language assets are available locally.');
+const release=JSON.parse(readFileSync(path.join(root,'releases.json'),'utf8'));
+const pkg=JSON.parse(readFileSync(path.join(root,'package.json'),'utf8'));
+writeFileSync(path.join(output,'build-info.json'),JSON.stringify({product:'SharedBoard.app',version:release.version,sourceHash:release.sourceHash,storageMode,author:pkg.author,license:pkg.license,homepage:pkg.homepage})+'\n');

@@ -1,0 +1,79 @@
+SharedBoard.app {{VERSION}} — Windows x64 local testing build
+
+GET STARTED
+1. Right-click the ZIP and choose Extract All. Finish extracting every file.
+2. Open the extracted folder and double-click Start SharedBoard.app.cmd.
+3. Your usual browser opens the board. No Node.js, npm, pnpm or administrator
+   installation is needed. Keep all the extracted files together.
+4. When finished, wait for Saved on this computer, then double-click
+   Stop SharedBoard.app.cmd.
+   Closing the browser
+   tab alone leaves the local service running so an assistant can still use it.
+
+WHAT THIS BUILD SUPPORTS
+- The complete local canvas, projects, notes, proposals, history and mini chat.
+- Local Codex, Claude Code, Cursor and compatible local MCP clients.
+- Your existing AI account/model. The AI client must already be installed and
+  signed in; it is not included in this ZIP.
+- ChatGPT web and Claude web connectors are visible but locked as WIP.
+  This build never starts a public tunnel or downloads a tunnel helper.
+
+LINK CODEX — THE SIMPLEST TEST ROUTE
+1. Open Connect an AI on the board and select Codex.
+2. Choose Read only, Propose changes, or Read and edit when requested.
+3. Prepare the connection and copy its generated instructions.
+4. Paste them into the EXISTING local Codex chat you want to use. That agent
+   runs this ZIP's bundled helper, pairs, reads the board and confirms it.
+5. Click Test with a reply. Verify board access, message delivery, and an actual
+   returned reply separately. Automatic messages require a queue-capable Codex
+   installation. An existing web-only ChatGPT chat is not a local Codex chat.
+
+LINK CLAUDE CODE OR ANOTHER LOCAL MCP CLIENT
+1. Choose the client in Connect an AI and prepare a connection.
+2. Use the generated MCP server configuration in that client's MCP settings.
+   It already uses the bundled Node executable and this board's exact folder.
+   Preserve all existing server entries. Enable the new server/tools; restart
+   the client if its setup requires it.
+3. Paste the generated pairing instructions into the existing conversation.
+4. The assistant pairs using connect_board, reads the board, and confirms it.
+5. Mini-chat messages use Copy to AI: paste that saved request into the chosen
+   conversation. The assistant reads it and uses reply_to_chat_message to put
+   its real answer back on the board. Outbound handoff is manual for these
+   clients; the app does not claim to wake an idle conversation automatically.
+
+YOUR FILES
+The data folder beside these launchers is created on first launch. Every
+extracted copy starts with an empty, disconnected board and creates its own
+identity. Open data folder.cmd shows your local files. Back up that folder
+while the app is stopped, or export individual boards from inside the app.
+Keep the extraction in a writable folder. After linking an AI, keep the folder
+in the same location; moving it can require updating the AI link.
+
+FOR SHARING
+Send the original release ZIP. Do not zip and share your used data folder:
+it contains drawings, messages and private local connection credentials.
+No developer boards, account credentials or conversation IDs are in the
+release ZIP. There is no SharedBoard.app hosted service or required account.
+
+IF SOMETHING DOES NOT START
+- Extract the whole ZIP first; do not run a launcher from inside the ZIP.
+- Use Windows x64 with PowerShell and a current browser. macOS, Linux and
+  Windows ARM builds are not included in this archive.
+- Start automatically chooses an available local port and opens the right
+  address. It will not attach to another extracted copy or the developer app.
+- Read the message left by the launcher. Logs are in data/server.log,
+  data/server-error.log and, when needed, data/launcher-error.log.
+- Organization-managed computers may block unsigned portable apps or scripts.
+  Follow your organization's software policy; this beta is not code-signed.
+
+TESTING
+Try drawing, a second project/board, a save/reopen, and a Discuss-only reply
+through the AI client. Then try a small explicitly requested drawing change.
+Use FEEDBACK.txt to record problems. Review logs for private content before
+sharing them. Nothing is uploaded automatically.
+
+MORE INFORMATION
+README.html: readable overview and setup instructions.
+CHANGELOG.md: exact version changes.
+THIRD_PARTY_NOTICES.md and licenses/: dependency and runtime notices.
+package-manifest.json and SHA256SUMS.txt: contents and integrity hashes.

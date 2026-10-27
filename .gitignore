@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-web/
+.wrangler/
+data/
+.sites-runtime/
+*.log
+.env
+.env.*
+!.env.example
+*.zip
+*.sha256
+INTEGRATION-REVIEW.md

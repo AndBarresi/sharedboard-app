@@ -1,0 +1,2 @@
+# Browser-owned boards use one static application; there are no server routes.
+/boards/* /index.html 200

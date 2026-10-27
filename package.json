@@ -1,0 +1,42 @@
+{
+  "name": "sharedboard-app",
+  "version": "0.4.0",
+  "private": true,
+  "author": {
+    "name": "Andrew Barresi",
+    "url": "https://github.com/AndBarresi"
+  },
+  "license": "MIT",
+  "homepage": "https://sharedboard.app",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "node server/index.mjs --dev",
+    "build": "node scripts/release.mjs check && vite build && node scripts/copy-assets.mjs",
+    "build:web": "node scripts/build-web.mjs",
+    "preview:web": "node scripts/preview-web.mjs",
+    "package:web": "node scripts/package-web.mjs",
+    "change": "node scripts/release.mjs record",
+    "start": "node server/index.mjs",
+    "agent": "node server/agent-cli.mjs",
+    "mcp": "node server/mcp.mjs",
+    "test": "node --test test/*.test.mjs",
+    "package:windows": "node scripts/package-portable.mjs"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@modelcontextprotocol/server": "2.4.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "fake-indexeddb": "^6.2.6",
+    "vite": "8.3.5"
+  }
+}

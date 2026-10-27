@@ -1,0 +1,52 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {Icon} from './Icons.jsx';
+import {Modal} from './Modal.jsx';
+import {applyElements} from './canvas-actions.mjs';
+import {associatedIds,editOutlineElements,elementLabel,navigatorBounds,outlineEntries,renameOutlineEntry,reorderOutlineElements} from './object-navigator.mjs';
+import './object-navigator.css';
+
+function VisibilityIcon({hidden}){return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>{hidden&&<path d="m3 3 18 18"/>}</svg>;}
+function safeColor(value,fallback){return /^#[a-f0-9]{3,8}$/i.test(value||'')?value:fallback;}
+export function ObjectNavigator({view,ui,getApi,onClose}){
+  const [query,setQuery]=useState(''),[expanded,setExpanded]=useState(()=>new Set()),[rename,setRename]=useState(null),[error,setError]=useState(null),[,refresh]=useState(0);
+  const input=useRef(null);
+  useEffect(()=>{input.current?.focus();},[]);
+  const api=getApi();
+  if(!api)return null;
+  const elements=api.getSceneElementsIncludingDeleted(),active=elements.filter(element=>!element.isDeleted),byId=new Map(active.map(element=>[element.id,element])),entries=outlineEntries(elements);
+  const selected=new Set(view.selectedIds??[]),needle=query.trim().toLowerCase(),disabled=view.status==='conflict'||!view.online;
+  const matches=entry=>`${entry.name} ${entry.type} ${entry.elementIds.join(' ')}`.toLowerCase().includes(needle);
+  const filtered=entries.filter(entry=>!needle||matches(entry)||entry.children?.some(matches));
+  const state=api.getAppState(),zoom=ui?.zoom||state.zoom.value||1;
+  const viewport={x:-(ui?.scrollX??state.scrollX??0),y:-(ui?.scrollY??state.scrollY??0),width:(ui?.width||state.width||1000)/zoom,height:(ui?.height||state.height||700)/zoom};
+  const mapBounds=navigatorBounds(active,viewport),stroke=Math.max(mapBounds.width,mapBounds.height)/240;
+  const jump=entry=>{const ids=associatedIds(api.getSceneElements(),entry.elementIds),items=api.getSceneElements().filter(element=>ids.has(element.id));if(!items.length)return;api.updateScene({appState:{selectedElementIds:Object.fromEntries(items.filter(element=>!element.containerId&&!element.locked).map(element=>[element.id,true])),selectedGroupIds:entry.kind==='group'?{[entry.groupId]:true}:{}}});api.scrollToContent(items,{fitToViewport:true,viewportZoomFactor:.7,minZoom:.05,maxZoom:1});};
+  const mutate=(entry,action)=>{try{setError(null);const current=api.getSceneElementsIncludingDeleted();const next=['front','back'].includes(action)?reorderOutlineElements(current,entry.elementIds,action):editOutlineElements(current,entry.elementIds,action);const selectedIds=Object.keys(api.getAppState().selectedElementIds).filter(id=>api.getAppState().selectedElementIds[id]&&next.some(element=>element.id===id&&!element.isDeleted&&!element.locked&&(element.opacity??100)>0));applyElements(api,next,selectedIds);refresh(value=>value+1);}catch(reason){setError(reason.message||'The drawing changed. Try this action again.');}};
+  const saveName=event=>{event.preventDefault();try{const current=api.getSceneElementsIncludingDeleted(),ids=rename.entry.kind==='group'?current.filter(element=>!element.isDeleted&&element.groupIds?.includes(rename.entry.groupId)).map(element=>element.id):rename.entry.elementIds.filter(id=>current.some(element=>element.id===id&&!element.isDeleted));if(!ids.length)throw new Error('This object is no longer on the board.');applyElements(api,renameOutlineEntry(current,{...rename.entry,elementIds:ids},rename.name));setRename(null);setError(null);refresh(value=>value+1);}catch(reason){setError(reason.message);}};
+  const row=entry=>{
+    const ids=associatedIds(elements,entry.elementIds),members=active.filter(element=>ids.has(element.id));
+    const hidden=members.length>0&&members.every(element=>(element.opacity??100)===0),locked=members.length>0&&members.every(element=>element.locked),chosen=entry.elementIds.some(id=>selected.has(id));
+    return <div className={`outline-row ${entry.kind==='group'?'is-group':''} ${hidden?'is-hidden':''} ${chosen?'is-selected':''}`} key={entry.id}>
+      <div className="outline-main-row">
+        {entry.kind==='group'?<button className="outline-expand" aria-label={`${expanded.has(entry.id)?'Collapse':'Expand'} ${entry.name}`} aria-expanded={expanded.has(entry.id)} onClick={()=>setExpanded(current=>{const next=new Set(current);next.has(entry.id)?next.delete(entry.id):next.add(entry.id);return next;})}><Icon name="chevron" size={13}/></button>:<span className="outline-symbol"><Icon name={entry.type==='image'?'image':entry.type==='text'?'text':entry.type==='arrow'?'arrow':entry.type==='freedraw'?'freedraw':'rectangle'} size={15}/></span>}
+        <button className="outline-jump" onClick={()=>jump(entry)} title={entry.name}><strong>{entry.name}</strong><small>{entry.kind==='group'?`${entry.children.length} objects in group`:entry.groupIds.length?`${entry.type} · ${entry.groupIds.length} group${entry.groupIds.length===1?'':'s'}`:entry.type}{hidden?' · hidden':''}{locked?' · locked':''}</small></button>
+        <button className="outline-action" disabled={disabled} aria-label={`${hidden?'Show':'Hide'} ${entry.name}`} title={hidden?'Show on canvas':'Hide on canvas'} onClick={()=>mutate(entry,'visibility')}><VisibilityIcon hidden={hidden}/></button>
+        <button className={`outline-action ${locked?'is-on':''}`} disabled={disabled} aria-label={`${locked?'Unlock':'Lock'} ${entry.name}`} title={locked?'Unlock':'Lock'} onClick={()=>mutate(entry,'lock')}><Icon name="lock" size={14}/></button>
+      </div>
+      <div className="outline-row-actions"><button disabled={disabled} onClick={()=>{setError(null);setRename({entry,name:entry.name});}}>Rename</button><button disabled={disabled} title="Bring this object or its group in front" onClick={()=>mutate(entry,'front')}>To front</button><button disabled={disabled} title="Send this object or its group behind" onClick={()=>mutate(entry,'back')}>To back</button></div>
+      {entry.children&&(expanded.has(entry.id)||needle)&&<div className="outline-children">{entry.children.filter(child=>!needle||matches(entry)||matches(child)).slice(0,100).map(row)}{entry.children.length>100&&<small className="outline-limit">Search to narrow this group.</small>}</div>}
+    </div>;
+  };
+  const miniElements=active.filter(element=>!element.containerId).slice(-250);
+  return <aside className="object-navigator" aria-label="Objects and minimap" onPointerDown={event=>event.stopPropagation()} onKeyDown={event=>event.stopPropagation()}>
+    <header className="object-navigator-header"><div><p className="eyebrow">FIND YOUR WAY AROUND</p><h2>Objects & map</h2></div><button className="icon-button" aria-label="Close objects and minimap" onClick={onClose}><Icon name="close"/></button></header>
+    <div className="outline-minimap"><div className="outline-map-label"><span>Canvas overview</span><button onClick={()=>api.scrollToContent(active,{fitToViewport:true,viewportZoomFactor:.8,minZoom:.05,maxZoom:1})} disabled={!active.length}>Fit all</button></div><svg viewBox={`${mapBounds.x} ${mapBounds.y} ${mapBounds.width} ${mapBounds.height}`} role="group" aria-label="Canvas minimap; select an object thumbnail to jump to it" preserveAspectRatio="xMidYMid meet">{miniElements.map(element=>{
+      const x=element.x,y=element.y,width=Math.max(3,Math.abs(element.width||0)),height=Math.max(3,Math.abs(element.height||0)),name=elementLabel(element,active),fill=safeColor(element.backgroundColor,element.type==='image'?'#dce9f6':'#edf2e6');
+      return <g key={element.id} role="button" tabIndex={0} aria-label={`Jump to ${name}`} onClick={()=>jump({elementIds:[element.id]})} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();jump({elementIds:[element.id]});}}} transform={`rotate(${(element.angle||0)*180/Math.PI} ${x+width/2} ${y+height/2})`}><title>{name}</title><rect x={x} y={y} width={width} height={height} rx={element.type==='ellipse'?Math.min(width,height)/2:0} fill={fill} fillOpacity={(element.opacity??100)===0 ? .35 : .85} stroke={selected.has(element.id)?'#275c46':safeColor(element.strokeColor,'#8da17d')} strokeWidth={stroke} strokeDasharray={(element.opacity??100)===0?`${stroke*3} ${stroke*2}`:undefined}/></g>;
+    })}<rect className="outline-viewport" x={viewport.x} y={viewport.y} width={viewport.width} height={viewport.height} fill="none" stroke="#b57d44" strokeWidth={stroke*1.2} strokeDasharray={`${stroke*4} ${stroke*2}`} pointerEvents="none"/></svg><small>{active.length?`${active.length} objects · dashed outline is your view`:'Your first objects will appear here.'}</small></div>
+    <div className="outline-search"><input ref={input} type="search" aria-label="Search objects" placeholder="Find a name, text, or object type…" value={query} onChange={event=>setQuery(event.target.value)}/></div>
+    {error&&!rename&&<p className="planner-error" role="alert">{error}</p>}
+    <div className="outline-list">{filtered.slice(0,200).map(row)}{filtered.length>200&&<p className="outline-limit">Showing 200 items. Search to find a specific object.</p>}{!active.length&&<div className="outline-empty"><Icon name="grid" size={30}/><h3>A little order for your ideas.</h3><p>Objects, groups and references appear here as you draw. Jump to them, name them, or move them between layers.</p></div>}{active.length>0&&!filtered.length&&<p className="outline-empty">No objects match this search.</p>}</div>
+    {rename&&<Modal title={rename.entry.kind==='group'?'Name this group':'Name this object'} subtitle="A friendly name makes it easier to find in the outline." onClose={()=>setRename(null)}><form className="planner-form" onSubmit={saveName}><label>Outline name<input autoFocus required maxLength={100} value={rename.name} onChange={event=>setRename(current=>({...current,name:event.target.value}))}/></label><p className="muted">This labels the object in your navigator. Any words drawn on the canvas stay as written.</p>{error&&<p className="planner-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={()=>setRename(null)}>Cancel</button><button className="primary-button" disabled={!rename.name.trim()||disabled}>Save name</button></div></form></Modal>}
+  </aside>;
+}

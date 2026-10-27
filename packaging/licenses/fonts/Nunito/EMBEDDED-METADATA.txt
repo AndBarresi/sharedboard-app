@@ -1,0 +1,17 @@
+Metadata extracted without modification from bundled @excalidraw/excalidraw 0.18.1 WOFF2 font name tables.
+
+Metadata group 1
+Files: Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTA3j6zbXWjgevT5.woff2, Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTk3j6zbXWjgevT5.woff2, Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTo3j6zbXWjgevT5.woff2, Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTQ3j6zbXWjgeg.woff2, Nunito-Regular-XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdTs3j6zbXWjgevT5.woff2
+
+Copyright:
+Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+
+Family:
+Nunito ExtraLight Medium
+
+Version:
+Version 3.602
+
+License URL:
+https://scripts.sil.org/OFL
+
