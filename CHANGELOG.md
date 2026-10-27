@@ -1,5 +1,22 @@
 # SharedBoard.app changelog
 
+## 0.8.1 — Preserve unconfirmed mini-chat drafts
+
+### Fixed
+
+- Keep pending text, captured context and original request IDs until an actual reply, manual handoff or queued-delivery receipt confirms acceptance, including subscription expiry during sending.
+
+## 0.8.0 — Clear client capabilities and verified mini chat
+
+### Added
+
+- Codex and Claude Code lead the connection choices, with distinct mini-chat availability labels and website-led Claude Code setup.
+
+### Fixed
+
+- Disabled Talk it through, fullscreen chat and new-message composition unless the active connection supports verified incoming messages, while preserving saved requests and replies.
+- Used separate chat and review expiry deadlines for UI availability and delivery routing, including safe retries after subscription expiry.
+
 ## 0.7.6 — Consistent UI spacing and compact layouts
 
 ### Fixed

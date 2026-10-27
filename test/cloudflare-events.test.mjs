@@ -35,6 +35,13 @@ test('event discovery is board-authenticated and automatic delivery waits for a 
   const refreshed=await handleEventRpc('events/subscribe',subscribe(),f.options);assert.equal(refreshed.id,result.id);assert.equal(f.requests.length,1,'brief verified-callback cache avoids repeat challenges');
 });
 
+test('chat and review expiry remain independent when one verified subscription ends earlier',async()=>{
+ const f=fixture();
+ const chat=await handleEventRpc('events/subscribe',subscribe({ttlMs:3600000}),f.options),review=await handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name,ttlMs:60000}),f.options);
+ const both=await eventStatus(f.options);assert.equal(both.automaticMessages,true);assert.equal(both.automaticReviews,true);assert.equal(both.messageExpiresAt,chat.refreshBefore);assert.equal(both.reviewExpiresAt,review.refreshBefore);assert.equal(both.eventExpiresAt,review.refreshBefore);
+ f.advance(60001);const remaining=await eventStatus(f.options);assert.equal(remaining.automaticMessages,true);assert.equal(remaining.automaticReviews,false);assert.equal(remaining.messageExpiresAt,chat.refreshBefore);assert.equal(remaining.reviewExpiresAt,null);assert.equal(remaining.eventExpiresAt,chat.refreshBefore);
+});
+
 test('callbacks are fail closed to exact operator-approved HTTPS origins, with no arbitrary fetch or secret-bearing errors',async()=>{
   const f=fixture();
   for(const url of ['http://chatgpt.com/callback','https://user@chatgpt.com/callback','https://chatgpt.com:444/callback','https://chatgpt.com/callback#fragment','https://chatgpt.com.evil.example/callback','https://127.0.0.1/callback','https://[::1]/callback','https://metadata.google.internal/callback'])await assert.rejects(handleEventRpc('events/subscribe',subscribe({delivery:{mode:'webhook',url,secret}}),f.options),error=>error.code===-32015);

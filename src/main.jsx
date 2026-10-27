@@ -21,6 +21,7 @@ import {ProjectTransfer} from './ProjectTransfer.jsx';
 import {WorkspacePicker} from './WorkspacePicker.jsx';
 import {ObjectNavigator} from './ObjectNavigator.jsx';
 import {Modal} from './Modal.jsx';
+import {miniChatState} from '../shared/client-profiles.mjs';
 import {CREATOR_NAME,CREATOR_URL} from '../shared/brand.mjs';
 import './workspace-upgrade.css';
 import './browser-mode-ui.css';
@@ -53,6 +54,8 @@ function App() {
   const [reviewError, setReviewError] = useState(null);
   const [focused,setFocused]=useState(false);
   const [chatOpen,setChatOpen]=useState(false);
+  const [,refreshMiniChatGate]=useState(0);
+  const miniChat=miniChatState(view.chatConnected?view.connection:null);
   const [connectionOpen,setConnectionOpen]=useState(false);
   const [changelogOpen,setChangelogOpen]=useState(false);
   const [storageDetailsOpen,setStorageDetailsOpen]=useState(false);
@@ -75,7 +78,14 @@ function App() {
   const drawingInitialData = useMemo(() => initial ? { elements: structuredClone(initial.elements), files: structuredClone(initial.files), appState: { viewBackgroundColor: '#fcfcfa', currentItemFontFamily: 2, currentItemStrokeColor:'#26352e',currentItemBackgroundColor:'transparent',currentItemFontSize:20,gridSize:null }, scrollToContent: true } : null, [initial]);
   const drawingUi = useMemo(() => ({ canvasActions: { loadScene: true, saveToActiveFile: false, export: { saveFileToDisk: true }, toggleTheme: false } }), []);
   const openPlanner=(tab,action=null)=>{if(window.innerWidth<1200)setChatOpen(false);setNavigatorOpen(false);setPlanner(tab);setPlannerAction(action?{...action,id:crypto.randomUUID()}:null);};
-  const setChatVisibility=value=>{if(value&&window.innerWidth<1200){setPlanner(null);setNavigatorOpen(false);}setChatOpen(value);};
+  const setChatVisibility=(value,{saved=false}={})=>{if(value&&!saved&&!miniChat.enabled)return;if(value&&window.innerWidth<1200){setPlanner(null);setNavigatorOpen(false);}setChatOpen(value);};
+  useEffect(()=>{
+    const value=view.connection?.messageExpiresAt??view.connection?.eventExpiresAt;
+    const deadline=typeof value==='number'?value:Date.parse(value);
+    if(!view.connection?.automaticMessages||!Number.isFinite(deadline)||deadline<=Date.now())return;
+    const timer=setTimeout(()=>refreshMiniChatGate(value=>value+1),Math.min(2147483647,deadline-Date.now()+1));
+    return()=>clearTimeout(timer);
+  },[view.connection?.id,view.connection?.automaticMessages,view.connection?.messageExpiresAt,view.connection?.eventExpiresAt]);
   useEffect(()=>{
     const shortcut=e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPlanner('areas');}};
     document.addEventListener('keydown',shortcut);return()=>document.removeEventListener('keydown',shortcut);
@@ -143,7 +153,7 @@ function App() {
   const testConnection=async()=>{
     const id=crypto.randomUUID();
     const result=await sync.current.sendChat({id,intent:'discuss',text:'Connection check only. Please read the live board and confirm its exact revision with confirm_connection, then reply to this mini chat to acknowledge that the connection works. No drawing changes are requested.'});
-    setChatVisibility(true);
+    setChatVisibility(true,{saved:true});
     const message=result.messages.find(item=>item.id===id);
     if(message?.handoffPrompt){try{await copyText(message.handoffPrompt);}catch{setReviewError('The test is saved in the mini chat. Copy its instructions there, then paste them into your linked conversation.');}}
     else if(!view.connection?.automaticMessages&&!message?.reply)throw new Error(message?.deliveryError||'The test is saved, but its Copy to AI instructions could not be prepared. Retry preparation from the mini chat.');
@@ -184,12 +194,12 @@ function App() {
             renderTopRightUI={() => null}
             handleKeyboardGlobally={true}
           /> : <div className="loading"><span className="loading-mark">↗</span>{browserOnly?'Opening your saved browser canvas…':'Opening our canvas…'}</div>}
-          {initial&&<DrawingToolbar browserOnly={browserOnly} onStorageDetails={()=>setStorageDetailsOpen(true)} getApi={()=>sync.current?.getApi()} ui={ui} focused={focused} onFullscreen={toggleFullscreen} onChat={()=>setChatVisibility(!chatOpen)} onConnect={()=>setConnectionOpen(true)} onReview={askForReview} reviewDisabled={requestingReview||samePendingReview||!view.agentConnected||view.status==='conflict'||!view.online} onExport={exportBoard} onImport={importBoard} onError={setReviewError} onPlanner={tab=>openPlanner(tab)} onReference={()=>setReferenceOpen(true)} onChangelog={()=>setChangelogOpen(true)} onExportProject={exportProject} onImportProject={()=>setProjectImportOpen(true)} onWorkspace={()=>setWorkspaceOpen(true)} onNavigator={()=>{setPlanner(null);setNavigatorOpen(v=>!v);}}/>}
+          {initial&&<DrawingToolbar browserOnly={browserOnly} onStorageDetails={()=>setStorageDetailsOpen(true)} getApi={()=>sync.current?.getApi()} ui={ui} focused={focused} onFullscreen={toggleFullscreen} chatDisabled={!miniChat.enabled} chatUnavailableReason={miniChat.reason} onChat={()=>setChatVisibility(!chatOpen)} onConnect={()=>setConnectionOpen(true)} onReview={askForReview} reviewDisabled={requestingReview||samePendingReview||!view.agentConnected||view.status==='conflict'||!view.online} onExport={exportBoard} onImport={importBoard} onError={setReviewError} onPlanner={tab=>openPlanner(tab)} onReference={()=>setReferenceOpen(true)} onChangelog={()=>setChangelogOpen(true)} onExportProject={exportProject} onImportProject={()=>setProjectImportOpen(true)} onWorkspace={()=>setWorkspaceOpen(true)} onNavigator={()=>{setPlanner(null);setNavigatorOpen(v=>!v);}}/>}
           {initial&&<NotePins view={view} ui={ui} onOpen={noteId=>openPlanner('notes',{type:'note-open',noteId})}/>}
           {initial&&!planner&&!navigatorOpen&&<SelectionBar view={view} getApi={()=>sync.current.getApi()} onNote={()=>openPlanner('notes',{type:'note'})} onArea={()=>openPlanner('areas',{type:'area'})} onInspect={()=>setSelectionOpen(true)}/>}
           {initial&&navigatorOpen&&<ObjectNavigator view={view} ui={ui} getApi={()=>sync.current.getApi()} onClose={()=>setNavigatorOpen(false)}/>}
-          {initial&&planner&&<PlanningPanel browserOnly={browserOnly} tab={planner} setTab={setPlanner} view={view} getSync={()=>sync.current} action={plannerAction} onClose={()=>{setPlanner(null);setPlannerAction(null);}} onReference={()=>setReferenceOpen(true)} onDiscuss={async text=>{if(browserOnly&&!view.chatConnected){setConnectionOpen(true);return;}setChatOpen(true);const id=crypto.randomUUID();const result=await sync.current.sendChat({id,text,intent:'discuss'});const message=result.messages.find(m=>m.id===id);if(message?.handoffPrompt)await copyText(message.handoffPrompt);}}/>}
-          {initial&&<BoardChat onConnect={()=>setConnectionOpen(true)} browserOnly={browserOnly} open={chatOpen} setOpen={setChatVisibility} onExpand={expanded=>{if(expanded){setPlanner(null);setNavigatorOpen(false);}}} view={view} send={input=>sync.current.sendChat(input)} retry={id=>sync.current.retryChat(id)} focused={focused} prepareContext={options=>sync.current.prepareContext(options)} legacyDraftBoardId={view.workspace?.legacyBoardId} onJump={ids=>{const api=sync.current.getApi();const elements=api.getSceneElements().filter(e=>ids.includes(e.id));if(elements.length)api.scrollToContent(elements,{fitToViewport:true,viewportZoomFactor:.7,maxZoom:1});}}/>}
+          {initial&&planner&&<PlanningPanel browserOnly={browserOnly} tab={planner} setTab={setPlanner} view={view} getSync={()=>sync.current} action={plannerAction} onClose={()=>{setPlanner(null);setPlannerAction(null);}} onReference={()=>setReferenceOpen(true)} onDiscuss={async text=>{if(browserOnly&&!view.chatConnected){setConnectionOpen(true);return;}setChatVisibility(true,{saved:!miniChat.enabled});const id=crypto.randomUUID();const result=await sync.current.sendChat({id,text,intent:'discuss'});const message=result.messages.find(m=>m.id===id);if(message?.handoffPrompt)await copyText(message.handoffPrompt);}}/>}
+          {initial&&<BoardChat onConnect={()=>setConnectionOpen(true)} browserOnly={browserOnly} open={chatOpen} setOpen={setChatVisibility} onExpand={expanded=>{if(expanded){setPlanner(null);setNavigatorOpen(false);}}} view={view} send={input=>{const available=miniChatState(view.chatConnected?view.connection:null);if(!available.enabled)throw new Error(available.reason);return sync.current.sendChat(input);}} retry={id=>sync.current.retryChat(id)} focused={focused} prepareContext={options=>sync.current.prepareContext(options)} legacyDraftBoardId={view.workspace?.legacyBoardId} onJump={ids=>{const api=sync.current.getApi();const elements=api.getSceneElements().filter(e=>ids.includes(e.id));if(elements.length)api.scrollToContent(elements,{fitToViewport:true,viewportZoomFactor:.7,maxZoom:1});}}/>}
           {initial&&count===0&&!planner&&!navigatorOpen&&!chatOpen&&<div className="canvas-welcome"><span className="welcome-symbol">↗</span><p className="eyebrow">EVERY GOOD BUILD STARTS SOMEWHERE</p><h2>What are we thinking through?</h2><p>Start with a screen, a system, or a screenshot.<br/>{browserOnly?'Sketch first. Your work stays in this browser.':'Your AI and your ideas share the same space.'}</p><div onPointerDown={e=>e.stopPropagation()}><button className="primary-button" onClick={()=>openPlanner('library')}>Choose a starting block</button><button className="secondary-button" onClick={()=>setReferenceOpen(true)}>Add a screenshot</button></div><small>Or pick a tool above and make your first mark.</small></div>}
         </div>
         <footer className="canvas-footer"><span><span className="footer-dot" />{statusText}</span><a className="footer-creator" href={CREATOR_URL} target="_blank" rel="author noopener noreferrer">Created by {CREATOR_NAME}</a><button className="footer-changelog" onClick={()=>setChangelogOpen(true)}>v{APP_VERSION} · What’s new</button></footer>
@@ -200,7 +210,7 @@ function App() {
       {projectImportOpen&&<ProjectTransfer getSync={()=>sync.current} onClose={()=>setProjectImportOpen(false)}/>}
       {workspaceOpen&&view.workspace&&<WorkspacePicker browserOnly={browserOnly} workspace={view.workspace} onClose={()=>setWorkspaceOpen(false)} run={input=>sync.current.workspaceAction(input)} openBoard={id=>sync.current.openBoard(id)}/>}
       {storageDetailsOpen&&<BrowserStorageDetails onClose={()=>setStorageDetailsOpen(false)} onExport={exportProject}/>}
-      {connectionOpen&&<ConnectionSetup detectBridge={()=>sync.current.detectBridge()} browserOnly={browserOnly} connection={view.connection} online={view.online} begin={input=>sync.current.beginPairing(input)} cancel={()=>sync.current.cancelPairing()} disconnect={()=>sync.current.disconnect()} onClose={()=>setConnectionOpen(false)} onTest={testConnection}/>}
+      {connectionOpen&&<ConnectionSetup detectBridge={()=>sync.current.detectBridge()} browserOnly={browserOnly} connection={view.connection} online={view.online} begin={input=>sync.current.beginPairing(input)} cancel={()=>sync.current.cancelPairing()} disconnect={()=>sync.current.disconnect()} onClose={()=>setConnectionOpen(false)} onTest={testConnection} hasSavedRequests={Boolean(view.messages?.length)} onHistory={()=>{setChatVisibility(true,{saved:true});setConnectionOpen(false);}}/>}
       {initial&&<CloudAuthorization controller={sync.current} view={view} setupOpen={connectionOpen||workspaceOpen} onConnect={()=>setConnectionOpen(true)} onChooseBoard={()=>setWorkspaceOpen(true)}/>}
     </div>
   );

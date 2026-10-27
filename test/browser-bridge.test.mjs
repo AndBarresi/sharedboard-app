@@ -140,6 +140,32 @@ test('chat and review subscriptions choose their own delivery paths and expose m
  }
 });
 
+test('cached capability flags route new requests by their own deadlines instead of an earlier sibling expiry',async()=>{
+ const {t,bridge}=await fixture();try{
+  const future=new Date(Date.now()+60000).toISOString(),past=new Date(Date.now()-1000).toISOString();
+  Object.assign(bridge.connection,{automaticMessages:true,automaticReviews:true,messageExpiresAt:future,reviewExpiresAt:past,eventExpiresAt:past});await t.bridgeStatus();
+  const chat=await call(t,'/api/chat',await capture(t,{text:'An active chat survives an expired review subscription.',intent:'discuss'})),review=await call(t,'/api/reviews',await capture(t));
+  assert.equal(chat.messages[0].delivery,'queued');assert.equal(chat.automaticMessages,true);assert.equal(review.request.delivery,'manual');assert.equal(review.automaticMessages,false);
+  const notifications=bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').map(request=>JSON.parse(request.body).kind);assert.deepEqual(notifications,['chat']);
+  Object.assign(bridge.connection,{messageExpiresAt:past,reviewExpiresAt:future});await t.bridgeStatus();
+  const newChat=await call(t,'/api/chat',await capture(t,{text:'This new request needs a manual handoff after chat expiry.',intent:'discuss'})),newReview=await call(t,'/api/reviews',await capture(t));
+  assert.equal(newChat.messages.at(-1).delivery,'manual');assert.equal(newChat.automaticMessages,false);assert.equal(newReview.request.delivery,'queued');assert.equal(newReview.automaticMessages,true);assert.equal(bridge.connection.automaticMessages,true,'the cached flag stays true, so deadline checks are required');
+  assert.deepEqual(bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').map(request=>JSON.parse(request.body).kind),['chat','review']);
+ }finally{t.close();}
+});
+
+test('a cached expired subscription cannot convert an uncertain automatic request into a manual resend',async()=>{
+ const {t,bridge}=await fixture();try{
+  Object.assign(bridge.connection,{messageExpiresAt:new Date(Date.now()+60000).toISOString(),reviewExpiresAt:new Date(Date.now()+120000).toISOString()});await t.bridgeStatus();
+  const input=await capture(t,{text:'Preserve the original uncertain request and attachment.',intent:'discuss'});bridge.loseReceipt=true;
+  const sent=await call(t,'/api/chat',input);assert.equal(sent.messages[0].delivery,'uncertain');assert.equal(bridge.notifyCount,1);
+  bridge.connection.messageExpiresAt=new Date(Date.now()-1000).toISOString();await t.bridgeStatus();
+  await assert.rejects(call(t,'/api/chat/retry',{id:input.id}),error=>error.status===409&&error.code==='DELIVERY_UNCERTAIN'&&error.deliveryUnknown);
+  const saved=(await call(t,'/api/chat')).messages[0];assert.equal(saved.id,input.id);assert.equal(saved.delivery,'uncertain');assert.equal(saved.boardRevision,input.expectedRevision);assert.equal(saved.planningVersion,input.expectedPlanningVersion);assert.equal(saved.handoffPrompt,undefined);assert.equal(bridge.notifyCount,1);
+  assert.equal(bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/handoff').length,0);
+ }finally{t.close();}
+});
+
 test('a chat-only connection can retry manual review preparation without creating a second captured request',async()=>{
  const {t,bridge}=await fixture();try{
   bridge.connection.automaticReviews=false;await t.bridgeStatus();const input=await capture(t);bridge.failHandoff=true;
@@ -183,6 +209,22 @@ test('detection verifies the hosted relay product and failed live status does no
   bridge.offline=true;const status=await t.bridgeStatus();assert.equal(status.connected,false);assert.equal(status.browserOnline,false);assert.equal((await call(t,'/api/chat')).connected,false);
   const element={id:'offline-drawing',type:'rectangle',x:0,y:0,width:40,height:40};await call(t,'/api/board',{changes:[{id:element.id,expectedVersion:0,element}]},'PATCH');assert.equal((await call(t,'/api/board')).elements[0].id,element.id);
  }finally{t.close();}
+});
+
+test('Claude Code pairing uses the shared provider registry and invalid choices cannot replace a grant',async()=>{
+ const boardId=crypto.randomUUID(),sessionId=crypto.randomUUID(),requests=[],saves=[];let state=null,loads=0;
+ const bridge=createBrowserBridge({boardId,clientId:'browser-tab',WebSocket:null,load:async()=>{loads++;return state;},save:async value=>{saves.push(value);state=value;return true;},fetch:async(url,options)=>{
+  requests.push(new URL(url).pathname);assert.equal(requests.at(-1),'/browser/pair');
+  assert.deepEqual(JSON.parse(options.body),{boardId,title:'Code planning board',provider:'claude-code',permission:'read',clientId:'browser-tab'});
+  return Response.json({browserToken:'claude-code-browser-grant',sessionId,connection:{id:sessionId,boardId,provider:'claude-code',connected:false,permission:'read'},pairing:{code:'test-pairing-code'},setup:{prompt:'Pair the Claude Code session'}});
+ }});
+ try{
+  const paired=await bridge.pair({provider:'claude-code',permission:'read'},'Code planning board');assert.equal(paired.setup.prompt,'Pair the Claude Code session');
+  const saved=state,loaded=loads;
+  for(const provider of ['unknown','__proto__',null,{},['codex']])await assert.rejects(bridge.pair({provider,permission:'edit'},'Code planning board'),/Choose an AI client/);
+  await assert.rejects(bridge.pair({provider:'claude-code',permission:'owner'},'Code planning board'),/Choose an AI client/);
+  assert.deepEqual(requests,['/browser/pair']);assert.equal(saves.length,1);assert.equal(state,saved);assert.equal(loads,loaded,'invalid choices must not even load or disconnect the existing grant');
+ }finally{bridge.close();}
 });
 
 test('preparing a new connection replaces an explicitly expired or revoked browser grant',async()=>{

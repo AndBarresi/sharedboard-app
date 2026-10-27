@@ -9,7 +9,14 @@ export const captureSchema=z.object({id:uuid,boardId:uuid,expectedRevision:z.num
 export const chatInputSchema=captureSchema.extend({text:z.string().trim().min(1).max(8000),intent:z.enum(['discuss','work'])});
 export const metadata=item=>{const {snapshot,targetThreadId,...rest}=item;return clone(rest);};
 export const planningContext=(record,ids=[],scope='board')=>({version:record.planning.version,title:record.planning.project.title,areas:clone(record.planning.project.areas),notes:clone(record.planning.project.notes.filter(n=>scope==='board'||!n.elementIds.length||n.elementIds.some(id=>ids.includes(id)))),pendingProposals:[]});
-export const automaticDeliveryFor=(connection,kind)=>Boolean(kind==='review'?(connection?.automaticReviews??connection?.automaticMessages):connection?.automaticMessages);
+export function automaticDeliveryFor(connection,kind,now=Date.now()){
+ const enabled=kind==='review'?(connection?.automaticReviews??connection?.automaticMessages):connection?.automaticMessages;
+ if(enabled!==true)return false;
+ const deadline=(kind==='review'?connection?.reviewExpiresAt:connection?.messageExpiresAt)??connection?.eventExpiresAt;
+ if(deadline===undefined||deadline===null)return true; // Older connections only supplied capability flags.
+ const expires=typeof deadline==='number'?deadline:Date.parse(deadline);
+ return Number.isFinite(expires)&&expires>now;
+}
 export const chatView=(record,connection)=>({messages:(record.messages??[]).map(metadata),connected:Boolean(connection?.connected),connectionLabel:connection?.label??'Connect an AI',automaticMessages:automaticDeliveryFor(connection,'chat')});
 export const reviewView=(record,connection)=>({requests:(record.reviews??[]).map(metadata),connected:Boolean(connection?.connected),automaticMessages:automaticDeliveryFor(connection,'review')});
 

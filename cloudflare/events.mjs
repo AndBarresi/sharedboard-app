@@ -128,7 +128,8 @@ export async function handleEventRpc(method,params,configuration){
 
 export async function eventStatus(configuration){
   const options=context(configuration),entries=(await subscriptions(options)).filter(entry=>matches(entry,options)&&allowedOrigins(options.allowedCallbackOrigins).has(new URL(entry.url).origin));
-  return {automaticMessages:entries.some(entry=>entry.name==='sharedboard.message.created'),automaticReviews:entries.some(entry=>entry.name==='sharedboard.review.requested'),eventSubscriptions:entries.length,eventExpiresAt:entries.length?new Date(Math.min(...entries.map(entry=>entry.expiresAt))).toISOString():null};
+  const message=entries.find(entry=>entry.name==='sharedboard.message.created'),review=entries.find(entry=>entry.name==='sharedboard.review.requested');
+  return {automaticMessages:Boolean(message),automaticReviews:Boolean(review),eventSubscriptions:entries.length,eventExpiresAt:entries.length?new Date(Math.min(...entries.map(entry=>entry.expiresAt))).toISOString():null,messageExpiresAt:message?new Date(message.expiresAt).toISOString():null,reviewExpiresAt:review?new Date(review.expiresAt).toISOString():null};
 }
 
 export async function clearEventSubscriptions(configuration){
