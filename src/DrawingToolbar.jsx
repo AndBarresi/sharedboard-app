@@ -4,10 +4,10 @@ import {Icon} from './Icons.jsx';
 const tools=[['selection','select','Select','V'],['hand','hand','Pan','H'],['rectangle','rectangle','Rectangle','R'],['diamond','diamond','Diamond','D'],['ellipse','ellipse','Ellipse','O'],['arrow','arrow','Arrow','A'],['line','line','Line','L'],['freedraw','freedraw','Draw','P'],['text','text','Text','T'],['image','image','Image','9'],['eraser','eraser','Eraser','E']];
 const colors=['#26352e','#275c46','#718b64','#b56c43','#657c9b','#896284','#ffffff'];
 const fills=['transparent','#e5eadc','#dff0e5','#fff0d9','#dce9f6','#eedfee','#ffffff'];
-export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,onConnect,onReview,reviewDisabled,onExport,onImport,onError,onPlanner,onReference,onChangelog,onExportProject,onImportProject,onWorkspace,onNavigator,browserOnly=false,onStorageDetails}){
+export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,chatDisabled=false,chatUnavailableReason='',onConnect,onReview,reviewDisabled,onExport,onImport,onError,onPlanner,onReference,onChangelog,onExportProject,onImportProject,onWorkspace,onNavigator,browserOnly=false,onStorageDetails}){
   const [panel,setPanel]=useState(null);const root=useRef(null);const file=useRef(null);
   useEffect(()=>{const close=e=>{if(!root.current?.contains(e.target))setPanel(null);};const escape=e=>{if(e.key==='Escape')setPanel(null);};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[]);
-  const button=(name,label,onClick,active=false,disabled=false)=><button type="button" key={label} className={`tool-button ${active?'active':''}`} aria-label={label} title={label} onClick={onClick} aria-pressed={active} disabled={disabled}><Icon name={name}/></button>;
+  const button=(name,label,onClick,active=false,disabled=false,title=label)=><button type="button" key={label} className={`tool-button ${active?'active':''}`} aria-label={label} title={title} onClick={onClick} aria-pressed={active} disabled={disabled}><Icon name={name}/></button>;
   const choose=type=>{const api=getApi();if(!api)return;api.setActiveTool(type==='image'?{type,insertOnCanvasDirectly:true}:{type});setPanel(null);};
   const history=redo=>{const el=document.querySelector('.canvas-shell .excalidraw');el?.focus();el?.dispatchEvent(new KeyboardEvent('keydown',{key:'z',code:'KeyZ',ctrlKey:true,shiftKey:redo,bubbles:true,cancelable:true}));};
   const zoom=direction=>{const api=getApi();if(!api)return;const s=api.getAppState(), value=Math.min(5,Math.max(.1,s.zoom.value*direction));const cx=s.width/2/s.zoom.value-s.scrollX,cy=s.height/2/s.zoom.value-s.scrollY;api.updateScene({appState:{zoom:{value},scrollX:s.width/2/value-cx,scrollY:s.height/2/value-cy}});};
@@ -30,7 +30,7 @@ export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,onConnect,
       {button('undo','Undo',()=>history(false))}{button('redo','Redo',()=>history(true))}
       <span className="tool-divider"/>
       {button('review','Ask AI to look',onReview,false,reviewDisabled)}
-      {focused&&button('chat','Open board chat',onChat)}
+      {focused&&button('chat','Open board chat',()=>{if(!chatDisabled)onChat();},false,chatDisabled,chatDisabled?chatUnavailableReason||'Mini chat unavailable for this connection':'Open board chat')}
       {button(focused?'collapse':'expand',focused?'Exit full screen':'Full screen',()=>{setPanel(null);onFullscreen();},focused)}
     </div>
     {panel==='menu'&&<div className="dock-panel board-menu" role="region" aria-label="Board menu">

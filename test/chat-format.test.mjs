@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat} from '../src/chat-format.mjs';
+import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage} from '../src/chat-format.mjs';
 test('chat links allow explicit web URLs and reject executable, local, disguised, credentialed and control-character destinations',()=>{
   assert.equal(safeChatHref('https://example.com/docs?q=a%20b'),'https://example.com/docs?q=a%20b');
   for(const url of ['javascript:alert(1)','data:text/html,hi','file:///C:/private.txt','//example.com',' https://example.com','https://exam\nple.com','https://user:secret@example.com','https:\\example.com','vbscript:msgbox(1)'])assert.equal(safeChatHref(url),null,url);
@@ -36,4 +36,24 @@ test('board-scoped drafts stay separate and a preview becomes stale when drawing
 test('large attachments retain the original retry identity without filling per-board browser storage',()=>{
   const pending={id:'same-request',text:'Inspect this',intent:'discuss',boardId:'board-a',capturedContext:{visual:'x'.repeat(1_000_000)}};
   const stored=JSON.parse(serializePendingChat(pending));assert.equal(stored.id,pending.id);assert.equal(stored.text,pending.text);assert.equal(stored.attachmentNotStored,true);assert.equal(stored.capturedContext,undefined);
+});
+
+test('pending, failed, and uncertain delivery never acknowledge a draft merely because automatic support was selected',()=>{
+ for(const delivery of ['pending','failed','uncertain']){
+  const attempted={id:'same-request',delivery,receipt:'attempted-event',handoffPrompt:'Old copied instructions',automaticMessages:true};
+  assert.equal(isAcceptedChatMessage(attempted),false,delivery);
+ }
+ const failedHandoff={id:'same-request',delivery:'failed',deliveryError:'The subscription expired and the handoff could not be prepared'};
+ assert.equal(isAcceptedChatMessage(failedHandoff),false,'a failed fallback retains the pending request and draft');
+ for(const receipt of [undefined,null,false,true,{},[],0,'','   ',{provider:'codex-cli'},{queueMessageId:'unknown-provider'},{provider:'codex-cli',queueMessageId:'  '}])assert.equal(isAcceptedChatMessage({delivery:'queued',receipt}),false);
+ for(const handoffPrompt of [undefined,null,true,{},'','   '])assert.equal(isAcceptedChatMessage({delivery:'manual',handoffPrompt}),false);
+ assert.equal(isAcceptedChatMessage(null),false);
+});
+
+test('only a confirmed receipt, prepared manual instructions, or an actual reply acknowledges a chat request',()=>{
+ assert.equal(isAcceptedChatMessage({delivery:'queued',receipt:'evt_confirmed'}),true);
+ assert.equal(isAcceptedChatMessage({delivery:'queued',receipt:{provider:'codex-cli',queueMessageId:'stored-queue-message'}}),true);
+ assert.equal(isAcceptedChatMessage({delivery:'manual',handoffPrompt:'Read the captured request with its original ID'}),true);
+ assert.equal(isAcceptedChatMessage({delivery:'uncertain',reply:'The actual assistant answer returned to this board'}),true,'an actual answer proves completion despite earlier delivery uncertainty');
+ assert.equal(isAcceptedChatMessage({status:'answered',reply:'  '}),false,'a label alone is not an actual reply');
 });

@@ -1,6 +1,25 @@
 {
-  "version": "0.7.6",
+  "version": "0.8.1",
   "entries": [
+    {
+      "version": "0.8.1",
+      "title": "Preserve unconfirmed mini-chat drafts",
+      "added": [],
+      "fixed": [
+        "Keep pending text, captured context and original request IDs until an actual reply, manual handoff or queued-delivery receipt confirms acceptance, including subscription expiry during sending."
+      ]
+    },
+    {
+      "version": "0.8.0",
+      "title": "Clear client capabilities and verified mini chat",
+      "added": [
+        "Codex and Claude Code lead the connection choices, with distinct mini-chat availability labels and website-led Claude Code setup."
+      ],
+      "fixed": [
+        "Disabled Talk it through, fullscreen chat and new-message composition unless the active connection supports verified incoming messages, while preserving saved requests and replies.",
+        "Used separate chat and review expiry deadlines for UI availability and delivery routing, including safe retries after subscription expiry."
+      ]
+    },
     {
       "version": "0.7.6",
       "title": "Consistent UI spacing and compact layouts",
@@ -214,5 +233,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "3fce1943e1cc34f24868dae195738d2bdcc3bb906ac287e559278a91df31f931"
+  "sourceHash": "746770e9ff42a78d086e350548e50242aa16c84057742ce5faba2dbd1d3ee794"
 }

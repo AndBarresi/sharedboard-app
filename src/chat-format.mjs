@@ -46,6 +46,16 @@ export function parseChatMarkdown(source){
   return blocks;
 }
 export function chatStorageKey(boardId,kind){return `sharedboard-chat:${encodeURIComponent(String(boardId||'legacy'))}:${kind}`;}
+export function isAcceptedChatMessage(message){
+  const hasText=value=>typeof value==='string'&&Boolean(value.trim());
+  if(!message||typeof message!=='object')return false;
+  if(hasText(message.reply))return true;
+  if(message.delivery==='manual')return hasText(message.handoffPrompt);
+  if(message.delivery!=='queued')return false;
+  // The cloud relay returns an event receipt string. Preserve recognition of
+  // historical queued Codex receipts without accepting arbitrary truthy objects.
+  return hasText(message.receipt)||Boolean(message.receipt?.provider==='codex-cli'&&hasText(message.receipt.queueMessageId));
+}
 export function isPreparedContextStale(context,board,planning){
   if(!context)return false;
   const currentBoardId=board?.id??board?.boardId;

@@ -23,3 +23,12 @@
 .access-choice select{min-width:0;width:min(100%,300px)}
 .access-choice input:focus-visible,.access-choice select:focus-visible{outline:2px solid #9abd8d;outline-offset:2px}
 @media(max-width:420px){.connection-dialog>header{align-items:flex-start}.connection-dialog>header .eyebrow{font-size:7px;letter-spacing:.7px}.connection-dialog h2{font-size:20px}.connect-mark{width:32px;height:32px}.connection-body{padding:18px 16px 20px}.ai-choices{gap:8px}.ai-choices>button{padding:12px}.current-connection{padding:14px}.current-connection>div:first-child{flex-wrap:wrap}.current-connection>div:first-child>span:last-child{margin-left:0}.connection-dialog>footer{padding:12px 16px;line-height:1.6}}
+
+.ai-choices>button strong{margin-bottom:8px}
+.ai-choices>button:last-child:nth-child(odd){grid-column:1/-1}
+.client-mini-badge{display:inline-block;max-width:100%;font-size:9px;line-height:1.5;color:#737d6b;background:#eff1e9;border:1px solid #dce1d3;border-radius:5px;padding:3px 6px;overflow-wrap:anywhere}
+.client-mini-badge.verify{color:#896f43;background:#faf4e7;border-color:#e5dcc5}
+.ai-choices .client-detail{display:block;font-size:9px;line-height:1.6;color:#8c9980;margin-top:7px}
+.connection-mini-status{display:flex;flex-direction:column;gap:5px;margin-top:16px;padding:11px 12px;background:#f7f7f1;border:1px solid #dce1d3;border-radius:8px}
+.connection-mini-status strong{font-size:11px}.connection-mini-status span{font-size:10px;line-height:1.7;color:#87957a}
+.connection-mini-status.is-ready{background:#e8f1df;border-color:#c7d8b8}
