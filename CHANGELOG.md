@@ -1,5 +1,11 @@
 # SharedBoard.app changelog
 
+## 0.7.4 — Recover expired connection setup
+
+### Fixed
+
+- Preparing a fresh connection recovers when the previous pending code has expired, while preserving existing access on uncertain network failures.
+
 ## 0.7.3 — Reliable message and review delivery checks
 
 ### Fixed

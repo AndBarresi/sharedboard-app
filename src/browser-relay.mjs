@@ -62,7 +62,11 @@ export function createBrowserBridge({boardId,clientId,load,save,execute,fetch:fe
   async detect(){try{const data=await http('/health');if(data.product!=='SharedBoard Relay'||!data.ok)throw failure('The hosted connection service is not ready.');return {available:true,version:data.version};}catch(error){return {available:false,detail:error.message,code:error.code};}},
   async pair(input,title){
    if(!['codex','chatgpt','claude','other'].includes(input?.provider)||!['read','edit'].includes(input?.permission))throw failure('Choose an AI client and read or edit access.',400);
-   const previous=await load();if(previous?.browserToken){await http('/browser/disconnect',{token:previous.browserToken,body:{clientId}});await save(null,{expectedToken:previous.browserToken});}disconnectSocket();const paired=await http('/browser/pair',{body:{boardId,title,provider:input.provider,permission:input.permission,clientId}});
+   const previous=await load();if(previous?.browserToken){
+    try{await http('/browser/disconnect',{token:previous.browserToken,body:{clientId}});}
+    catch(error){if(![401,403].includes(error.status)||error.deliveryUnknown)throw error; /* An expired or revoked grant is already disconnected. */}
+    await save(null,{expectedToken:previous.browserToken});
+   }disconnectSocket();const paired=await http('/browser/pair',{body:{boardId,title,provider:input.provider,permission:input.permission,clientId}});
    if(typeof paired.browserToken!=='string'||!paired.sessionId||paired.connection?.boardId!==boardId)throw failure('The relay did not return a board-scoped connection.');
    await save({browserToken:paired.browserToken,sessionId:paired.sessionId,connection:paired.connection});void start();return {pairing:paired.pairing,setup:paired.setup};
   },
