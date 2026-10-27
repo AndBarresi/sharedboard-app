@@ -18,6 +18,9 @@ const requestResult=request=>new Promise((resolve,reject)=>{request.onsuccess=()
 const nowIso=now=>new Date(now()).toISOString();
 const safeUuid=value=>z.string().uuid().parse(value);
 const metadataRecovery=entry=>{const {hash,...metadata}=entry;return clone(metadata);};
+const deletionInput=z.object({id:z.string().uuid(),expectedVersion:z.number().int().min(0),boards:z.array(z.object({id:z.string().uuid(),revision:z.number().int().min(0),planningVersion:z.number().int().min(0)}).strict()).max(150)});
+const deletionConflict=()=>browserFailure('The project or drawing changed after this confirmation. Nothing was deleted. Reopen the delete dialog to review the current contents.',409,'DELETE_PREVIEW_STALE');
+const deletedBoardError=(catalog,origin)=>Object.assign(browserFailure('This board was deleted in this browser. Open another saved board to continue.',410,'BOARD_DELETED'),{fallbackBoardId:catalog.legacyBoardId,url:`${new URL(origin).origin}/`});
 
 function newRecord(id,title,now){return {id,board:{schemaVersion:1,id,title,revision:0,updatedAt:nowIso(now),elements:[],elementVersions:{},files:{},activity:[]},planning:{boardId:id,version:0,project:{title,areas:[],notes:[],library:[]},checkpoints:[],proposals:[],agentActions:[]},recoveries:[],visual:null};}
 function planningView(record){return {...clone(record.planning),recoveries:record.recoveries.map(metadataRecovery)};}
@@ -90,12 +93,13 @@ async function openDatabase(indexedDB,name,timeoutMs=10000){
 
 export async function createBrowserTransport({basePath='',indexedDB=globalThis.indexedDB,dbName='sharedboard-browser-v1',BroadcastChannel=globalThis.BroadcastChannel,origin=globalThis.location?.origin??'http://localhost',now=()=>Date.now(),randomUUID=()=>globalThis.crypto.randomUUID(),openTimeoutMs=10000,bridgeFetch=globalThis.fetch,bridgeWebSocket=globalThis.WebSocket,bridgeBaseURL,bridgePollDelay=1000}={}){
  let db;try{db=await openDatabase(indexedDB,dbName,openTimeoutMs);}catch(error){throw normalizeBrowserError(error);}
- const events=new BrowserEvents(),source=randomUUID();let boardId,closed=false,channel,bridge;
+ const events=new BrowserEvents(),source=randomUUID();let boardId,closed=false,channel,bridge,deletedNotified=false;
  const requested=basePath?(/^\/boards\/([0-9a-f-]{36})\/?$/i.exec(basePath)?.[1]??null):null;
  if(basePath&&!requested){db.close();throw browserFailure('This board address is invalid.',404);}
  const emitChanges=async({types,board:changedBoard,clientId}={})=>{
   if(closed)return;
-  try{const data=await atomic('readonly',async stores=>({catalog:checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection??disconnected()}));if(closed)return;
+  try{const data=await atomic('readonly',async stores=>{const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value);return {catalog,record:catalog.boards.some(board=>board.id===boardId)?checkRecord(await requestResult(stores.boards.get(boardId)),boardId):null,connection:(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection??disconnected()};});if(closed)return;
+   if(!data.record){bridge?.close();if(!deletedNotified){deletedNotified=true;events.emit('board-deleted',{boardId,fallbackBoardId:data.catalog.legacyBoardId,url:`${new URL(origin).origin}/`,workspace:workspaceView(data.catalog,data.catalog.legacyBoardId)});}return;}
    if(types.includes('board')&&changedBoard===boardId)events.emit('board',{board:data.record.board,clientId:clientId??null});
    if(types.includes('planning')&&changedBoard===boardId)events.emit('planning',planningView(data.record));
    if(types.includes('workspace'))events.emit('workspace',workspaceView(data.catalog,boardId));
@@ -135,7 +139,7 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
  const renameCatalog=(catalog,id,title)=>{const board=catalog.boards.find(board=>board.id===id);if(board.title===title)return false;board.title=title;catalog.version++;return true;};
  const notify=notice=>{if(!notice.types.length||closed)return;void emitChanges(notice);channel?.postMessage({...notice,source});};
  const loadBridge=()=>atomic('readonly',async stores=>(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value??null);
- const saveBridge=async(value,{expectedToken}={})=>{const saved=await atomic('readwrite',async stores=>{const key=`relay:v1:${boardId}`,current=(await requestResult(stores.meta.get(key)))?.value;if(expectedToken!==undefined&&current?.browserToken!==expectedToken)return false;if(value)stores.meta.put({key,value:clone(value)});else stores.meta.delete(key);return true;});if(saved)notify({types:['connection','chat','reviews'],board:boardId});return saved;};
+ const saveBridge=async(value,{expectedToken}={})=>{const saved=await atomic('readwrite',async stores=>{const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value);if(!catalog.boards.some(board=>board.id===boardId))return false;const key=`relay:v1:${boardId}`,current=(await requestResult(stores.meta.get(key)))?.value;if(expectedToken!==undefined&&current?.browserToken!==expectedToken)return false;if(value)stores.meta.put({key,value:clone(value)});else stores.meta.delete(key);return true;});if(saved)notify({types:['connection','chat','reviews'],board:boardId});else void emitChanges({types:['workspace'],board:boardId});return saved;};
  const execute=async(command,authority)=>{
   const outcome=await atomic('readwrite',async stores=>{
    validateBridgeDeadline(command,now());
@@ -153,8 +157,41 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
  };
  bridge=createBrowserBridge({boardId,clientId:source,load:loadBridge,save:saveBridge,execute,fetch:bridgeFetch,WebSocket:bridgeWebSocket,baseURL:bridgeBaseURL,pollDelay:bridgePollDelay,onError:async error=>{if(closed||error.status===409)return;const saved=await loadBridge();if(!closed&&saved?.browserToken)await saveBridge({...saved,connection:{...saved.connection,connected:false,browserOnline:false,relayAvailable:false,relayError:error.message}},{expectedToken:saved.browserToken});}});
  const connectionView=async()=>((await loadBridge())?.connection??disconnected());
+ const deletionPreview=async(stores,kind,id)=>{
+  const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value);
+  if(!catalog.boards.some(board=>board.id===boardId))throw deletedBoardError(catalog,origin);
+  const target=kind==='board'?catalog.boards.find(board=>board.id===id):catalog.projects.find(project=>project.id===id);
+  if(!target)throw browserFailure(`That ${kind} no longer exists.`,404);
+  const targets=kind==='board'?[target]:catalog.boards.filter(board=>board.projectId===id),boards=[];
+  for(const target of targets){const record=checkRecord(await requestResult(stores.boards.get(target.id)),target.id);boards.push({id:target.id,revision:record.board.revision,planningVersion:record.planning.version});}
+  return {catalog,preview:{kind,id,title:target.title??target.name,expectedVersion:catalog.version,boards,boardCount:boards.length}};
+ };
+ const checkDeletion=async(stores,kind,input)=>{
+  const data=await deletionPreview(stores,kind,input.id);
+  if(data.preview.expectedVersion!==input.expectedVersion||input.boards.length!==data.preview.boards.length||new Set(input.boards.map(board=>board.id)).size!==input.boards.length||data.preview.boards.some(board=>!input.boards.some(wanted=>wanted.id===board.id&&wanted.revision===board.revision&&wanted.planningVersion===board.planningVersion)))throw deletionConflict();
+  return data;
+ };
+ const deleteWorkspace=async(kind,raw)=>{
+  const input=deletionInput.parse(raw),prepared=await atomic('readonly',async stores=>{const data=await checkDeletion(stores,kind,input),grants=[];for(const board of data.preview.boards){const state=(await requestResult(stores.meta.get(`relay:v1:${board.id}`)))?.value??null;if(state?.browserToken&&state.connection?.boardId!==board.id)throw browserFailure('This board’s saved connection cannot be verified. Nothing was deleted.',500,'BROWSER_STORAGE_CORRUPT');grants.push({id:board.id,state});}return {...data,grants};});
+  // Revoke only the reviewed target grants. Never fetch or revoke a replacement
+  // grant that another tab created while this deletion was in progress.
+  for(const {id,state} of prepared.grants){if(!state?.browserToken)continue;const targetBridge=createBrowserBridge({boardId:id,clientId:source,load:async()=>clone(state),save:async()=>true,fetch:bridgeFetch,WebSocket:bridgeWebSocket,baseURL:bridgeBaseURL});try{await targetBridge.disconnect();}catch(error){if(error.status!==401||error.code!=='RELAY_DISCONNECTED'||error.deliveryUnknown)throw error;}finally{targetBridge.close();}}
+  const outcome=await atomic('readwrite',async stores=>{
+   const {catalog,preview}=await checkDeletion(stores,kind,input),deletedBoardIds=preview.boards.map(board=>board.id),removed=new Set(deletedBoardIds);
+   for(const {id,state} of prepared.grants){const latest=(await requestResult(stores.meta.get(`relay:v1:${id}`)))?.value;if(latest?.browserToken&&latest.browserToken!==state?.browserToken)throw deletionConflict();}
+   catalog.boards=catalog.boards.filter(board=>!removed.has(board.id));const deletedProjectIds=kind==='project'?[input.id]:[];if(kind==='project')catalog.projects=catalog.projects.filter(project=>project.id!==input.id);
+   const freshId=async()=>{for(let attempt=0;attempt<20;attempt++){const id=safeUuid(randomUUID());if(!removed.has(id)&&!catalog.boards.some(board=>board.id===id)&&!catalog.projects.some(project=>project.id===id)&&!(await requestResult(stores.meta.get(`deleted-board:v1:${id}`))))return id;}throw browserFailure('A new board ID could not be created. Nothing was deleted.',503);};
+   if(!catalog.projects.length)catalog.projects.push({id:await freshId(),name:'My first project'});
+   if(!catalog.boards.length){const id=await freshId(),projectId=catalog.projects[0].id,title='Untitled board';catalog.boards.push({id,projectId,title});stores.boards.put(newRecord(id,title,now));}
+   if(removed.has(catalog.legacyBoardId))catalog.legacyBoardId=catalog.boards[0].id;
+   const currentBoardDeleted=removed.has(boardId),selectedId=currentBoardDeleted?catalog.legacyBoardId:boardId,url=`${new URL(origin).origin}${selectedId===catalog.legacyBoardId?'/':`/boards/${selectedId}/`}`;
+   for(const id of deletedBoardIds){stores.boards.delete(id);stores.meta.delete(`relay:v1:${id}`);stores.meta.put({key:`deleted-board:v1:${id}`,value:{boardId:id,deletedAt:nowIso(now),fallbackBoardId:catalog.legacyBoardId}});}
+   await new Promise((resolve,reject)=>{const request=stores.snapshots.openCursor();request.onerror=()=>reject(request.error);request.onsuccess=()=>{const cursor=request.result;if(!cursor){resolve();return;}if(removed.has(cursor.value.boardId))cursor.delete();cursor.continue();};});
+   catalog.version++;stores.meta.put({key:'catalog',value:catalog});return {result:{...workspaceView(catalog,selectedId),deletedBoardIds,deletedProjectIds,currentBoardDeleted,url},notice:{types:['workspace','board-deleted'],board:boardId}};
+  });notify(outcome.notice);return outcome.result;
+ };
  const deliver=async(kind,id,{retry=false}={})=>{
-   const pinned=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,list=kind==='chat'?record.messages:record.reviews,item=list?.find(m=>m.id===id);if(!item)throw browserFailure('That request does not exist.',404);if(!connection?.connected||connection.id!==item.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(item.delivery==='queued'||item.delivery==='manual'&&item.handoffPrompt||['answered','reviewed'].includes(item.status))return false;const manual=!automaticDeliveryFor(connection,kind);if(item.delivery==='uncertain'&&manual)throw Object.assign(browserFailure('This request has an uncertain automatic delivery. Check its original AI conversation before sending anything again.',409,'DELIVERY_UNCERTAIN'),{deliveryUnknown:true});item.delivery='pending';delete item.deliveryError;stores.boards.put(record);return {manual,connectionId:connection.id};});
+   const pinned=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,list=kind==='chat'?record.messages:record.reviews,item=list?.find(m=>m.id===id);if(!item)throw browserFailure('That request does not exist.',404);if(!connection?.connected||connection.id!==item.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(item.delivery==='queued'||item.delivery==='manual'&&item.handoffPrompt||['answered','reviewed'].includes(item.status))return false;const manual=!automaticDeliveryFor(connection,kind,now());if(item.automaticRequired&&manual)throw browserFailure('The direct chat link expired. Open the SharedBoard panel in the original AI conversation and click Link this chat, then retry this saved request.',409,'DIRECT_CHAT_NOT_LINKED');if(item.delivery==='uncertain'&&manual)throw Object.assign(browserFailure('This request has an uncertain automatic delivery. Check its original AI conversation before sending anything again.',409,'DELIVERY_UNCERTAIN'),{deliveryUnknown:true});item.delivery='pending';delete item.deliveryError;stores.boards.put(record);return {manual,connectionId:connection.id};});
    if(!pinned)return;notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});let receipt,handoffPrompt,error;try{if(pinned.manual)handoffPrompt=await bridge.handoff(kind,id);else receipt=await bridge.notify(kind,id,{retry});}catch(cause){error=cause;}
    await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,item=(kind==='chat'?record.messages:record.reviews).find(m=>m.id===id);if(!item||item.connectionId!==pinned.connectionId||connection?.id!==pinned.connectionId)throw browserFailure('This request belongs to its original AI connection. Reconnect that conversation before retrying.');if(error){item.delivery=error.deliveryUnknown?'uncertain':'failed';item.deliveryError=error.message;}else if(pinned.manual){item.delivery='manual';item.handoffPrompt=handoffPrompt;delete item.receipt;delete item.deliveredAt;delete item.deliveryError;}else{item.delivery='queued';item.deliveredAt=nowIso(now);item.receipt=receipt;delete item.deliveryError;}stores.boards.put(record);});notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});if(pinned.manual&&error)throw error;
  };
@@ -163,6 +200,9 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
    if(closed)throw browserFailure('This browser storage connection is closed. Reopen the page.',503,'BROWSER_STORAGE_CLOSED');
    const url=new URL(route,origin),method=(options.method??'GET').toUpperCase(),pathname=url.pathname,input=parseBrowserBody(options.body,{backup:pathname==='/api/project/import'&&method==='POST'});
    if(url.origin!==new URL(origin).origin)throw browserFailure('Only this browser workspace can be accessed.',403);
+   await atomic('readonly',async stores=>{const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value);if(!catalog.boards.some(board=>board.id===boardId))throw deletedBoardError(catalog,origin);});
+   if(pathname==='/api/workspaces/delete-preview'&&method==='POST'){const {kind,id}=z.object({kind:z.enum(['board','project']),id:z.string().uuid()}).parse(input);return (await atomic('readonly',stores=>deletionPreview(stores,kind,id))).preview;}
+   if(pathname==='/api/workspaces'&&method==='POST'&&['delete-board','delete-project'].includes(input.action))return await deleteWorkspace(input.action==='delete-board'?'board':'project',input);
    if(pathname==='/api/connection'&&method==='GET')return connectionView();
    if(pathname==='/api/connection/detect'&&method==='GET')return bridge.detect();
    if(pathname==='/api/connection/oauth-request'&&method==='GET')return bridge.oauthRequest(url.searchParams.get('id'));
@@ -172,7 +212,7 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
    if(pathname==='/api/connection/web/stop'&&method==='POST')return disconnected();
    if(['/api/chat','/api/reviews'].includes(pathname)&&method==='GET')return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection;return pathname==='/api/chat'?chatView(record,connection):reviewView(record,connection);});
    if(['/api/chat','/api/reviews'].includes(pathname)&&method==='POST'){
-     const kind=pathname==='/api/chat'?'chat':'review',created=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,out=createCaptured(record,input,kind,connection,nowIso(now));if(out.created)stores.boards.put(record);return {id:out.item.id,created:out.created,needsHandoff:!automaticDeliveryFor(connection,kind)&&!out.item.handoffPrompt&&!['answered','reviewed'].includes(out.item.status)};});
+     const kind=pathname==='/api/chat'?'chat':'review',created=await atomic('readwrite',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection,out=createCaptured(record,input,kind,connection,nowIso(now));if(out.created)stores.boards.put(record);return {id:out.item.id,created:out.created,needsHandoff:!automaticDeliveryFor(connection,kind,now())&&!out.item.handoffPrompt&&!['answered','reviewed'].includes(out.item.status)};});
      if(created.created||created.needsHandoff){notify({types:[kind==='chat'?'chat':'reviews'],board:boardId});await deliver(kind,created.id);}
     return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection;return kind==='chat'?chatView(record,connection):{request:metadata(record.reviews.find(r=>r.id===created.id)),connected:Boolean(connection?.connected),automaticMessages:automaticDeliveryFor(connection,kind)};});
    }
@@ -180,7 +220,7 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
    if(pathname.startsWith('/api/connection/')||pathname.startsWith('/api/agent/')||pathname.startsWith('/api/chat')||pathname.startsWith('/api/reviews')||pathname==='/api/proposal')throw browserFailure(connectorWip,501,'HOSTED_CONNECTOR_WIP');
    const readOnly=method==='GET'||['/api/presence'].includes(pathname)||['/api/checkpoint','/api/recovery'].includes(pathname)&&input.action==='read';
    const outcome=await atomic(readOnly?'readonly':'readwrite',async stores=>{
-    const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),types=new Set();let catalogChanged=false,recordChanged=false,result;
+    const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value);if(!catalog.boards.some(board=>board.id===boardId))throw deletedBoardError(catalog,origin);const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),types=new Set();let catalogChanged=false,recordChanged=false,result;
     const writePlanning=()=>{recordChanged=true;types.add('planning');};
     const recovery=async(name,force=false)=>{if(await captureRecovery(stores,record,name,{force})){writePlanning();return true;}return false;};
     const drawing=input=>{const next=applyDrawing(record.board,input,now);record.board=next.board;if(next.changed){recordChanged=true;types.add('board');}return next.board;};
@@ -247,7 +287,7 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
  const ready=async()=>{
   // Network checks run after the drawing opens. Never invalidate another live
   // tab's shared grant merely because this tab is opening the same board.
-  const snapshot=await atomic('readonly',async stores=>({catalog:checkCatalog((await requestResult(stores.meta.get('catalog')))?.value),record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection??disconnected()}));
+  const snapshot=await atomic('readonly',async stores=>{const catalog=checkCatalog((await requestResult(stores.meta.get('catalog')))?.value);if(!catalog.boards.some(board=>board.id===boardId))throw deletedBoardError(catalog,origin);return {catalog,record:checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection:(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection??disconnected()};});
   if(!closed){events.emit('connected',{board:snapshot.record.board,planning:planningView(snapshot.record),workspace:workspaceView(snapshot.catalog,boardId),connection:snapshot.connection,reviews:reviewView(snapshot.record,snapshot.connection),chat:chatView(snapshot.record,snapshot.connection),lastAgentAt:snapshot.record.lastAgentAt??null});bridge.start();void bridge.status();}
  };
  return {request,events,close,boardId,ready,detectBridge:()=>bridge.detect(),bridgeStatus:()=>bridge.status()};

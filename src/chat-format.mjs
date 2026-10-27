@@ -46,6 +46,14 @@ export function parseChatMarkdown(source){
   return blocks;
 }
 export function chatStorageKey(boardId,kind){return `sharedboard-chat:${encodeURIComponent(String(boardId||'legacy'))}:${kind}`;}
+export function clearDeletedBoardChatStorage(boardIds,{legacyBoardId,storage}={}){
+  try{
+    storage??=globalThis.sessionStorage;if(!storage)return;
+    const deleted=new Set(boardIds),prefixes=[...deleted].map(id=>chatStorageKey(id,'')),keys=[];
+    for(let index=0;index<storage.length;index++){const key=storage.key(index);if(prefixes.some(prefix=>key?.startsWith(prefix))||deleted.has(legacyBoardId)&&['sharedboard-chat-draft','sharedboard-chat-pending','sharedboard-chat-seen'].includes(key))keys.push(key);}
+    for(const key of keys)storage.removeItem(key);
+  }catch{/* A blocked session store must not prevent confirmed browser deletion. */}
+}
 export function isAcceptedChatMessage(message){
   const hasText=value=>typeof value==='string'&&Boolean(value.trim());
   if(!message||typeof message!=='object')return false;
@@ -59,7 +67,7 @@ export function isAcceptedChatMessage(message){
 export function shouldResetChatCapture(error){
   // An ambiguous delivery may already be running. Preserve its original ID and
   // attachment even when retry reports a conflict after events expire.
-  return !error?.deliveryUnknown&&error?.code!=='DELIVERY_UNCERTAIN'&&[400,409,413].includes(error?.status);
+  return !error?.deliveryUnknown&&!['DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED'].includes(error?.code)&&[400,409,413].includes(error?.status);
 }
 export function isPreparedContextStale(context,board,planning){
   if(!context)return false;

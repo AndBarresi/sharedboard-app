@@ -45,6 +45,26 @@ async function fixture(permission='edit',overrides={}){
 }
 const capture=async(t,extra={})=>{const board=await call(t,'/api/board'),plan=await call(t,'/api/planning');return {id:crypto.randomUUID(),boardId:board.id,expectedRevision:board.revision,expectedPlanningVersion:plan.version,selectedIds:[],scope:'board',visual:png,...extra};};
 
+test('direct-only browser messages and reviews never fall back to manual delivery after a link expires',async()=>{
+ const {t,bridge}=await fixture();try{
+  Object.assign(bridge.connection,{automaticMessages:false,automaticReviews:false});await t.bridgeStatus();
+  const blocked=await capture(t,{text:'Keep this direct',intent:'discuss',automaticRequired:true});
+  await assert.rejects(call(t,'/api/chat',blocked),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  await assert.rejects(call(t,'/api/reviews',await capture(t,{automaticRequired:true})),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  assert.equal((await call(t,'/api/chat')).messages.length,0);
+  assert.equal(bridge.requests.some(request=>new URL(request.url).pathname==='/browser/handoff'),false);
+  Object.assign(bridge.connection,{automaticMessages:true,messageExpiresAt:new Date(Date.now()+60000).toISOString()});await t.bridgeStatus();
+  bridge.onNotify=async()=>{throw new Error('Temporary direct delivery failure');};
+  const saved=await call(t,'/api/chat',blocked);assert.equal(saved.messages[0].delivery,'uncertain');
+  Object.assign(bridge.connection,{automaticMessages:false});await t.bridgeStatus();
+  await assert.rejects(call(t,'/api/chat/retry',{id:blocked.id}),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  assert.equal((await call(t,'/api/chat')).messages[0].id,blocked.id);
+  assert.equal(bridge.requests.some(request=>new URL(request.url).pathname==='/browser/handoff'),false);
+  bridge.onNotify=null;Object.assign(bridge.connection,{automaticMessages:true,messageExpiresAt:new Date(Date.now()+60000).toISOString()});await t.bridgeStatus();
+  const retried=await call(t,'/api/chat/retry',{id:blocked.id});assert.equal(retried.messages.length,1);assert.equal(retried.messages[0].id,blocked.id);assert.equal(retried.messages[0].delivery,'queued');
+ }finally{t.close();}
+});
+
 test('hosted bridge edits real browser objects and enforces optimistic versions, permissions and command authority',async()=>{
  const {t,bridge}=await fixture();try{
   assert.equal((await t.detectBridge()).available,true);

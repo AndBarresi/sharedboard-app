@@ -5,6 +5,7 @@ import { diffElements, rebaseElements, indexById, same } from '../shared/scene.m
 import {selectElements} from '../shared/scene.mjs';
 import {renderScene} from './canvas-actions.mjs';
 import {isWebProvider,localConnectionView,webConnectionWip} from './connection-policy.mjs';
+import {clearDeletedBoardChatStorage} from './chat-format.mjs';
 
 const unavailableWeb=()=>Promise.reject(Object.assign(new Error(webConnectionWip),{status:501,code:'WEB_CONNECTOR_WIP'}));
 
@@ -41,6 +42,7 @@ export async function connectBoard(onState) {
       connection:state.connection, automaticMessages:state.automaticMessages,
       planning:state.planning,
       workspace:state.workspace,
+      deletedBoard:state.deletedBoard??null,
       storageMode:browserOnly?'browser':'local',
     };
     if (lastEmitted && Object.keys(next).every((key) => next[key] === lastEmitted[key])) return;
@@ -132,7 +134,14 @@ export async function connectBoard(onState) {
   events.addEventListener('chat',(event)=>{const data=JSON.parse(event.data);state.messages=data.messages;state.chatConnected=Boolean(state.connection?.connected&&data.connected);state.connectionLabel=state.connection?.label;state.automaticMessages=Boolean(state.connection?.connected&&state.connection.automaticMessages);emit();});
   events.addEventListener('connection',event=>{state.connection=localConnectionView(JSON.parse(event.data));state.agentConnected=state.connection.connected;state.chatConnected=state.connection.connected;state.connectionLabel=state.connection.label;state.automaticMessages=state.connection.automaticMessages;emit();});
   events.addEventListener('planning',event=>{const next=JSON.parse(event.data);if(next.version>=state.planning.version){state.planning=next;emit();}});
-  events.addEventListener('workspace',event=>{const next=JSON.parse(event.data);if(next.version>=state.workspace.version){state.workspace=next;emit();}});
+  events.addEventListener('workspace',event=>{const next=JSON.parse(event.data);if(next.version>=state.workspace.version){clearDeletedBoardChatStorage(state.workspace.boards.filter(board=>!next.boards.some(saved=>saved.id===board.id)).map(board=>board.id),{legacyBoardId:state.workspace.legacyBoardId});state.workspace=next;emit();}});
+  events.addEventListener('board-deleted',event=>{
+    const deleted=JSON.parse(event.data);
+    clearDeletedBoardChatStorage(state.workspace.boards.filter(board=>!deleted.workspace.boards.some(saved=>saved.id===board.id)).map(board=>board.id),{legacyBoardId:state.workspace.legacyBoardId});
+    state.deletedBoard=deleted;state.closed=true;state.online=false;
+    state.agentConnected=false;state.chatConnected=false;state.automaticMessages=false;
+    clearTimeout(saveTimer);clearTimeout(presenceTimer);browserTransport?.close();emit('deleted');
+  });
   events.onerror = () => { state.online = false; emit('offline'); };
   if(browserTransport)try{await browserTransport.ready();}catch(error){browserTransport.close();throw error;}
   emit(browserOnly?'saved':'loading');
@@ -216,7 +225,9 @@ export async function connectBoard(onState) {
     flush,
     waitUntilSaved,
     prepareContext:captureContext,
-    workspaceAction:input=>request('/api/workspaces',{method:'POST',body:JSON.stringify(input)}),
+    async workspaceAction(input){const legacyBoardId=state.workspace.legacyBoardId,result=await request('/api/workspaces',{method:'POST',body:JSON.stringify(input)});if(result.deletedBoardIds)clearDeletedBoardChatStorage(result.deletedBoardIds,{legacyBoardId});return result;},
+    async previewWorkspaceDelete(input){await waitUntilSaved();return request('/api/workspaces/delete-preview',{method:'POST',body:JSON.stringify(input)});},
+    openAfterDeletion(result){const url=new URL(result.url);if(url.origin!==location.origin||!/^\/(?:boards\/[a-f0-9-]{36}\/)?$/i.test(url.pathname)||url.search||url.hash)throw new Error('The remaining board address was invalid.');location.assign(url.href);},
     async openBoard(id){await waitUntilSaved();const result=await request('/api/workspaces/open',{method:'POST',body:JSON.stringify({id})});const url=new URL(result.url);if(url.origin!==location.origin||!/^\/(?:boards\/[a-f0-9-]{36}\/)?$/i.test(url.pathname))throw new Error('The board address was invalid.');const authorization=new URLSearchParams(location.search).get('sharedboard_connect');if(authorization&&/^[a-f0-9]{64}$/.test(authorization))url.searchParams.set('sharedboard_connect',authorization);location.assign(url.href);},
     async recoveryAction(id,action,expectedRevision,expectedVersion){if(action==='restore')await waitUntilSaved();return request('/api/recovery',{method:'POST',body:JSON.stringify({id,action,expectedRevision,expectedVersion})});},
     async updateVisual(){const board=structuredClone(state.base);if(!board.elements.some(e=>!e.isDeleted))return;const visual=await renderScene(board.elements,board.files);if(visual&&visual.length<=4_000_000&&!state.closed)await request('/api/visual',{method:'POST',body:JSON.stringify({expectedRevision:board.revision,visual})});},
@@ -243,14 +254,14 @@ export async function connectBoard(onState) {
         const capture=input.capturedContext??await captureContext();
         if(capture.boardId!==state.base.id)throw new Error('This preview belongs to another board. Prepare a new preview.');
         const {notes,...context}=capture;
-        chatInputs.set(input.id,{id:input.id,text:input.text,intent:input.intent,...context});
+        chatInputs.set(input.id,{id:input.id,text:input.text,intent:input.intent,...context,...(browserOnly?{automaticRequired:true}:{})});
       }
       let data;try{data=await request('/api/chat',{method:'POST',body:JSON.stringify(chatInputs.get(input.id))});}catch(error){if(error.status===409&&error.message.includes('drawing changed before sending'))chatInputs.delete(input.id);throw error;}
       state.messages=data.messages;state.chatConnected=data.connected;state.connectionLabel=data.connectionLabel;emit();return data;
     },
-    async retryChat(id){const data=await request('/api/chat/retry',{method:'POST',body:JSON.stringify({id})});state.messages=data.messages;state.chatConnected=data.connected;emit();},
+    async retryChat(id){const data=await request('/api/chat/retry',{method:'POST',body:JSON.stringify({id})});state.messages=data.messages;state.chatConnected=data.connected;emit();return data;},
     async requestReview() {
-      const body = { id: crypto.randomUUID(), ...await captureContext() };
+      const body = { id: crypto.randomUUID(), ...await captureContext(), ...(browserOnly?{automaticRequired:true}:{}) };
       const result = await request('/api/reviews', { method: 'POST', body: JSON.stringify(body) });
       state.reviews = [result.request, ...state.reviews.filter((review) => review.id !== result.request.id)];
       state.agentConnected = result.connected;
@@ -264,6 +275,6 @@ export async function connectBoard(onState) {
       emit();
     },
     close() { state.closed = true; clearTimeout(saveTimer); clearTimeout(presenceTimer); if(browserTransport)browserTransport.close();else events.close(); },
-    hasUnsaved() { return state.api && (state.saving || diffElements(state.base.elements, state.api.getSceneElementsIncludingDeleted()).length > 0 || Object.entries(state.api.getFiles()).some(([id,file])=>!same(state.base.files[id],file))); },
+    hasUnsaved() { return !state.deletedBoard&&state.api && (state.saving || diffElements(state.base.elements, state.api.getSceneElementsIncludingDeleted()).length > 0 || Object.entries(state.api.getFiles()).some(([id,file])=>!same(state.base.files[id],file))); },
   };
 }

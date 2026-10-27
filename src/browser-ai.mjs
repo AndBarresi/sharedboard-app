@@ -5,7 +5,7 @@ import {specSchema,editsSchema} from '../server/schemas.mjs';
 import {browserIdSchema,browserFailure,validateBrowserVisual} from './browser-validation.mjs';
 
 const clone=value=>structuredClone(value),uuid=z.string().uuid();
-export const captureSchema=z.object({id:uuid,boardId:uuid,expectedRevision:z.number().int().min(0),expectedPlanningVersion:z.number().int().min(0),selectedIds:z.array(browserIdSchema).max(10000),scope:z.enum(['board','selection','area']),areaId:uuid.optional(),visual:z.string().optional()});
+export const captureSchema=z.object({id:uuid,boardId:uuid,expectedRevision:z.number().int().min(0),expectedPlanningVersion:z.number().int().min(0),selectedIds:z.array(browserIdSchema).max(10000),scope:z.enum(['board','selection','area']),areaId:uuid.optional(),visual:z.string().optional(),automaticRequired:z.boolean().optional()});
 export const chatInputSchema=captureSchema.extend({text:z.string().trim().min(1).max(8000),intent:z.enum(['discuss','work'])});
 export const metadata=item=>{const {snapshot,targetThreadId,...rest}=item;return clone(rest);};
 export const planningContext=(record,ids=[],scope='board')=>({version:record.planning.version,title:record.planning.project.title,areas:clone(record.planning.project.areas),notes:clone(record.planning.project.notes.filter(n=>scope==='board'||!n.elementIds.length||n.elementIds.some(id=>ids.includes(id)))),pendingProposals:[]});
@@ -25,6 +25,7 @@ export function createCaptured(record,raw,kind,connection,at){
  const duplicate=list.find(item=>item.id===input.id);
  if(duplicate){if(duplicate.boardRevision!==input.expectedRevision||duplicate.planningVersion!==input.expectedPlanningVersion||duplicate.scope!==input.scope||duplicate.areaId!==input.areaId||!same(duplicate.selectedIds,selectedIds)||kind==='chat'&&(duplicate.text!==input.text||duplicate.intent!==input.intent))throw browserFailure('That request ID already belongs to different content. Retry the original request.',409);return {item:duplicate,created:false};}
  if(!connection?.connected||!connection.id)throw browserFailure('Connect this board to your existing AI chat before sending.',409,'BRIDGE_NOT_CONNECTED');
+ if(input.automaticRequired&&!automaticDeliveryFor(connection,kind,Date.parse(at)))throw browserFailure('Open the SharedBoard panel in your AI conversation and click Link this chat before sending.',409,'DIRECT_CHAT_NOT_LINKED');
  if(input.boardId!==record.id)throw browserFailure('This preview belongs to another board. Prepare a new preview.');
  if(input.expectedRevision!==record.board.revision)throw browserFailure('The drawing changed before sending. Refresh the context preview.');
  if(input.expectedPlanningVersion!==record.planning.version)throw browserFailure('The planning notes changed. Refresh the context preview.');
@@ -34,7 +35,7 @@ export function createCaptured(record,raw,kind,connection,at){
  if(list.filter(item=>!['answered','reviewed'].includes(item.status)).length>=(kind==='chat'?20:10))throw browserFailure('Several requests are already waiting. Let your AI finish before sending more.',429);
  const elements=clone(input.scope==='area'&&!selectedIds.length?[]:selectElements(record.board.elements,selectedIds)),ids=elements.map(e=>e.id),used=new Set(elements.map(e=>e.fileId).filter(Boolean));
  const snapshot={id:record.id,title:record.planning.project.title,revision:record.board.revision,elements,files:clone(Object.fromEntries(Object.entries(record.board.files).filter(([id])=>used.has(id)))),elementVersions:Object.fromEntries(ids.map(id=>[id,record.board.elementVersions[id]])),planning:planningContext(record,ids,input.scope),...(input.visual?{visual:{revision:record.board.revision,dataURL:validateBrowserVisual(input.visual)}}:{})};
- const item={id:input.id,boardId:record.id,boardRevision:record.board.revision,planningVersion:record.planning.version,selectedIds,scope:input.scope,...(input.areaId?{areaId:input.areaId}:{}),connectionId:connection.id,createdAt:at,objectCount:elements.length,hasVisual:Boolean(input.visual),noteCount:snapshot.planning.notes.length,status:kind==='chat'?'waiting':'requested',delivery:'pending',snapshot,...(kind==='chat'?{text:input.text,intent:input.intent}:{})};
+ const item={id:input.id,boardId:record.id,boardRevision:record.board.revision,planningVersion:record.planning.version,selectedIds,scope:input.scope,...(input.areaId?{areaId:input.areaId}:{}),...(input.automaticRequired?{automaticRequired:true}:{}),connectionId:connection.id,createdAt:at,objectCount:elements.length,hasVisual:Boolean(input.visual),noteCount:snapshot.planning.notes.length,status:kind==='chat'?'waiting':'requested',delivery:'pending',snapshot,...(kind==='chat'?{text:input.text,intent:input.intent}:{})};
  if(kind==='chat'){list.push(item);record.messages=list.filter((m,i)=>i>=list.length-100||m.status!=='answered');}else{list.unshift(item);record.reviews=list.filter((m,i)=>i<40||m.status!=='reviewed');}
  return {item,created:true};
 }

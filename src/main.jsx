@@ -8,7 +8,7 @@ import './canvas-ui.css';
 import { DrawingToolbar } from './DrawingToolbar.jsx';
 import { BoardChat } from './BoardChat.jsx';
 import { Icon } from './Icons.jsx';
-import {ConnectionSetup,copyText} from './ConnectionSetup.jsx';
+import {ConnectionSetup} from './ConnectionSetup.jsx';
 import {CloudAuthorization} from './CloudAuthorization.jsx';
 import './connection-ui.css';
 import {APP_VERSION,Changelog} from './Changelog.jsx';
@@ -25,6 +25,7 @@ import {miniChatState} from '../shared/client-profiles.mjs';
 import {CREATOR_NAME,CREATOR_URL} from '../shared/brand.mjs';
 import './workspace-upgrade.css';
 import './browser-mode-ui.css';
+import './deleted-board.css';
 
 const browserBuild=import.meta.env.VITE_STORAGE_MODE==='browser';
 
@@ -80,12 +81,12 @@ function App() {
   const openPlanner=(tab,action=null)=>{if(window.innerWidth<1200)setChatOpen(false);setNavigatorOpen(false);setPlanner(tab);setPlannerAction(action?{...action,id:crypto.randomUUID()}:null);};
   const setChatVisibility=(value,{saved=false}={})=>{if(value&&!saved&&!miniChat.enabled)return;if(value&&window.innerWidth<1200){setPlanner(null);setNavigatorOpen(false);}setChatOpen(value);};
   useEffect(()=>{
-    const value=view.connection?.messageExpiresAt??view.connection?.eventExpiresAt;
+    const value=view.connection?.messageExpiresAt??view.connection?.panelExpiresAt??view.connection?.eventExpiresAt;
     const deadline=typeof value==='number'?value:Date.parse(value);
     if(!view.connection?.automaticMessages||!Number.isFinite(deadline)||deadline<=Date.now())return;
     const timer=setTimeout(()=>refreshMiniChatGate(value=>value+1),Math.min(2147483647,deadline-Date.now()+1));
     return()=>clearTimeout(timer);
-  },[view.connection?.id,view.connection?.automaticMessages,view.connection?.messageExpiresAt,view.connection?.eventExpiresAt]);
+  },[view.connection?.id,view.connection?.automaticMessages,view.connection?.messageExpiresAt,view.connection?.panelExpiresAt,view.connection?.eventExpiresAt]);
   useEffect(()=>{
     const shortcut=e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPlanner('areas');}};
     document.addEventListener('keydown',shortcut);return()=>document.removeEventListener('keydown',shortcut);
@@ -136,35 +137,36 @@ function App() {
     api.scrollToContent(imported,{fitToViewport:true,viewportZoomFactor:.8,maxZoom:1});
   };
   const askForReview = async () => {
-    if(browserOnly&&!view.agentConnected){setConnectionOpen(true);return;}
+    if(browserOnly&&!miniChatState({...view.connection,automaticMessages:view.connection?.automaticReviews,messageExpiresAt:view.connection?.reviewExpiresAt??view.connection?.panelExpiresAt??view.connection?.eventExpiresAt}).automatic){setConnectionOpen(true);return;}
     setRequestingReview(true);
     setReviewError(null);
-    try { const result=await sync.current.requestReview();if(result.handoffPrompt)await copyText(result.handoffPrompt); }
+    try { await sync.current.requestReview(); }
     catch (error) { setReviewError(error.message || 'Delivery could not be confirmed. Please try again.'); }
     finally { setRequestingReview(false); }
   };
   const retryReview = async (id) => {
-    if(browserOnly&&!view.agentConnected){setConnectionOpen(true);return;}
+    if(browserOnly&&!miniChat.automatic){setConnectionOpen(true);return;}
     setRequestingReview(true); setReviewError(null);
     try { await sync.current.retryReview(id); }
     catch (error) { setReviewError(error.message); }
     finally { setRequestingReview(false); }
   };
   const testConnection=async()=>{
+    if(browserOnly&&!miniChat.automatic)throw new Error(miniChat.reason||'Link this chat from the SharedBoard panel in your AI conversation first.');
     const id=crypto.randomUUID();
     const result=await sync.current.sendChat({id,intent:'discuss',text:'Connection check only. Please read the live board and confirm its exact revision with confirm_connection, then reply to this mini chat to acknowledge that the connection works. No drawing changes are requested.'});
     setChatVisibility(true,{saved:true});
     const message=result.messages.find(item=>item.id===id);
-    if(message?.handoffPrompt){try{await copyText(message.handoffPrompt);}catch{setReviewError('The test is saved in the mini chat. Copy its instructions there, then paste them into your linked conversation.');}}
-    else if(!view.connection?.automaticMessages&&!message?.reply)throw new Error(message?.deliveryError||'The test is saved, but its Copy to AI instructions could not be prepared. Retry preparation from the mini chat.');
+    if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'The test is saved, but direct delivery was not confirmed. Check the linked chat before retrying.');
   };
   const latestReview = view.reviews[0];
   const reviewCurrent=latestReview&&(!latestReview.connectionId||latestReview.connectionId===view.connection?.id);
   const samePendingReview = reviewCurrent && latestReview.boardRevision === view.board.revision && latestReview.planningVersion===view.planning?.version && JSON.stringify([...latestReview.selectedIds].sort()) === JSON.stringify([...view.selectedIds].sort()) && ['requested', 'reviewing'].includes(latestReview.status) && latestReview.delivery !== 'failed';
-  const reviewHeading = !latestReview ? '' : latestReview.status === 'reviewed' ? 'AI reviewed your board' : latestReview.status === 'reviewing' ? 'AI is reviewing' : latestReview.delivery === 'uncertain' ? 'Check your linked chat before retrying' : latestReview.delivery === 'app' ? 'Waiting for your connected chat card' : latestReview.delivery === 'manual' ? 'Review ready to copy to your AI' : latestReview.delivery === 'failed' ? 'Review saved · delivery needs attention' : latestReview.delivery === 'queued' ? 'Waiting for AI' : 'Sending your review request…';
+  const reviewHeading = !latestReview ? '' : latestReview.status === 'reviewed' ? 'AI reviewed your board' : latestReview.status === 'reviewing' ? 'AI is reviewing' : latestReview.delivery === 'uncertain' ? 'Check your linked chat before retrying' : latestReview.delivery === 'app' ? 'Waiting for your connected chat card' : latestReview.delivery === 'manual' ? 'Earlier review was not sent automatically' : latestReview.delivery === 'failed' ? 'Review saved · delivery needs attention' : latestReview.delivery === 'queued' ? 'Waiting for AI' : 'Sending your review request…';
   const statusText = { loading: browserOnly?'Opening browser storage…':'Connecting…', saving: 'Saving your changes…', saved: browserOnly?'Saved in this browser':'Saved on this computer', offline: browserOnly?'Browser storage needs attention':'Reconnecting · keep this tab open', error: 'Save needs attention', conflict: 'Two edits need your choice' }[view.status];
   const count = view.board.elements.filter((element) => !element.isDeleted).length;
   const reviewVisible=reviewError || (reviewCurrent && (latestReview.status!=='reviewed' || latestReview.boardRevision===view.board.revision));
+  if(view.deletedBoard)return <main className="deleted-board-screen"><section><span className="brand-mark" aria-hidden="true">↗</span><h1>This board was deleted.</h1><p>It was removed from this browser workspace. This tab will not save changes to it or switch your AI connection to another board.</p><button type="button" className="primary-button" onClick={()=>sync.current.openAfterDeletion(view.deletedBoard)}>Open remaining board</button><p><a href={CREATOR_URL} rel="author noopener noreferrer" target="_blank">Created by {CREATOR_NAME}</a> · SharedBoard.app v{APP_VERSION}</p></section></main>;
   return (
     <div className={`workspace ${focused?'is-focused':''} ${browserOnly?'browser-mode':''}`} ref={workspace}>
       <aside className="rail">
@@ -182,7 +184,7 @@ function App() {
       </aside>
       <main className="main">
         <header className="topbar"><div className="breadcrumb">WORKSPACE <span>/</span> <strong>{view.planning?.project.title||'Our shared project'}</strong></div><div className="top-actions"><button className={`connection-chip ${view.connection?.connected?'connected':''}`} disabled={!initial} onClick={()=>setConnectionOpen(true)} title={browserOnly?'Set up or manage your AI connection':'Manage this board’s AI connection'}><span className="connection-dot"/><span>{view.connection?.connected?view.connection.label:browserOnly?'Connect an AI':'Connect an AI'}</span><small>{view.connection?.permission==='propose'?'Approval required':view.connection?.permission==='read'?'Read only':view.connection?.connected?'Read + edit':''}</small></button></div></header>
-        {reviewVisible && <section className={`review-strip ${latestReview?.status ?? ''}`} aria-live="polite"><div className="review-strip-main"><span className="review-symbol" aria-hidden="true">{latestReview?.status === 'reviewed' ? '✓' : '↗'}</span><div><strong>{reviewError || reviewHeading}</strong>{latestReview && <p>{latestReview.scope === 'selection' ? `${latestReview.selectedIds.length} selected objects` : 'Whole board'} · Board version {latestReview.boardRevision}{latestReview.boardRevision < view.board.revision ? ' · More changes since this request' : ''}</p>}</div>{['failed','uncertain'].includes(latestReview?.delivery) && <button className="review-retry" onClick={() => retryReview(latestReview.id)} disabled={requestingReview}>{latestReview.delivery==='uncertain'?'I checked my chat · retry':'Retry delivery'}</button>}{latestReview?.delivery==='manual'&&latestReview.handoffPrompt&&<button className="review-retry" onClick={()=>copyText(latestReview.handoffPrompt).catch(e=>setReviewError(e.message))}>Copy review to {view.connection?.provider==='codex'?'Codex':'AI'}</button>}</div>{latestReview?.summary ? <details className="review-result"><summary>View review summary</summary><p>{latestReview.summary}</p></details> : <p className="review-hint">{latestReview?.delivery==='uncertain'?'Delivery could not be confirmed. Check your linked chat for this request before retrying; the saved request keeps its original ID and context.':latestReview?.delivery==='manual'?'Paste this saved request into your linked chat. The reply returns when your AI posts its review.':latestReview?.deliveryError || 'This request asks only for a review of the drawing. The response will appear in your linked chat.'}</p>}</section>}
+        {reviewVisible && <section className={`review-strip ${latestReview?.status ?? ''}`} aria-live="polite"><div className="review-strip-main"><span className="review-symbol" aria-hidden="true">{latestReview?.status === 'reviewed' ? '✓' : '↗'}</span><div><strong>{reviewError || reviewHeading}</strong>{latestReview && <p>{latestReview.scope === 'selection' ? `${latestReview.selectedIds.length} selected objects` : 'Whole board'} · Board version {latestReview.boardRevision}{latestReview.boardRevision < view.board.revision ? ' · More changes since this request' : ''}</p>}</div>{['failed','uncertain'].includes(latestReview?.delivery) && <button className="review-retry" onClick={() => retryReview(latestReview.id)} disabled={requestingReview}>{latestReview.delivery==='uncertain'?'I checked my chat · retry':'Retry delivery'}</button>}</div>{latestReview?.summary ? <details className="review-result"><summary>View review summary</summary><p>{latestReview.summary}</p></details> : <p className="review-hint">{latestReview?.delivery==='uncertain'?'Delivery could not be confirmed. Check your linked chat for this request before retrying; the saved request keeps its original ID and context.':latestReview?.delivery==='manual'?'This earlier request was saved without automatic delivery and will not replay when you link a chat.':latestReview?.deliveryError || 'This request asks only for a review of the drawing. The response will appear in your linked chat.'}</p>}</section>}
         {(view.status === 'error' || view.status === 'conflict') && <div className="notice" role="alert"><p>{view.status === 'conflict' ? 'You and the agent edited the same object. Your drawing is preserved in this tab. Choose which edits to keep.' : view.error}</p><div>{view.status === 'conflict' ? <><button onClick={() => sync.current.resolveConflict(true)}>Keep my edits</button><button onClick={() => sync.current.resolveConflict(false)}>Use saved version</button><button onClick={exportBoard}>Export my drawing first</button></> : <button onClick={() => sync.current.retry()}>Retry save</button>}</div></div>}
         <div className="canvas-shell" onPointerDown={() => sync.current?.pointerDown()}>
           {bootError ? <div className="loading" role="alert">{browserOnly?'Could not open browser storage':'Could not open the board'}: {bootError}<button onClick={() => location.reload()}>Try again</button></div> : initial ? <Excalidraw
@@ -198,7 +200,7 @@ function App() {
           {initial&&<NotePins view={view} ui={ui} onOpen={noteId=>openPlanner('notes',{type:'note-open',noteId})}/>}
           {initial&&!planner&&!navigatorOpen&&<SelectionBar view={view} getApi={()=>sync.current.getApi()} onNote={()=>openPlanner('notes',{type:'note'})} onArea={()=>openPlanner('areas',{type:'area'})} onInspect={()=>setSelectionOpen(true)}/>}
           {initial&&navigatorOpen&&<ObjectNavigator view={view} ui={ui} getApi={()=>sync.current.getApi()} onClose={()=>setNavigatorOpen(false)}/>}
-          {initial&&planner&&<PlanningPanel browserOnly={browserOnly} tab={planner} setTab={setPlanner} view={view} getSync={()=>sync.current} action={plannerAction} onClose={()=>{setPlanner(null);setPlannerAction(null);}} onReference={()=>setReferenceOpen(true)} onDiscuss={async text=>{if(browserOnly&&!view.chatConnected){setConnectionOpen(true);return;}setChatVisibility(true,{saved:!miniChat.enabled});const id=crypto.randomUUID();const result=await sync.current.sendChat({id,text,intent:'discuss'});const message=result.messages.find(m=>m.id===id);if(message?.handoffPrompt)await copyText(message.handoffPrompt);}}/>}
+          {initial&&planner&&<PlanningPanel browserOnly={browserOnly} tab={planner} setTab={setPlanner} view={view} getSync={()=>sync.current} action={plannerAction} onClose={()=>{setPlanner(null);setPlannerAction(null);}} onReference={()=>setReferenceOpen(true)} onDiscuss={async text=>{if(browserOnly&&!miniChat.automatic){setConnectionOpen(true);return;}setChatVisibility(true,{saved:!miniChat.enabled});const id=crypto.randomUUID();const result=await sync.current.sendChat({id,text,intent:'discuss'});const message=result.messages.find(m=>m.id===id);if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'Direct delivery could not be confirmed. Check the linked chat before retrying.');}}/>}
           {initial&&<BoardChat onConnect={()=>setConnectionOpen(true)} browserOnly={browserOnly} open={chatOpen} setOpen={setChatVisibility} onExpand={expanded=>{if(expanded){setPlanner(null);setNavigatorOpen(false);}}} view={view} send={input=>{const available=miniChatState(view.chatConnected?view.connection:null);if(!available.enabled)throw new Error(available.reason);return sync.current.sendChat(input);}} retry={id=>sync.current.retryChat(id)} focused={focused} prepareContext={options=>sync.current.prepareContext(options)} legacyDraftBoardId={view.workspace?.legacyBoardId} onJump={ids=>{const api=sync.current.getApi();const elements=api.getSceneElements().filter(e=>ids.includes(e.id));if(elements.length)api.scrollToContent(elements,{fitToViewport:true,viewportZoomFactor:.7,maxZoom:1});}}/>}
           {initial&&count===0&&!planner&&!navigatorOpen&&!chatOpen&&<div className="canvas-welcome"><span className="welcome-symbol">↗</span><p className="eyebrow">EVERY GOOD BUILD STARTS SOMEWHERE</p><h2>What are we thinking through?</h2><p>Start with a screen, a system, or a screenshot.<br/>{browserOnly?'Sketch first. Your work stays in this browser.':'Your AI and your ideas share the same space.'}</p><div onPointerDown={e=>e.stopPropagation()}><button className="primary-button" onClick={()=>openPlanner('library')}>Choose a starting block</button><button className="secondary-button" onClick={()=>setReferenceOpen(true)}>Add a screenshot</button></div><small>Or pick a tool above and make your first mark.</small></div>}
         </div>
@@ -208,7 +210,7 @@ function App() {
       {referenceOpen&&<ReferenceImport getApi={()=>sync.current.getApi()} onClose={()=>setReferenceOpen(false)}/>}
       {selectionOpen&&<SelectionDetails getApi={()=>sync.current.getApi()} onClose={()=>setSelectionOpen(false)}/>}
       {projectImportOpen&&<ProjectTransfer getSync={()=>sync.current} onClose={()=>setProjectImportOpen(false)}/>}
-      {workspaceOpen&&view.workspace&&<WorkspacePicker browserOnly={browserOnly} workspace={view.workspace} onClose={()=>setWorkspaceOpen(false)} run={input=>sync.current.workspaceAction(input)} openBoard={id=>sync.current.openBoard(id)}/>}
+      {workspaceOpen&&view.workspace&&<WorkspacePicker browserOnly={browserOnly} workspace={view.workspace} onClose={()=>setWorkspaceOpen(false)} run={input=>sync.current.workspaceAction(input)} openBoard={id=>sync.current.openBoard(id)} previewDelete={browserOnly?input=>sync.current.previewWorkspaceDelete(input):undefined} onDeleted={result=>sync.current.openAfterDeletion(result)}/>}
       {storageDetailsOpen&&<BrowserStorageDetails onClose={()=>setStorageDetailsOpen(false)} onExport={exportProject}/>}
       {connectionOpen&&<ConnectionSetup detectBridge={()=>sync.current.detectBridge()} browserOnly={browserOnly} connection={view.connection} online={view.online} begin={input=>sync.current.beginPairing(input)} cancel={()=>sync.current.cancelPairing()} disconnect={()=>sync.current.disconnect()} onClose={()=>setConnectionOpen(false)} onTest={testConnection} hasSavedRequests={Boolean(view.messages?.length)} onHistory={()=>{setChatVisibility(true,{saved:true});setConnectionOpen(false);}}/>}
       {initial&&<CloudAuthorization controller={sync.current} view={view} setupOpen={connectionOpen||workspaceOpen} onConnect={()=>setConnectionOpen(true)} onChooseBoard={()=>setWorkspaceOpen(true)}/>}
