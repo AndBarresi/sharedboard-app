@@ -2,11 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {IDBFactory} from 'fake-indexeddb';
 import {createBrowserTransport} from '../src/browser-store.mjs';
-import {createBrowserBridge,validateBridgeDeadline} from '../src/browser-bridge.mjs';
-import {startBridge} from '../bridge/server.mjs';
-import {mkdtemp,rm} from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import {createBrowserBridge,validateBridgeDeadline} from '../src/browser-relay.mjs';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Z5kAAAAASUVORK5CYII=';
 const call=(t,path,input,method=input===undefined?'GET':'POST')=>t.request(path,{method,...(input===undefined?{}:{body:JSON.stringify(input)})});
@@ -18,33 +14,34 @@ class TestChannel{
  close(){this.closed=true;TestChannel.channels.get(this.name).delete(this);}
 }
 class FakeBridge{
- token='private-browser-token'; connection=null; waiters=[]; commands=[]; receipts=new Map(); results=new Map(); notifyCount=0; owner=null; onNotify=null; loseReceipt=false; offline=false;
+ token='private-browser-token'; connection=null; commands=[]; receipts=new Map(); results=new Map(); notifyCount=0; owner=null; onNotify=null; loseReceipt=false; offline=false; requests=[]; sockets=[];
+ constructor(){const relay=this;this.WebSocket=class{
+  constructor(url){this.url=url;this.readyState=0;relay.sockets.push(this);assert.equal(new URL(url).origin,'wss://connect.sharedboard.app');assert.equal(new URL(url).searchParams.has('token'),false);queueMicrotask(()=>{if(this.readyState!==0)return;this.readyState=1;this.onopen?.();});}
+  send(raw){const data=JSON.parse(raw);if(data.type==='authenticate'){assert.equal(data.browserToken,relay.token);this.clientId=data.clientId;if(relay.owner&&relay.owner!==this&&relay.owner.clientId!==this.clientId){this.close(4009);return;}relay.owner=this;this.emit({type:'connection',connection:structuredClone(relay.connection)});relay.flush();return;}if(data.type==='ping'){this.emit({type:'pong'});return;}if(data.type==='result'){const target=relay.results.get(data.id);if(target){relay.results.delete(data.id);target(data);}return;}throw new Error(`Unexpected socket message ${data.type}`);}
+  emit(data){queueMicrotask(()=>{if(this.readyState===1)this.onmessage?.({data:JSON.stringify(data)});});}
+  close(code=1000){if(this.readyState===3)return;this.readyState=3;if(relay.owner===this)relay.owner=null;queueMicrotask(()=>this.onclose?.({code}));}
+ };}
  response(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});}
- flush(){const waiter=this.waiters.shift();if(waiter){waiter.cleanup();waiter.resolve(this.response({connection:structuredClone(this.connection),commands:this.commands.splice(0)}));}}
- activate(){Object.assign(this.connection,{connected:true,id:crypto.randomUUID(),label:'Existing Codex conversation',automaticMessages:true,connectedAt:new Date().toISOString(),browserOnline:true});this.flush();}
+ flush(){if(this.owner?.readyState===1)for(const command of this.commands.splice(0))this.owner.emit({type:'command',command});}
+ activate(){Object.assign(this.connection,{connected:true,label:'Existing Codex conversation',automaticMessages:true,automaticReviews:true,connectedAt:new Date().toISOString(),browserOnline:true});this.owner?.emit({type:'connection',connection:structuredClone(this.connection)});this.flush();}
  async fetch(url,options={}){
+  this.requests.push({url,...options});assert.equal(new URL(url).origin,'https://connect.sharedboard.app');
   if(this.offline)throw new Error('Fixture bridge offline');
-  const path=new URL(url).pathname.replace('/bridge',''),body=options.body?JSON.parse(options.body):{};
-  if(path==='/health')return this.response({ok:true,product:'SharedBoard Bridge',version:'fixture'});
-  if(path==='/browser/pair'){this.connection={connected:false,boardId:body.boardId,provider:'codex',permission:body.permission};return this.response({browserToken:this.token,code:'fixture-code',expiresAt:new Date(Date.now()+60000).toISOString(),setup:{prompt:'Fixture pairing prompt'}});}
+  const path=new URL(url).pathname,body=options.body?JSON.parse(options.body):{};
+  if(path==='/health')return this.response({ok:true,product:'SharedBoard Relay',version:'fixture'});
+  if(path==='/browser/pair'){const sessionId=crypto.randomUUID();this.token=`${sessionId}.private-browser-token`;this.connection={connected:false,id:sessionId,boardId:body.boardId,provider:body.provider,permission:body.permission};return this.response({browserToken:this.token,sessionId,connection:this.connection,pairing:{code:'fixture-code',expiresAt:new Date(Date.now()+60000).toISOString()},setup:{prompt:'Fixture pairing prompt'}});}
   assert.equal(options.headers['x-sharedboard-browser'],this.token);
   if(path==='/browser/status')return this.response({connection:this.connection});
-  if(path==='/browser/events'){
-   if(this.owner&&this.owner!==body.clientId)return this.response({error:'Another tab owns the browser lease'},409);this.owner=body.clientId;
-   if(this.commands.length)return this.response({connection:this.connection,commands:this.commands.splice(0)});
-   return new Promise((resolve,reject)=>{const entry={resolve,cleanup:()=>options.signal?.removeEventListener('abort',abort)},abort=()=>{this.waiters=this.waiters.filter(w=>w!==entry);reject(new DOMException('Aborted','AbortError'));};this.waiters.push(entry);options.signal?.addEventListener('abort',abort,{once:true});});
-  }
-  if(path==='/browser/result'){assert.equal(body.clientId,this.owner);const target=this.results.get(body.id);if(target){this.results.delete(body.id);target(body);}return this.response({ok:true});}
-  if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:{provider:'codex-cli',queueMessageId:crypto.randomUUID()}});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
+  if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`evt_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
+  if(path==='/browser/handoff')return this.response({delivery:'manual',handoffPrompt:`Read captured ${body.kind} ${body.id} using the connected SharedBoard tools.`,connection:this.connection});
   if(path==='/browser/disconnect'){this.connection={...this.connection,connected:false};return this.response({connection:this.connection});}
-  if(path==='/browser/release'){if(this.owner===body.clientId)this.owner=null;return this.response({ok:true});}
   throw new Error(`Unexpected bridge URL ${path}`);
  }
  command(operation,input={},extra={}){const id=extra.id??crypto.randomUUID();return new Promise(resolve=>{this.results.set(id,resolve);this.commands.push({id,connectionId:this.connection.id,operation,input,...extra});this.flush();});}
 }
 async function fixture(permission='edit',overrides={}){
- const bridge=new FakeBridge(),config={indexedDB:new IDBFactory(),dbName:crypto.randomUUID(),origin:'https://sharedboard.app',BroadcastChannel:null,bridgeFetch:bridge.fetch.bind(bridge),bridgePollDelay:10,...overrides},t=await createBrowserTransport(config);
- await t.ready();const pair=await call(t,'/api/connection/pairing',{provider:'codex',permission});assert.equal(pair.setup.prompt,'Fixture pairing prompt');bridge.activate();await t.bridgeStatus();await wait(async()=>(await call(t,'/api/connection')).connected);return {t,bridge,config};
+ const bridge=new FakeBridge(),config={indexedDB:new IDBFactory(),dbName:crypto.randomUUID(),origin:'https://sharedboard.app',BroadcastChannel:null,bridgeFetch:bridge.fetch.bind(bridge),bridgeWebSocket:bridge.WebSocket,bridgePollDelay:10,...overrides},t=await createBrowserTransport(config);
+ await t.ready();const pair=await call(t,'/api/connection/pairing',{provider:'codex',permission});assert.equal(pair.setup.prompt,'Fixture pairing prompt');bridge.activate();await t.bridgeStatus();await wait(async()=>(await call(t,'/api/connection')).connected&&bridge.owner?.readyState===1);return {t,bridge,config};
 }
 const capture=async(t,extra={})=>{const board=await call(t,'/api/board'),plan=await call(t,'/api/planning');return {id:crypto.randomUUID(),boardId:board.id,expectedRevision:board.revision,expectedPlanningVersion:plan.version,selectedIds:[],scope:'board',visual:png,...extra};};
 
@@ -140,7 +137,7 @@ test('durable command retries do not duplicate drawing edits and browser reload 
  }finally{t.close();reopened?.close();}
 });
 
-test('detection verifies the actual bridge product and failed live status does not disable browser drawing storage',async()=>{
+test('detection verifies the hosted relay product and failed live status does not disable browser drawing storage',async()=>{
  const wrong=createBrowserBridge({load:async()=>null,fetch:async()=>new Response(JSON.stringify({ok:true,product:'Unrelated service'}))});assert.deepEqual((await wrong.detect()).available,false);wrong.close();
  const {t,bridge}=await fixture();try{
   bridge.offline=true;const status=await t.bridgeStatus();assert.equal(status.connected,false);assert.equal(status.browserOnline,false);assert.equal((await call(t,'/api/chat')).connected,false);
@@ -148,17 +145,32 @@ test('detection verifies the actual bridge product and failed live status does n
  }finally{t.close();}
 });
 
-test('browser adapter interoperates with actual Node bridge RPC and isolated fake Codex queue in both directions',async()=>{
- const dataDir=await mkdtemp(path.join(os.tmpdir(),'sharedboard-browser-roundtrip-'));let service,t,second;const queued=[];
+test('hosted WebSocket operations synchronize browser tabs and mini-chat replies without a local process',async()=>{
+ const {t,bridge,config}=await fixture('edit',{BroadcastChannel:TestChannel});let second;
  try{
-  service=await startBridge({port:0,dataDir,findCodex:()=>'/fixture/codex.exe',runQueue:async(command,args)=>{queued.push(args);return `Queued message ${crypto.randomUUID()} for thread ${args[2]}`;},pollTimeoutMs:200,leaseMs:2000,commandTimeoutMs:3000});
-  const origin='https://sharedboard.app',browserFetch=(url,options={})=>fetch(url,{...options,headers:{...options.headers,Origin:origin}});
-  const config={indexedDB:new IDBFactory(),dbName:crypto.randomUUID(),BroadcastChannel:TestChannel,origin,bridgeFetch:browserFetch,bridgeBaseURL:`${service.url}/bridge`,bridgePollDelay:20};t=await createBrowserTransport(config);await t.ready();assert.equal((await t.detectBridge()).available,true);
-  const pair=await call(t,'/api/connection/pairing',{provider:'codex',permission:'edit'}),threadId=crypto.randomUUID(),pairedResponse=await fetch(`${service.url}/bridge/agent/pair`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:pair.pairing.code,threadId})}),agent=await pairedResponse.json();assert.equal(pairedResponse.status,200);await wait(async()=>(await call(t,'/api/connection')).connected);
-  const command=async(operation,input={})=>{const response=await fetch(`${service.url}/bridge/agent/command`,{method:'POST',headers:{'Content-Type':'application/json','x-sharedboard-agent':agent.agentKey,'x-sharedboard-thread':threadId},body:JSON.stringify({boardId:t.boardId,operation,input})});const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));return result;};
   second=await createBrowserTransport(config);await second.ready();let observedRevision=0;second.events.addEventListener('board',event=>{observedRevision=JSON.parse(event.data).board.revision;});
-  const added=await command('add_elements',{elements:[{id:'roundtrip',text:'A shared design',x:20,y:20}]});assert.equal(added.revision,1);await wait(()=>observedRevision===1);assert.equal((await call(second,'/api/board')).revision,1);const read=await command('read_board');assert.equal(read.elements[0].editVersion,1);await command('confirm_connection',{revision:read.revision});
-  const message=await capture(t,{text:'Describe the design',intent:'discuss'});await Promise.all([call(t,'/api/chat',message),call(second,'/api/chat',message)]);assert.equal(queued.length,1);assert.equal((await call(t,'/api/chat')).messages.length,1);const captured=await command('read_chat_message',{id:message.id});assert.equal(captured.board.visual.dataURL,png);await command('reply_to_chat_message',{id:message.id,text:'The design is a labeled card.'});assert.equal((await call(second,'/api/chat')).messages[0].reply,'The design is a labeled card.');
-  const current=await t.bridgeStatus();assert.ok(current.boardCheckedAt);assert.ok(current.deliveryCheckedAt);assert.ok(current.replyCheckedAt);
- }finally{t?.close();second?.close();await service?.close();const target=path.resolve(dataDir);assert.ok(target.startsWith(path.join(os.tmpdir(),'sharedboard-browser-roundtrip-')));await rm(target,{recursive:true,force:true});}
+  const added=await bridge.command('add_elements',{elements:[{id:'roundtrip',text:'A shared design',x:20,y:20}]});assert.equal(added.result.revision,1);await wait(()=>observedRevision===1);assert.equal((await call(second,'/api/board')).revision,1);const read=await bridge.command('read_board');assert.equal(read.result.elements[0].editVersion,1);await bridge.command('confirm_connection',{revision:read.result.revision});
+  const message=await capture(t,{text:'Describe the design',intent:'discuss'});await Promise.all([call(t,'/api/chat',message),call(second,'/api/chat',message)]);assert.equal(bridge.notifyCount,1);assert.equal((await call(t,'/api/chat')).messages.length,1);const captured=await bridge.command('read_chat_message',{id:message.id});assert.equal(captured.result.board.visual.dataURL,png);await bridge.command('reply_to_chat_message',{id:message.id,text:'The design is a labeled card.'});assert.equal((await call(second,'/api/chat')).messages[0].reply,'The design is a labeled card.');
+  assert.ok(bridge.requests.every(request=>new URL(request.url).origin==='https://connect.sharedboard.app'));
+ }finally{t.close();second?.close();}
+});
+
+test('an old local bridge grant is never forwarded to the hosted service while existing drawings, captures and recovery remain saved',async()=>{
+ const {t,bridge,config}=await fixture();let reopened;
+ try{
+  await bridge.command('add_elements',{elements:[{id:'saved-before-migration',text:'Keep this existing board'}]});
+  const message=await capture(t,{text:'Keep this captured request',intent:'discuss'});await call(t,'/api/chat',message);
+  const before=await call(t,'/api/board'),planningBefore=await call(t,'/api/planning'),boardId=t.boardId;
+  t.close();await wait(()=>bridge.owner===null);
+  const db=await new Promise((resolve,reject)=>{const request=config.indexedDB.open(config.dbName);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+  const legacyToken='private-legacy-local-bridge-token';
+  await new Promise((resolve,reject)=>{const transaction=db.transaction('meta','readwrite'),meta=transaction.objectStore('meta');meta.delete(`relay:v1:${boardId}`);meta.put({key:`bridge:${boardId}`,value:{browserToken:legacyToken,connection:{connected:true,id:crypto.randomUUID(),boardId,provider:'codex'}}});meta.put({key:`bridge:v1:${boardId}`,value:{browserToken:legacyToken}});transaction.oncomplete=resolve;transaction.onabort=()=>reject(transaction.error);});db.close();
+  const requestCount=bridge.requests.length,socketCount=bridge.sockets.length;
+  reopened=await createBrowserTransport(config);await reopened.ready();await new Promise(resolve=>setTimeout(resolve,30));
+  assert.equal((await call(reopened,'/api/connection')).connected,false);assert.equal(bridge.requests.length,requestCount);assert.equal(bridge.sockets.length,socketCount);
+  assert.deepEqual(await call(reopened,'/api/board'),before);assert.deepEqual(await call(reopened,'/api/planning'),planningBefore);assert.equal((await call(reopened,'/api/chat')).messages[0].id,message.id);
+  await call(reopened,'/api/connection/pairing',{provider:'codex',permission:'edit'});bridge.activate();await reopened.bridgeStatus();await wait(()=>bridge.owner?.readyState===1);
+  assert.equal(JSON.stringify(bridge.requests).includes(legacyToken),false);assert.deepEqual(await call(reopened,'/api/board'),before);
+  const exported=JSON.stringify(await call(reopened,'/api/project/export'));assert.equal(exported.includes(legacyToken),false);assert.equal(exported.includes(bridge.token),false);
+ }finally{t.close();reopened?.close();}
 });

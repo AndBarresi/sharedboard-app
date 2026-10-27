@@ -1,0 +1,21 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sharedboard-relay",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{"pattern": "connect.sharedboard.app", "custom_domain": true}],
+  "vars": {
+    "RELAY_ORIGIN": "https://connect.sharedboard.app",
+    "APP_ORIGIN": "https://sharedboard.app",
+    "EVENT_CALLBACK_ORIGINS": ""
+  },
+  "durable_objects": {"bindings": [
+    {"name": "BOARD_RELAY", "class_name": "BoardRelay"},
+    {"name": "RELAY_AUTH", "class_name": "RelayAuth"}
+  ]},
+  "migrations": [{"tag": "relay-v1", "new_sqlite_classes": ["BoardRelay", "RelayAuth"]}],
+  "observability": {"enabled": false},
+  "limits": {"cpu_ms": 50}
+}

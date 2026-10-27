@@ -1,6 +1,6 @@
 {
   "name": "sharedboard-app",
-  "version": "0.6.3",
+  "version": "0.7.2",
   "private": true,
   "author": {
     "name": "Andrew Barresi",
@@ -14,18 +14,16 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "node server/index.mjs --dev",
-    "build": "node scripts/release.mjs check && vite build && node scripts/copy-assets.mjs",
+    "dev": "node scripts/dev-web.mjs",
+    "build": "node scripts/build-web.mjs",
     "build:web": "node scripts/build-web.mjs",
     "preview:web": "node scripts/preview-web.mjs",
     "package:web": "node scripts/package-web.mjs",
-    "package:bridge": "node scripts/package-bridge.mjs",
     "change": "node scripts/release.mjs record",
-    "start": "node server/index.mjs",
-    "agent": "node server/agent-cli.mjs",
-    "mcp": "node server/mcp.mjs",
+    "start": "node scripts/preview-web.mjs",
     "test": "node --test test/*.test.mjs",
-    "package:windows": "node scripts/package-portable.mjs"
+    "relay:dev": "wrangler dev --config cloudflare/wrangler.jsonc --port 8787 --var RELAY_ORIGIN:http://127.0.0.1:8787 --var APP_ORIGIN:http://127.0.0.1:4317",
+    "relay:deploy": "wrangler deploy --config cloudflare/wrangler.jsonc"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",
@@ -38,6 +36,7 @@
     "@modelcontextprotocol/client": "2.4.0",
     "@vitejs/plugin-react": "6.1.2",
     "fake-indexeddb": "^6.2.6",
-    "vite": "8.3.5"
+    "vite": "8.3.5",
+    "wrangler": "4.154.0"
   }
 }

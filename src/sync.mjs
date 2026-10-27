@@ -11,7 +11,7 @@ const unavailableWeb=()=>Promise.reject(Object.assign(new Error(webConnectionWip
 export async function connectBoard(onState) {
   const basePath=/^\/boards\/[a-f0-9-]{36}(?=\/|$)/i.exec(location.pathname)?.[0]??'';
   const browserOnly=import.meta.env.VITE_STORAGE_MODE==='browser';
-  const browserTransport=browserOnly?await (await import('./browser-store.mjs')).createBrowserTransport({basePath}):null;
+  const browserTransport=browserOnly?await (await import('./browser-store.mjs')).createBrowserTransport({basePath,bridgeBaseURL:import.meta.env.DEV?import.meta.env.VITE_RELAY_ORIGIN:undefined}):null;
   const session = browserOnly?null:await fetch(`${basePath}/api/session`).then((response) => response.json());
   const clientId = crypto.randomUUID();
   const request = async (route, options = {}) => {
@@ -217,7 +217,7 @@ export async function connectBoard(onState) {
     waitUntilSaved,
     prepareContext:captureContext,
     workspaceAction:input=>request('/api/workspaces',{method:'POST',body:JSON.stringify(input)}),
-    async openBoard(id){await waitUntilSaved();const result=await request('/api/workspaces/open',{method:'POST',body:JSON.stringify({id})});const url=new URL(result.url);if(url.origin!==location.origin||!/^\/(?:boards\/[a-f0-9-]{36}\/)?$/i.test(url.pathname))throw new Error('The board address was invalid.');location.assign(url.href);},
+    async openBoard(id){await waitUntilSaved();const result=await request('/api/workspaces/open',{method:'POST',body:JSON.stringify({id})});const url=new URL(result.url);if(url.origin!==location.origin||!/^\/(?:boards\/[a-f0-9-]{36}\/)?$/i.test(url.pathname))throw new Error('The board address was invalid.');const authorization=new URLSearchParams(location.search).get('sharedboard_connect');if(authorization&&/^[a-f0-9]{64}$/.test(authorization))url.searchParams.set('sharedboard_connect',authorization);location.assign(url.href);},
     async recoveryAction(id,action,expectedRevision,expectedVersion){if(action==='restore')await waitUntilSaved();return request('/api/recovery',{method:'POST',body:JSON.stringify({id,action,expectedRevision,expectedVersion})});},
     async updateVisual(){const board=structuredClone(state.base);if(!board.elements.some(e=>!e.isDeleted))return;const visual=await renderScene(board.elements,board.files);if(visual&&visual.length<=4_000_000&&!state.closed)await request('/api/visual',{method:'POST',body:JSON.stringify({expectedRevision:board.revision,visual})});},
     async saveProject(project,expectedVersion=state.planning.version){const result=await request('/api/planning',{method:'PUT',body:JSON.stringify({expectedVersion,project})});state.planning=result;emit();return result;},
@@ -228,6 +228,8 @@ export async function connectBoard(onState) {
     async proposalAction(id,action){if(action==='accept')await waitUntilSaved();return request('/api/proposal',{method:'POST',body:JSON.stringify({id,action})});},
     async undoAgent(id){await waitUntilSaved();return request('/api/undo-agent',{method:'POST',body:JSON.stringify({id})});},
     beginPairing:input=>isWebProvider(input?.provider)?unavailableWeb():request('/api/connection/pairing',{method:'POST',body:JSON.stringify(input)}),
+    readConnectionRequest:id=>request(`/api/connection/oauth-request?id=${encodeURIComponent(id)}`),
+    approveConnection:input=>request('/api/connection/approve',{method:'POST',body:JSON.stringify(input)}),
     detectBridge:()=>browserTransport?browserTransport.detectBridge():Promise.resolve({available:true,local:true}),
     bridgeStatus:()=>browserTransport?browserTransport.bridgeStatus():request('/api/connection'),
     cancelPairing:()=>request('/api/connection/cancel',{method:'POST',body:'{}'}),

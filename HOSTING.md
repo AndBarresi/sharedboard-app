@@ -1,59 +1,73 @@
-# SharedBoard.app browser beta on Cloudflare Pages
+# Host the website and AI relay
 
-This build hosts the application files. Boards, images, notes and history stay in IndexedDB in each visitor's browser profile. The site has no cloud board database, account system or hosted model. An optional locally installed SharedBoard Bridge for Windows or Mac connects the open browser board to the user's existing local Codex conversation. Direct web-chat and in-chat MCP connectors remain visible as planned WIP. Normal web requests still reach Cloudflare to load the application; this design is not a claim that hosting produces no access logs.
+SharedBoard has two hosted parts: the browser app at **https://sharedboard.app** and the Cloudflare relay at **https://connect.sharedboard.app**. Users work from the website and connect their existing AI through its generated remote MCP URL. No end-user application installation is part of this flow.
 
-SharedBoard.app is created by **Andrew Barresi** ([AndBarresi on GitHub](https://github.com/AndBarresi)) and released under the **MIT license**. The static deployment includes LICENSE, AUTHORS.md and collected third-party/font notices; those components retain their own licenses.
+Drawings, images, planning details, and board history remain in IndexedDB in each visitor’s browser profile. The relay handles connection authorization and live board/tool traffic; selected content passes through Cloudflare to the connected AI service. SharedBoard does not host a model. Normal hosting requests still reach Cloudflare, and this is not a claim of zero access logs.
 
-## Build and verify locally
+## Build the browser app
 
-Use the pinned pnpm version in package.json and Node **24.22.1** (also recorded in .node-version):
+Use Node **24.22.1** from `.node-version` and pnpm **11.25.0**:
 
-```text
+```sh
 pnpm install --frozen-lockfile
 pnpm test
-pnpm run build:web
-pnpm run preview:web
+pnpm build:web
+pnpm preview:web
 ```
 
-The browser build sets VITE_STORAGE_MODE=browser and writes **dist-web**. Its preview opens at http://127.0.0.1:4173/ unless --port is supplied. The normal pnpm build and Windows ZIP build continue using **dist** and local-server storage.
+The browser build sets `VITE_STORAGE_MODE=browser` and writes `dist-web/`. The preview normally serves `http://127.0.0.1:4173/`. A preview origin has separate browser storage and must use an explicitly permitted relay configuration for integration tests.
 
-The build checks the recorded version/source fingerprint, includes fonts and dependency notices, writes a browser-storage build stamp and enforces Cloudflare asset limits. It packages no server, personal board files, Node runtime or connection credentials. Direct /boards/<id>/ URLs load the app; a board URL locates a board in the current browser's storage and does not share it with other people.
+The frontend build contains app assets, fonts, release metadata, and license notices. Never include user `data/`, credentials, captured requests, `.env` files, or development/runtime directories in it. Deploy the relay separately with its own explicit Worker configuration; do not copy private server state into static assets.
 
-## Primary deployment: GitHub integration
+## Cloudflare Pages frontend
 
-1. Push the clean source repository to GitHub. Exclude data/, dist/, dist-web/, node_modules/, .wrangler/, credentials and generated release ZIPs. Keep pnpm-lock.yaml, .node-version, hosting/, packaging/licenses/ and the application sources in the repository.
-2. In Cloudflare, open **Workers & Pages → Create application → Pages → Connect to Git**. Select the repository and the intended production branch.
-3. Set the framework preset to **None**, the root directory to this application's repository root, the build command to **pnpm test && pnpm run build:web**, and the build output directory to **dist-web**.
-4. Set **NODE_VERSION=24.22.1** and **PNPM_VERSION=11.25.0** in both Production and Preview environment settings. The browser-storage flag is set by the build script; no model API key or other secret is needed. Cloudflare Pages v3 supports the version overrides and does not infer pnpm from the lockfile format or engines field. [Build image documentation](https://developers.cloudflare.com/pages/configuration/build-image/)
-5. Save and deploy. Cloudflare builds each eligible push to the configured production branch; other branches can create previews. Preserve the production branch setting when configuring preview rules. [Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/)
-6. Verify the resulting site: create an isolated test board, draw and add a note, wait for the saved indicator, reload, reopen a /boards/<id>/ URL, and confirm persistence. Open a separate browser profile to confirm it starts independently. Check the platform-specific Codex bridge setup and that other client choices stay locked as WIP; export/import a board backup using test data. Test live bridge pairing only on the exact authorized production origin and chosen existing conversation, following [BRIDGE.md](BRIDGE.md).
+1. Connect the repository to a **Pages Git-integrated project**, with the repository root as the project root and framework preset **None**.
+2. Set the build command to **`pnpm test && pnpm run build:web`** and the output directory to **`dist-web`**.
+3. Set **`NODE_VERSION=24.22.1`** and **`PNPM_VERSION=11.25.0`** for production and preview builds.
+4. Use `main` as the intended production branch. Pushes build and deploy the website; review preview rules separately.
+5. Attach **sharedboard.app** through the project’s custom-domain settings and follow Cloudflare’s DNS instructions.
 
-Choose a **Pages Git-integrated project**, not a Workers application or a Direct Upload project, for automatic deployment from GitHub. Keep deployment previews for testing; send testers the stable production address.
+References: [Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/), [build image settings](https://developers.cloudflare.com/pages/configuration/build-image/), [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/).
 
-## Choose the permanent origin before inviting testers
+## Cloudflare relay
 
-IndexedDB is scoped to the full origin: scheme, hostname and port. **https://project.pages.dev, https://sharedboard.app, https://www.sharedboard.app, a branch preview and http://127.0.0.1:4173 all have separate storage.** Changing the website's address does not move boards automatically. The same applies to another browser/profile or clearing site data; private browsing may discard it on exit.
+Deploy the relay’s Worker with the committed Wrangler configuration and its required bindings. Configure **connect.sharedboard.app** as its public address and **https://sharedboard.app** as the authorized browser origin. Development/test origins must be explicitly scoped, not enabled through a permissive production wildcard.
 
-Prefer the final custom domain before testers create work. Attach it through **Pages project → Custom domains → Set up a domain**, then follow Cloudflare's DNS instructions. An apex domain requires Cloudflare nameservers; a subdomain can use a CNAME after being associated with the Pages project. [Custom domain setup](https://developers.cloudflare.com/pages/configuration/custom-domains/)
+Store deployment credentials and any service secrets in Cloudflare’s secret facilities, not in browser environment variables, published JavaScript, or repository files. Deployment access belongs to the project owner; people using SharedBoard do not need Cloudflare or GitHub accounts.
 
-To move work, use **Export board** on the old origin, open the new origin, and use **Restore board backup**. Export each board that matters; one board backup does not contain every project/board. Keep backups outside browser storage. Plan a canonical hostname carefully: redirecting a site before users export can make their old browser storage hard to reach.
+The committed configuration is `cloudflare/wrangler.jsonc`. Deploy it with:
 
-## Secondary path: static ZIP or manual upload
-
-```text
-pnpm run package:web
+```sh
+pnpm relay:deploy
 ```
 
-After a successful browser build, this produces SharedBoard.app-<version>-cloudflare-pages.zip and its SHA-256 sidecar. The ZIP contains only dist-web's deployable static contents, with index.html at the archive root. It is suitable for a separate Pages Direct Upload test or an archived release. It is not the Windows portable app ZIP.
+Its Durable Object bindings are **`BOARD_RELAY` → `BoardRelay`** for scoped live board sessions and **`RELAY_AUTH` → `RelayAuth`** for authorization metadata. Wrangler applies the configured migrations. `APP_ORIGIN` and `RELAY_ORIGIN` identify the exact frontend and relay origins; keep production values scoped to the two public addresses above. `EVENT_CALLBACK_ORIGINS` starts empty, so automatic event callbacks require explicit operator-approved provider origins rather than arbitrary callback URLs.
 
-Cloudflare Dashboard drag-and-drop accepts ZIPs or folders with up to **1,000 files**; Wrangler accepts an asset directory with up to **20,000 files**. Both limit each asset to **25 MiB**. This package deliberately meets the Dashboard's lower file-count limit. Wrangler deployment syntax is **npx wrangler pages deploy dist-web --project-name <existing-project>**; Wrangler accepts the folder, not the ZIP. Do not accidentally deploy a functions directory alongside it. [Direct Upload and limits](https://developers.cloudflare.com/pages/get-started/direct-upload/)
+The relay provides the hosted MCP endpoint, short-lived board pairing, scoped authorization, live browser transport, and revocation. Ordinary clients use an explicit copied request. Automatic mini-chat delivery must remain gated to a supported hosted Work Cloud client’s actual MCP event capabilities, with real delivery/read/reply checks.
 
-A Direct Upload project cannot later switch to Git integration; create a Git-integrated project from the start for the primary workflow. Manual deployments for an existing Git-integrated project require the supported Wrangler path, not Dashboard drag-and-drop. The normal release flow should remain Git push → tests/build → Pages deployment.
+For development, `pnpm relay:dev` starts Wrangler on port **8787**. Its production origin defaults are still strict: a local integration requires development-only `APP_ORIGIN` and `RELAY_ORIGIN` values matching the exact preview/relay origins, plus the frontend pointing to that test relay. Do not weaken the production allowlist to make a local preview work. Verify the deployed relay before the frontend advertises a working connection; a successful static build does not prove the relay, authorization, or an AI account works.
+
+## Browser storage and the permanent origin
+
+IndexedDB is scoped to the full origin. **sharedboard.app, www.sharedboard.app, pages.dev, branch previews, and a local preview all have different storage.** Another browser/profile/device also starts independently. Do not redirect an old address before users can export work that exists only at that origin.
+
+Keep one canonical production origin. To move work, export each important board on the old origin, open the new origin, and restore its `.sharedboard` backup. A backup contains one board, not every project, other board, or checkpoint.
 
 ## Security and routing
 
-The build generates _headers with MIME-sniffing protection, no-referrer, frame protection, restricted permissions and a CSP. Inline bootstrap scripts receive exact SHA-256 CSP hashes; fonts and drawing assets are self-contained. The local preview sends the same headers. [Pages headers](https://developers.cloudflare.com/pages/configuration/headers/)
+The frontend’s generated headers protect MIME handling, referrers, framing, permissions, and content sources. Its content policy must permit the designated HTTPS/WebSocket relay, with no loopback companion requirement. Fonts and drawing assets stay self-contained.
 
-The three exact `/downloads/SharedBoard-Bridge-<platform>.zip` routes redirect to public release-file downloads. Users stay in the website's setup flow and need no GitHub account or repository visit. These are fixed routes generated from `shared/bridge-downloads.mjs`, not a general redirect endpoint; the local preview mirrors them. ZIP bytes are served by GitHub's release infrastructure rather than copied into the Cloudflare static build, where individual assets are limited to 25 MiB.
+`/boards/*` must load the canonical root with a `200` rewrite. A top-level `404.html` keeps unrelated missing URLs from masquerading as application routes. User backup exports remain part of the board; application installer routes are not part of the supported product.
 
-_redirects rewrites /boards/* to the canonical root `/` with a 200 response. Cloudflare rejects wildcard rewrites whose destination ends in `/index` or `/index.html`, so use the root target. A top-level 404.html prevents unrelated missing URLs such as /api/board from being treated as application routes. No Pages Functions or Worker handler is included. [Serving Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/)
+## Release acceptance
+
+Use isolated browser profiles/databases and synthetic drawings, not the developer’s or a tester’s real board.
+
+- Create a board, draw, add a note/reference, wait for saved state, reload, and reopen a direct board URL.
+- Confirm a separate profile begins independently; export/import a test backup and preserve current work on rejected imports.
+- Pair a real supported AI client through the website, approve the chosen board permission, read/confirm its revision, and return an actual mini-chat reply.
+- Check explicit handoff for ordinary clients and capability-gated event delivery separately. A delivery acknowledgement is not an AI answer.
+- Verify expiry, wrong-board isolation, revocation, reconnect, uncertain retry handling, and newer human-edit preservation.
+- Check the website on Windows and Mac browsers without a SharedBoard installation.
+
+Static checks and protocol fixtures prepare for these acceptance tests; they do not replace them. See [Connections](CONNECTIONS.md), [Connection behavior](BRIDGE.md), and [Development](docs/LOCAL-DEVELOPMENT.md).
