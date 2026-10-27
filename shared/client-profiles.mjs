@@ -5,7 +5,7 @@
 export const CLIENT_PROFILES=Object.freeze([
  {id:'codex',label:'Codex',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Requires remote board tools and an active wait in your existing AI run.'},
  {id:'claude-code',label:'Claude Code',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Requires remote board tools and an active wait in your existing AI run.'},
- {id:'chatgpt',label:'ChatGPT',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Your host must keep the wait tool running; its limits need a real test.'},
+ {id:'chatgpt',label:'ChatGPT Work Cloud',miniChat:'verify',miniChatLabel:'Automatic mini chat · native event setup',detail:'Requires Work with Cloud selected and native event-triggered tasks. Availability depends on your account.'},
  {id:'claude',label:'Claude (web)',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental active-run mode. Claude app messages alone only fill a composer draft.'},
  {id:'other',label:'Other MCP client',miniChat:'verify',miniChatLabel:'Live mini chat · AI session must stay active',detail:'Experimental. Requires remote MCP and a host that can keep the wait tool active.'},
 ].map(profile=>Object.freeze(profile)));
@@ -22,7 +22,7 @@ export function miniChatState(connection,now=Date.now()){
   if(sessionActive&&live.status==='waiting'&&connection.automaticMessages===true&&Number.isFinite(deadline(live.waitExpiresAt))&&deadline(live.waitExpiresAt)>now)return {enabled:true,automatic:true,mode:'live-session',phase:'waiting',sessionActive:true,reason:'Your active AI session is waiting for a board request. Keep that run and this board open.'};
   return {enabled:false,automatic:false,mode:'live-session',phase:live?.status??'inactive',sessionActive,reason:'Start or resume live collaboration once in your AI conversation. Mini chat opens while its wait tool is active; it cannot wake an ended or closed AI run. Board tools remain available.'};
  }
- const reason='Start live collaboration once in your AI conversation, or use a verified incoming-event connection. A live session must keep its wait tool active; it cannot wake an ended or closed run. Board tools remain available in your AI chat.';
+ const reason=connection.provider==='chatgpt'?'Set up native event tasks once in your existing ChatGPT Work conversation with Cloud selected. Mini chat requires verified incoming messages; board tools remain available in your AI chat.':'Start live collaboration once in your AI conversation, or use a verified incoming-event connection. A live session must keep its wait tool active; it cannot wake an ended or closed run. Board tools remain available in your AI chat.';
  const unavailable={enabled:false,automatic:false,mode:'unavailable',reason};
  if(connection.automaticMessages!==true||connection.deliveryMode!=='events')return unavailable;
  const expires=deadline(connection.messageExpiresAt??connection.eventExpiresAt);

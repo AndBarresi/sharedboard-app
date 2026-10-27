@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,clearDeletedBoardChatStorage,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture} from '../src/chat-format.mjs';
+import {safeChatHref,inlineChatTokens,parseChatMarkdown,chatStorageKey,clearDeletedBoardChatStorage,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture,nativeChatAwaitingReply} from '../src/chat-format.mjs';
 test('chat links allow explicit web URLs and reject executable, local, disguised, credentialed and control-character destinations',()=>{
   assert.equal(safeChatHref('https://example.com/docs?q=a%20b'),'https://example.com/docs?q=a%20b');
   for(const url of ['javascript:alert(1)','data:text/html,hi','file:///C:/private.txt','//example.com',' https://example.com','https://exam\nple.com','https://user:secret@example.com','https:\\example.com','vbscript:msgbox(1)'])assert.equal(safeChatHref(url),null,url);
@@ -69,4 +69,17 @@ test('only a confirmed receipt, prepared manual instructions, or an actual reply
 test('an uncertain automatic request retains its retry ID and capture after switching to manual chat',()=>{
  for(const error of [{status:409,code:'DIRECT_CHAT_NOT_LINKED'},{status:409,code:'DIRECT_DELIVERY_UNAVAILABLE'},{status:409,code:'PANEL_DIRECT_DELIVERY_UNAVAILABLE'},{status:409,code:'DELIVERY_UNCERTAIN',deliveryUnknown:true},{status:409,code:'DELIVERY_UNCERTAIN'},{status:409,deliveryUnknown:true},{status:500},new Error('Network unavailable')])assert.equal(shouldResetChatCapture(error),false);
  for(const status of [400,409,413])assert.equal(shouldResetChatCapture({status,code:'INVALID_PREVIEW'}),true);
+});
+
+test('native chat waits for an actual reply while isolating other connections, boards and delivery routes',()=>{
+ const connection={id:'current-connection',boardId:'current-board'},base={id:'first-message',connectionId:connection.id,boardId:connection.boardId,delivery:'queued',receipt:'evt_chat_first-message'};
+ assert.equal(nativeChatAwaitingReply([base],connection),base);
+ for(const changes of [{status:'answered'},{status:'reading'},{reply:'   '},{delivery:'uncertain'}])assert.equal(nativeChatAwaitingReply([{...base,...changes}],connection)?.id,base.id);
+ for(const changes of [{reply:'Actual model answer'},{connectionId:'older-connection'},{boardId:'different-board'},{receipt:'evt_review_first-message'},{receipt:'evt_chat_other-message'},{receipt:'live_'+'a'.repeat(64)},{receipt:'panel_old'}])assert.equal(nativeChatAwaitingReply([{...base,...changes}],connection),null);
+ assert.equal(nativeChatAwaitingReply([base],connection,base.id),null,'status checks using the same saved ID remain idempotent');
+ for(const delivery of ['pending','uncertain'])assert.equal(nativeChatAwaitingReply([{...base,receipt:undefined,deliveryMode:'events',delivery}],connection)?.id,base.id);
+ assert.equal(nativeChatAwaitingReply([{...base,receipt:undefined,deliveryMode:'events',delivery:'failed'}],connection),null);
+ assert.equal(nativeChatAwaitingReply([{...base,receipt:undefined,delivery:'pending'}],connection),null,'unrelated historical pending records do not reserve the native route');
+ assert.equal(nativeChatAwaitingReply([{...base,reply:'Actual answer'},base],connection)?.id,base.id);
+ assert.equal(shouldResetChatCapture({status:409,code:'CHAT_REPLY_PENDING'}),false,'waiting for another answer does not invalidate the prepared drawing');
 });

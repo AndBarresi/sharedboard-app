@@ -3,7 +3,7 @@ import {Icon} from './Icons.jsx';
 import {copyText} from './ConnectionSetup.jsx';
 import {Modal} from './Modal.jsx';
 import {MarkdownReply} from './MarkdownReply.jsx';
-import {chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture} from './chat-format.mjs';
+import {chatStorageKey,isPreparedContextStale,hasSelectionContextChanged,serializePendingChat,isAcceptedChatMessage,shouldResetChatCapture,nativeChatAwaitingReply,CHAT_REPLY_PENDING_MESSAGE} from './chat-format.mjs';
 import {miniChatState} from '../shared/client-profiles.mjs';
 import './chat-upgrade.css';
 
@@ -43,10 +43,12 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
   const [expanded,setExpanded]=useState(()=>Boolean(storedSize?.expanded)),[short,setShort]=useState(false);
   const bottom=useRef(null),composer=useRef(null),panel=useRef(null),lastSeen=useRef(initialValue('seen')||''),active=useRef(true);
   const messages=view.messages||[],lastReply=messages.filter(m=>m.reply).at(-1)?.repliedAt||'';
+  const currentMessages=useRef(messages);currentMessages.current=messages;
   const currentConnection=useRef(null);currentConnection.current=view.chatConnected?view.connection:null;
   const miniChat=miniChatState(currentConnection.current,clock),composerAvailable=miniChat.enabled||miniChat.sessionActive;
   const unread=!open&&lastReply&&lastReply!==lastSeen.current;
   const areas=view.planning?.project.areas??[],matchingPending=Boolean(pending&&pending.text===draft.trim()&&pending.intent===intent);
+  const replyPending=nativeChatAwaitingReply(messages,currentConnection.current,matchingPending?pending.id:undefined);
   const attachment=matchingPending&&pending.capturedContext?pending.capturedContext:prepared;
   const stale=isPreparedContextStale(attachment,view.board,view.planning)||hasSelectionContextChanged(attachment,view.selectedIds);
   const missingRetryAttachment=Boolean(prepareContext&&matchingPending&&pending.attachmentNotStored&&!pending.capturedContext);
@@ -64,6 +66,7 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
     for(const kind of ['draft','pending','seen'])writeStorage(`sharedboard-chat-${kind}`,null);
   },[legacyDraftBoardId]);
   useEffect(()=>{writeStorage(scoped('draft'),draft);},[draft]);
+  useEffect(()=>{if(!replyPending)setError(current=>current===CHAT_REPLY_PENDING_MESSAGE?null:current);},[replyPending?.id]);
   useEffect(()=>{writeStorage(scoped('intent'),intent);},[intent]);
   useEffect(()=>{
     if(!pending){writeStorage(scoped('pending'),null);return;}
@@ -99,7 +102,7 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
     finally{if(active.current)setPreparing(false);}
   };
   const submit=async event=>{
-    event.preventDefault();const latestChat=miniChatState(currentConnection.current);if(!latestChat.enabled){setError(latestChat.reason);return;}if(!draft.trim()||sending||needsPreview||missingRetryAttachment)return;
+    event.preventDefault();const latestChat=miniChatState(currentConnection.current);if(!latestChat.enabled){setError(latestChat.reason);return;}if(nativeChatAwaitingReply(currentMessages.current,currentConnection.current,matchingPending?pending.id:undefined)){setError(CHAT_REPLY_PENDING_MESSAGE);return;}if(!draft.trim()||sending||needsPreview||missingRetryAttachment)return;
     setSending(true);setError(null);
     const input=matchingPending?pending:{id:crypto.randomUUID(),text:draft.trim(),intent,boardId,...(prepared?{capturedContext:prepared}:{})};
     setPending(input);
@@ -115,8 +118,8 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
       if(active.current){setDraft(current=>current.trim()===input.text?'':current);setPending(current=>current?.id===input.id?null:current);}
     }catch(err){
       if(!active.current)return;
-      if(shouldResetChatCapture(err)){setPending(null);setPrepared(null);}
-      setError(err.message||'Could not confirm sending. Retry keeps the same request and its original attachment.');
+      if(err.code==='CHAT_REPLY_PENDING'){setPending(current=>current?.id===input.id?null:current);setError(nativeChatAwaitingReply(currentMessages.current,currentConnection.current,input.id)?CHAT_REPLY_PENDING_MESSAGE:null);}
+      else{if(shouldResetChatCapture(err)){setPending(null);setPrepared(null);}setError(err.message||'Could not confirm sending. Retry keeps the same request and its original attachment.');}
     }finally{if(active.current)setSending(false);}
   };
   const pause=async()=>{if(stopping||!onStopLive)return;setStopping(true);setError(null);try{await onStopLive();}catch(cause){if(active.current)setError(cause.message||'Could not pause live collaboration.');}finally{if(active.current)setStopping(false);}};
@@ -132,6 +135,7 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
     {composerAvailable?<form className="chat-composer" onSubmit={submit}>
       <div className="chat-compose-fields">
       {miniChat.mode==='live-session'&&<p className="chat-storage-hint" role="status">{miniChat.reason} {miniChat.sessionActive&&onStopLive&&<button type="button" className="chat-context-link" disabled={stopping} onClick={pause}>{stopping?'Pausing…':'Pause live collaboration'}</button>}</p>}
+      {replyPending&&<p className="chat-storage-hint" role="status">{CHAT_REPLY_PENDING_MESSAGE}</p>}
       <div className="chat-intent"><label>Message intent<select aria-label="Message intent" value={intent} onChange={e=>setIntent(e.target.value)}><option value="discuss">Discuss · review only</option><option value="work">Request work · allow changes</option></select></label><span>{view.connection?.permission==='propose'?'Drawing proposals need approval':view.selectedIds?.length?`${view.selectedIds.length} selected`:'Whole board'}</span></div>
       {view.connection?.permission==='read'&&<p className="chat-storage-hint">Read-only drawing access: discussion and replies work. Drawing edits require reconnecting with read-and-edit access.{onConnect&&<button type="button" className="chat-context-link" onClick={onConnect}>Change drawing access</button>}</p>}
       {prepareContext?<div className={`chat-context-picker ${stale?'is-stale':''}`}>
@@ -145,7 +149,7 @@ function BoardChatSession({open,setOpen,view,send,retry,focused,onJump,prepareCo
       {missingRetryAttachment&&<div className="chat-storage-hint" role="status">The original attachment was not retained after reopening. Check your AI chat for this request before starting another one.<button type="button" className="chat-context-link" onClick={()=>{setPending(null);setPrepared(null);setStorageWarning(false);}}>Start a new request with this text</button></div>}
       {error&&<p className="chat-error" role="alert">{error}</p>}
       </div>
-      <div className="chat-send"><small>{!miniChat.enabled?miniChat.phase==='processing'?'The AI is not waiting; your draft is kept.':'Wait for your AI to call the board wait tool.':needsPreview?'Preview the attachment before sending.':intent==='work'?'Allows only the work you ask for.':'Discussion does not approve changes.'}</small><button type="submit" disabled={!miniChat.enabled||!draft.trim()||sending||preparing||needsPreview||missingRetryAttachment||!view.chatConnected||!view.online||view.status==='conflict'}><Icon name="send" size={16}/>{sending?'Sending…':matchingPending?'Retry saved send':miniChat.phase==='processing'?'Waiting for AI…':'Send'}</button></div>
+      <div className="chat-send"><small>{replyPending?'Waiting for the previous reply.':!miniChat.enabled?miniChat.phase==='processing'?'The AI is not waiting; your draft is kept.':'Wait for your AI to call the board wait tool.':needsPreview?'Preview the attachment before sending.':intent==='work'?'Allows only the work you ask for.':'Discussion does not approve changes.'}</small><button type="submit" disabled={Boolean(replyPending)||!miniChat.enabled||!draft.trim()||sending||preparing||needsPreview||missingRetryAttachment||!view.chatConnected||!view.online||view.status==='conflict'}><Icon name="send" size={16}/>{sending?'Sending…':replyPending?'Waiting for reply…':matchingPending?'Retry saved send':miniChat.phase==='processing'?'Waiting for AI…':'Send'}</button></div>
     </form>:<div className="chat-unavailable" role="status"><strong>Automatic mini chat unavailable</strong><p>{miniChat.reason} Saved requests and replies remain available here.</p>{error&&<p className="chat-error" role="alert">{error}</p>}{onConnect&&<button type="button" className="secondary-button" onClick={onConnect}>Connection details</button>}</div>}
     {previewOpen&&attachment&&<Modal title="Your AI’s drawing context" subtitle={`${scopeLabel(attachment)} · saved revision ${attachment.expectedRevision}`} onClose={()=>setPreviewOpen(false)} wide><div className="context-preview-drawing">{attachment.visual?<img src={attachment.visual} alt="Exact drawing image prepared for this message"/>:<p>The captured drawing is empty.</p>}</div>{stale&&<p className="planner-error" role="status">The board or planning details changed after this capture. Close this preview and refresh it before a new send.</p>}<div className="context-preview-notes"><h3>Included notes & requirements <span>{attachment.notes?.length||0}</span></h3>{attachment.notes?.length?attachment.notes.map((note,index)=><article key={note.id??index}><small>{note.kind==='task'?'Work card':note.kind==='requirement'?'Requirement':'Note'}{note.status==='done'?' · resolved':''}</small><strong>{note.title}</strong>{note.text&&<p>{note.text}</p>}</article>):<p>No notes are attached to this scope.</p>}</div><p className="muted">This saved drawing image, its editable object data and the listed planning context travel with your message. Later drawing changes do not replace this snapshot.</p><div className="modal-actions"><button type="button" className="primary-button" onClick={()=>setPreviewOpen(false)}>Use this attachment</button></div></Modal>}
   </section>;

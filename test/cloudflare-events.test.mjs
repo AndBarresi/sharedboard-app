@@ -5,6 +5,9 @@ import {McpServer,createMcpHandler,PROTOCOL_VERSION_META_KEY,CLIENT_INFO_META_KE
 import {eventCatalog,handleEventRpc,eventStatus,dispatchEvent,clearEventSubscriptions,attachEventHandlers} from '../cloudflare/events.mjs';
 import {BoardRelay} from '../cloudflare/relay.mjs';
 import {handleRequest} from '../cloudflare/worker.mjs';
+import {createRequire} from 'node:module';
+import {realpathSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 
 const boardId='00000000-0000-4000-8000-000000000001',messageId='00000000-0000-4000-8000-000000000002';
 const secret=`whsec_${Buffer.alloc(32,12).toString('base64')}`,otherSecret=`whsec_${Buffer.alloc(32,13).toString('base64')}`;
@@ -178,4 +181,20 @@ test('the actual Worker and BoardRelay preserve MCP callback rejection code and 
   assert.equal(response.status,200);assert.equal(result.error.code,-32015,JSON.stringify(result));assert.deepEqual(result.error.data,{reason:'callback_not_approved',callbackOrigin:'https://new-provider.example'});
   for(const privateValue of ['private-path','must-not-leak',secret])assert.equal(JSON.stringify(result).includes(privateValue),false);
   const diagnostic=(await eventStatus({...f.options,principal:sessionId,allowedCallbackOrigins:[]})).eventActivation;assert.equal(diagnostic.reason,'callback_not_approved');assert.equal(diagnostic.callbackOrigin,'https://new-provider.example');
+});
+
+test('real workerd verifies and delivers signed callbacks through native fetch without rebinding its receiver',{timeout:15000},async()=>{
+  const root=fileURLToPath(new URL('../',import.meta.url)),requireWrangler=createRequire(realpathSync(new URL('../node_modules/wrangler/package.json',import.meta.url))),{Miniflare,convertV4MiniflareOptions}=requireWrangler('miniflare'),{build}=requireWrangler('esbuild'),requests=[];
+  const source=`import {handleEventRpc,eventStatus,dispatchEvent} from './cloudflare/events.mjs';
+    export default {async fetch(request){
+      const values=new Map(),storage={get:async key=>structuredClone(values.get(key)),put:async(key,value)=>{values.set(key,structuredClone(value));}};
+      const options={principal:'isolated-native-fetch',boardId:${JSON.stringify(boardId)},storage,allowedCallbackOrigins:['https://callback.example'],...(new URL(request.url).pathname==='/injected'?{callbackFetch:fetch}:{})};
+      try{const subscription=await handleEventRpc('events/subscribe',{name:'sharedboard.message.created',arguments:{boardId:${JSON.stringify(boardId)}},delivery:{mode:'webhook',url:'https://callback.example/private-path?token=fixture-only',secret:${JSON.stringify(secret)}}},options);
+        const delivery=await dispatchEvent({id:${JSON.stringify(messageId)},kind:'chat',intent:'discuss'},options);return Response.json({subscription,delivery,status:await eventStatus(options)});
+      }catch(error){return Response.json({error:{code:error.code,reason:error.data?.reason}});}
+    }};`;
+  const bundle=await build({stdin:{contents:source,resolveDir:root,sourcefile:'native-event-fetch-test.mjs'},bundle:true,format:'esm',platform:'neutral',target:'es2022',conditions:['workerd','worker','browser'],external:['node:*'],write:false,logLevel:'silent'});
+  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat'],outboundService:async request=>{const body=await request.text();requests.push({url:request.url,body,headers:Object.fromEntries(request.headers)});const data=JSON.parse(body);return Response.json(data.type==='verification'?{challenge:data.challenge}:{accepted:true});}}));
+  try{await mf.ready;for(const mode of ['injected','default']){const before=requests.length,result=await (await mf.dispatchFetch('https://worker.example/'+mode)).json();assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.status.automaticMessages,true);assert.equal(result.delivery.delivery,'queued');assert.equal(result.status.eventActivation.outcome,'verified');const sent=requests.slice(before);assert.equal(sent.length,2);for(const request of sent)verifySignature(request);assert.equal(JSON.parse(sent[0].body).type,'verification');assert.equal(JSON.parse(sent[1].body).name,'sharedboard.message.created');}}
+  finally{await mf.dispose();}
 });

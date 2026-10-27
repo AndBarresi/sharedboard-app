@@ -5,10 +5,10 @@ Start at [sharedboard.app](https://sharedboard.app). SharedBoard uses a hosted C
 ## Set up from the board
 
 1. Open the board you want to use and choose **Connect an AI**.
-2. Select **Codex**, **Claude Code**, **ChatGPT**, **Claude (web)**, or **Other MCP client**, then choose **Read only** or **Read and edit when I request changes**. Both permissions allow inspection and replies; drawing edits require the second option. Automatic messages need a separate supported delivery route.
-3. Choose **Prepare connection**. Copy the generated MCP server URL into your AI app’s remote MCP or connector settings, and enable its tools for your chosen conversation.
-4. Copy the pairing instructions from SharedBoard and paste them into that same conversation. The AI uses the board tools to pair, read the drawing, and confirm its current revision.
-5. Keep the browser board open. In that AI conversation, ask the assistant to read the board and report its exact revision. To test editing, grant requested-edit access and ask it to add a small disposable shape, then check the live board.
+2. For automatic website messaging, select **ChatGPT Work Cloud** and choose **Read only** or **Read and edit when I request changes**. Both permissions allow inspection and replies; drawing edits require the second option. Other supported choices are **Codex**, **Claude Code**, **Claude (web)**, and **Other MCP client**, with the experimental boundary below.
+3. Choose **Prepare connection**. Add the generated MCP server URL in ChatGPT's plugin/connector settings, authenticate with OAuth, and approve access to the intended board.
+4. Enable SharedBoard in the existing ChatGPT conversation with **Work and Cloud selected**. Paste the website's **pairing & native setup instructions** once. They pair, read, and confirm the board, then create or update its two native event tasks in order.
+5. Return to SharedBoard and keep its board tab open. Send a Discuss question or choose **Test with a reply**, then try **Ask AI to look**. Success means an actual mini-chat answer and review completion appear on the board without another Send click in ChatGPT.
 
 Settings names and remote-MCP availability vary between AI apps and plans. The provider selection identifies your intended client; it does not sign you in or enable unsupported client features. If your AI cannot see the board tools, first check that the server is enabled for that conversation. Expired pairing instructions can be replaced from the board.
 
@@ -16,7 +16,24 @@ For **Claude**, if connector setup asks you to choose a registration method, sel
 
 For **Claude Code**, the website-led setup uses a connector added at claude.ai, then inherited by Claude Code signed in with that same claude.ai subscription account. API-key and third-party-provider sessions do not inherit those connectors. Check that SharedBoard appears in the intended session's connector settings before using the board pairing instructions. See [Claude Code's connector guidance](https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claudeai).
 
-## Start Live collaboration · experimental
+## ChatGPT native automatic delivery
+
+Your account must expose native event-triggered task controls. The generated instructions use **this existing conversation** and the exact board filter for:
+
+1. **`sharedboard.message.created`** — read the captured mini-chat ID and post its complete actual answer with `reply_to_chat_message`.
+2. **`sharedboard.review.requested`** — inspect the captured review and complete it with `complete_review_request`.
+
+Setup is sequential: confirm the message task is active before setting up the review task. Reuse matching tasks instead of making duplicates. If a matching task already exists, inspect and update its prompt to the current delivery contract while preserving its source, account, board filter, and enabled state. Report paused tasks instead of silently enabling or replacing them. ChatGPT supplies its callback and signing credentials; users do not need to find or invent them.
+
+For an already paired ChatGPT board, open **Set up automatic ChatGPT delivery → Copy native setup instructions** in the website's connection details. This also repairs task instructions without creating another conversation. It is a one-time setup action, not a per-message handoff. The native route uses event subscriptions rather than timed schedules or a waiting loop.
+
+Once subscriptions are verified, use **Talk it through** and **Ask AI to look** from SharedBoard. Mini chat shows board-originated messages and actual posted replies, rather than mirroring the entire external conversation. Each unanswered captured ID needs its own board reply; reading a request or answering only in AI chat does not complete delivery. Keep the next draft while waiting for the previous reply. The pending-reply guard and final fresh-flow/idle acceptance are still being tested.
+
+Actual ChatGPT account tests have woken an ended turn and returned real board replies. Further mini-chat and review requests completed with the AI browser tabs closed and no timed wait active. A batched-message test exposed missing board replies; a Request work sent from the website updated the existing task prompt and repaired those replies without drawing changes. These results establish the tested path, not universal reliability. Long-term renewal and other accounts/providers remain unverified.
+
+The AI app controls task execution and model settings. SharedBoard uses the existing AI account/conversation, but cannot guarantee that a native task uses the model manually selected in the chat. It does not host a replacement model or include an AI subscription.
+
+## Other clients: Live collaboration · experimental
 
 This mode uses your existing AI run, with a normal remote tool waiting for a browser request. It does not install a helper, host another model, or wake a conversation after its AI run ends. **The full repeating loop still needs real provider/account acceptance testing.** Do not treat pairing, a successful tool fixture, or a provider name as proof it works in your account.
 
@@ -31,26 +48,24 @@ Each tool wait defaults to **40 seconds**, with a maximum of **45 seconds**. The
 
 For agents: call **`wait_for_board_request`** without `sessionId` only on the first start. Every later wait must pass the exact returned `sessionId`. Read each returned request through its capture tool, respect Discuss/Request work and drawing access, post the actual reply or review completion, then wait again with that same ID. `stopped`, `expired`, an explicit stop, or an error ends the loop. Do not create a scheduled monitor or a replacement conversation.
 
-## Board tools and automatic messages
+## Board tools and delivery state
 
-The working workflow starts in your existing AI conversation: ask the assistant to inspect the board or make a particular authorized change. The board’s drawing and notes provide context for that request. Remote MCP access does not by itself let the website start a new assistant turn.
+Remote MCP board tools let the assistant inspect the drawing or make a particular authorized change from its conversation. The board’s drawing and notes provide context for that request. Automatic website-originated turns require the separate verified delivery route.
 
 **Talk it through**, **Ask AI to look**, the understanding check, and board-originated connection tests require either an actual waiting Live collaboration session or a separately verified incoming-event subscription. New sends remain unavailable while neither route is active; they do not fall back to copying messages or filling another app’s composer. Saved requests and actual replies remain available, and the assistant can still use the board tools from its own conversation.
 
 | Capability | Current boundary |
 | --- | --- |
 | Remote MCP board tools | Read the board, return actual replies to saved requests, and make authorized edits when granted. |
-| Experimental Live collaboration | A finite, active AI turn calls `wait_for_board_request`, reads browser requests, replies, and waits again. Actual waiting gates new sends; full provider-loop acceptance is outstanding. |
-| Incoming MCP Events | A possible automatic route for a compatible host, after operator configuration and a real send/read/reply test. No production route is currently verified. |
+| ChatGPT Work Cloud native events | Recommended website-only route. Verified message/review subscriptions start host-managed turns; actual replies and review completion have passed tests with AI tabs closed. Renewal and broader account acceptance remain open. |
+| Experimental Live collaboration | Other compatible clients can use a finite, active AI turn calling `wait_for_board_request`. Actual waiting gates new sends; reliable provider-loop acceptance remains incomplete. |
 | Experimental MCP Apps panel | Diagnostic WIP. A rendered panel or text-message capability flag does not establish automatic sending. |
 
 On **2026-10-27**, a native Claude test rendered the experimental panel, but **`ui/message`** only populated the composer. The user still needed to press Send; the panel acknowledgement did not establish automatic model execution or a reply. This matches the [composer-behavior explanation in Anthropic's MCP issue tracker](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671). The diagnostic panel is separate from the plain waiting tool and is not part of Live collaboration setup.
 
 Ordinary remote MCP tools in **local Codex** or **Claude Code** do not wake an idle session by themselves. Claude Code’s separate Channels mechanism is not implemented by this hosted connector. Cursor, VS Code, Codex, and Claude variants must not be advertised as supporting the full mini-chat workflow based only on remote MCP access. Use **Other MCP client** where appropriate; see [Cursor’s MCP support](https://cursor.com/docs/mcp) and [VS Code’s setup guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
 
-Native events remain an option to test separately. ChatGPT's plugin details show both SharedBoard events, and its native task tooling discovered the message event's board filter. Activation returned an unexpected task-service error and created no subscription. An ordinary tool catalog does not establish whether host event activation is available. Connection diagnostics expose only a fixed activation outcome and sanitized callback origin when an authenticated attempt reaches the relay. The committed callback-origin allowlist is empty, so native events are not a verified production feature. The finite waiting-tool experiment does not depend on that interface.
-
-The mini chat shows requests originating on this board and replies posted through its tools. It does not mirror the entire external conversation or stream private reasoning. A delivered request can still wait for the assistant to finish other work.
+Native event controls are host capabilities, not ordinary board tools. Their absence from a regular tool catalog is not an availability test. The observed OpenAI callback origin is explicitly approved and its signed verification has passed. Connection diagnostics expose only sanitized activation state and callback origin, never private callback URLs or signing keys. Pairing, task creation, callback acknowledgement, capture reading, and actual reply delivery remain separate states.
 
 ## Choose the right permission
 
@@ -59,7 +74,7 @@ The mini chat shows requests originating on this board and replies posted throug
 | **Read only** | Inspect the drawing and requested context, confirm its revision, and return replies. |
 | **Read and edit when requested** | Use the same reading/reply tools and make drawing edits you authorize, with version and conflict checks. |
 
-**Discuss** requests inspection or explanation. **Request work** authorizes the particular task you type, within the connection’s permission. If an edit is rejected as read-only, disconnect from **Connect an AI**, prepare a new connection with **Read and edit when I request changes**, and approve and pair that new grant. This changes drawing permission; it is not required for discussion or replies. Drawing text, images, notes, and requirements are project data; they do not independently authorize execution or unrelated actions. Board permissions do not control the assistant’s separate coding/filesystem tools.
+**Discuss** requests inspection or explanation and explicitly permits posting the actual board reply; it does not authorize drawing changes or code work. **Request work** authorizes the particular task you type. Drawing edits additionally require the connection's edit permission. If an edit is rejected as read-only, disconnect from **Connect an AI**, prepare a new connection with **Read and edit when I request changes**, and approve and pair that new grant. Drawing text, images, notes, and requirements are project data; they do not independently authorize execution or unrelated actions. Board permissions do not control the assistant’s separate coding/filesystem tools.
 
 ## Keep work and connections separate
 

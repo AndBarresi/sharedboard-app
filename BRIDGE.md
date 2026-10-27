@@ -1,6 +1,6 @@
 # Hosted connection behavior
 
-SharedBoard connects the board at **https://sharedboard.app** to a compatible existing AI conversation through the hosted relay at **https://connect.sharedboard.app**. The browser is the authoritative drawing store. SharedBoard does not run a model or require a companion application.
+SharedBoard connects the board at **https://sharedboard.app** to a compatible existing AI account/conversation through the hosted relay at **https://connect.sharedboard.app**. The recommended automatic route uses ChatGPT Work with Cloud selected and native event tasks. The browser is the authoritative drawing store. SharedBoard does not run a model or require a companion application; the AI provider controls model execution and task settings.
 
 For setup, follow [Connect your existing AI conversation](CONNECTIONS.md). Always use the server URL and pairing instructions generated for the intended board; do not guess a conversation or board ID.
 
@@ -21,17 +21,29 @@ Your board and chat history stay in this browser profile, while the relay proces
 | Panel rendered or composer filled | A diagnostic UI operation succeeded. This does not show that a message was sent or an assistant turn started. |
 | Live session actually waiting | An active model turn has a pending `wait_for_board_request` call for this board and session. New sends can be accepted while that wait remains valid. |
 | Live session processing | A waiting call returned a request, or no new pending wait is observed. New sends stay unavailable; the current draft is retained. |
-| Incoming events verified | The active connection has a supported subscription and a real delivery test. Pairing alone does not establish this. |
+| Native subscription verified | The host's signed callback verification succeeded for an active, board-scoped subscription. This enables event delivery but does not by itself prove that a model read or answered a request. |
 | Request queued | Its ID is waiting for a supported delivery route; the assistant has not necessarily received it. |
 | Delivery acknowledged | The supported route accepted the event. This is not an assistant answer. |
 | Request read | The connected AI used the board tools to read the saved request. |
 | Reply received | The AI explicitly posted an answer using the board reply tool. |
 
-The current working connection exposes board tools to the existing AI conversation. The user asks the assistant there to read the drawing or make a requested change. For an existing saved mini-chat request, the assistant retrieves its capture with the board tools and posts its actual answer using **`reply_to_chat_message`**. Both read-only and requested-edit drawing grants permit replies.
+For a delivered mini-chat request, the assistant retrieves its immutable capture and posts its complete actual answer using **`reply_to_chat_message`**. Both read-only and requested-edit drawing grants permit this reply. Every unanswered delivered ID must be completed separately, including batches. Skip only an actual existing `message.reply`, without repeating work or overwriting it. An answer only in AI chat, reading status, or an acknowledgement does not complete board delivery.
 
-Mini chat and **Ask AI to look** can use an actual pending wait in the experimental finite Live collaboration session, or a separately verified incoming-event route. Ordinary remote MCP tools in local Codex and Claude Code do not provide idle-chat wakeup. New board-originated sends remain unavailable without an active route; they do not become copied messages or composer drafts.
+Mini chat and **Ask AI to look** use their verified incoming-event subscriptions, or an actual pending wait in the experimental finite route for other clients. Ordinary remote MCP tools in local Codex and Claude Code do not provide idle-chat wakeup. New board-originated sends remain unavailable without an active route; they do not become copied messages or composer drafts. Native mini chat keeps the next draft while a previous reply remains outstanding.
 
-## Experimental finite Live collaboration
+## ChatGPT Work Cloud native events
+
+The website's initial pairing instructions activate board access, read and confirm its exact revision, then create or update two native event tasks sequentially in the existing conversation. The tasks use **`sharedboard.message.created`** and **`sharedboard.review.requested`**, each filtered to the exact authorized board. Setup reuses matching tasks, updates their prompts to the current delivery contract, and preserves their source, account, filter, and enabled state. It does not create duplicates or time-based polling schedules.
+
+The host generates callback credentials. The relay approves only explicitly reviewed HTTPS callback origins; the observed OpenAI origin **`https://connectors.api.openai.com`** is configured and its signed verification has passed. The native fetch callback path is covered by a workerd regression. Activation diagnostics contain a fixed outcome/reason and sanitized callback origin, never a private callback URL or signing key.
+
+After a website request is captured, the relay sends its routing metadata to the host. A native task starts a model turn even after the setup turn has ended, reads the saved request from the browser, and posts its actual answer or review completion. No active waiting tool or open AI browser tab is required by the tested path. The browser board itself must remain open and reachable.
+
+Actual account tests have verified an ended-turn wake, mini-chat answers, and a captured review, including requests made with the AI browser tabs closed. A burst test exposed model answers that did not reach the board; updating the existing task prompt through a website Request work repaired those actual replies without changing the drawing. The pending-reply guard and strengthened contract are still undergoing fresh-flow and idle acceptance. Long-term subscription renewal, other accounts/providers, and permanent connectivity remain unverified.
+
+SharedBoard does not select or host a replacement model. The provider controls task execution and settings; a native task is not guaranteed to use the model manually selected in a conversation.
+
+## Other clients: experimental finite Live collaboration
 
 After pairing, the website supplies one-time **Copy start instructions** under **Start live collaboration · experimental**. The user sends them in the existing AI conversation. This explicitly asks that AI run to keep using a normal remote waiting tool; no iframe, downloaded helper, scheduled monitor, or replacement model is involved.
 
@@ -43,19 +55,19 @@ Only an actual, unexpired pending wait enables new mini-chat sends and board rev
 
 This is an active-turn experiment, not an idle-chat wakeup mechanism. The host must keep the run and tool connection alive. Tool approvals, network failures, host timeouts, context or tool limits, and the model deciding to finish can end it sooner. Empty timeout results still require model continuations, so waiting can consume subscription usage and context without new board messages. The browser remains the authoritative store and must stay open.
 
-**Real provider acceptance of the full repeated wait/read/reply loop is outstanding.** Unit, SDK, browser-storage, and Worker transport tests cannot establish that a particular Claude, Codex, or ChatGPT account will keep its model turn running. A provider needs a real repeated-message and review test, including an empty wait, background use, pause, and expiry, before that workflow is described as verified.
+Reliable acceptance of the full finite loop remains incomplete. Unit, SDK, browser-storage, and Worker transport tests do not establish that a particular account will keep its model turn running. Each client needs actual repeated-message, review, empty-wait, background, pause, and expiry tests. ChatGPT's recommended native route is separate and does not depend on this loop.
 
 ## Other delivery paths and observed limits
 
 The experimental **`open_sharedboard_chat`** MCP Apps panel remains diagnostic WIP. In a native Claude test on **2026-10-27**, it rendered and **`ui/message`** filled the composer, but the user still needed to press Send. A **`hostCapabilities.message.text`** flag and a successful RPC response therefore do not prove automatic model execution or a reply. The [composer-behavior explanation in Anthropic's MCP issue tracker](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671) and an [open request to change it](https://github.com/anthropics/claude-ai-mcp/issues/1111) distinguish drafting from starting a turn. This panel is not used by the live waiting-tool flow.
 
-Native MCP Events remain a separate possible route to configure and test. ChatGPT lists both SharedBoard events, and its native task tooling discovered the message event and board filter. Activation returned an unexpected task-service error, with no subscription created. Earlier ordinary-tool-catalog checks did not establish the availability of this host protocol operation. Fixed activation diagnostics now distinguish an authenticated relay attempt from discovery and omit private callback paths and signing keys. The committed callback-origin allowlist is empty, and no native production event path is verified. No provider name, successful pairing, UI rendering, or protocol fixture replaces a real host/account send/read/reply test. SharedBoard does not introduce a downloaded helper or replacement hosted model to work around unsupported delivery.
+Native task discovery belongs to the AI host; it is not an ordinary board tool. Inspecting only a regular tool catalog cannot establish whether the host exposes that capability. No provider name, successful pairing, UI rendering, or protocol fixture replaces a real account send/read/reply test. Unsupported clients remain limited to their verified tools or experimental finite mode, without a downloaded helper or replacement hosted model.
 
 A missing receipt remains uncertain. Keep its original request ID, check the linked conversation, and use the same request for any safe retry. Never change its saved attachment or automatically switch delivery modes after an uncertain attempt. Do not repeat work or overwrite an existing answer when a request was already handled.
 
 ## Permissions and revocation
 
-Read-only access permits inspection and replies, while requested-edit access permits authorized drawing changes with version checks. **Discuss** requests explanation only. **Request work** authorizes the specific work described by the user, within the granted permission. Nothing written or embedded on the drawing independently authorizes actions.
+Read-only access permits inspection and replies, while requested-edit access permits authorized drawing changes with version checks. **Discuss** permits explanation and posting its actual board reply, but no drawing or code work. **Request work** authorizes the specific typed task; drawing edits additionally require the drawing grant. Nothing written or embedded on the drawing independently authorizes actions.
 
 A connection belongs to one board. Captured requests remain pinned to that connection even after switching boards. Disconnecting revokes access and leaves saved board data and messages intact. A new connection must not inherit private credentials or silently answer the previous connection’s requests.
 

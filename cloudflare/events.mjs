@@ -105,7 +105,10 @@ async function signedRequest(subscription,body,id,options){
   const destination=callbackUrl(subscription.url,options),timestamp=String(Math.floor(options.now()/1000));
   const secrets=[subscription.secret,...(subscription.previousSecret&&subscription.previousSecretUntil>options.now()?[subscription.previousSecret]:[])];
   const signatures=await Promise.all(secrets.map(secret=>signature(secret,id,timestamp,body)));
-  return options.callbackFetch(destination,{method:'POST',redirect:'manual',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json','Accept':'application/json','Cache-Control':'no-store','webhook-id':id,'webhook-timestamp':timestamp,'webhook-signature':signatures.join(' '),'X-MCP-Subscription-Id':subscription.id},body});
+  // Workers' native fetch rejects an unrelated method receiver. Invoke the
+  // injected fetch function detached, preserving its ordinary fetch interface.
+  const send=options.callbackFetch;
+  return send(destination,{method:'POST',redirect:'manual',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json','Accept':'application/json','Cache-Control':'no-store','webhook-id':id,'webhook-timestamp':timestamp,'webhook-signature':signatures.join(' '),'X-MCP-Subscription-Id':subscription.id},body});
 }
 async function smallJson(response){
   if(!response.body)throw failure('The provider callback did not return a verification challenge.',-32015,{reason:'challenge_failed'});
