@@ -66,6 +66,28 @@ test('revocation during wait setup cannot leave a timer or consumer active after
  const pending=f.live.wait();await entering;const clearing=f.live.clear();release();await clearing;assert.equal((await pending).status,'stopped');assert.equal(await f.live.status(),null);assert.equal(f.timers.size,0);assert.equal(await f.storage.get(f.live.key),undefined);await assert.rejects(f.live.wait(),error=>error.code==='LIVE_SESSION_NOT_WAITING');
 });
 
+test('Pause after the wait commits but before activation settles its exact consumer and preserves prior claims',{timeout:1000},async()=>{
+ const f=fixture(),first=await waiting(f.live),claimed=request(first.state.id);await f.live.queue(claimed);await first.pending;await f.live.stop({sessionId:first.state.id});const claims=(await f.storage.get(f.live.key)).requests;
+ const original=f.storage.transaction.bind(f.storage);let entered,release;const entering=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{release=resolve;});let hold=true;
+ // Durable Object scheduling may admit Pause after the transaction commits
+ // while wait() has not yet attached the returned session ID to its waiter.
+ f.storage.transaction=async operation=>{const result=await original(operation);if(hold&&result?.session){hold=false;entered();await gate;}return result;};
+ const pending=f.live.wait({waitMs:1000});await entering;const saved=await f.storage.get(f.live.key),sessionId=saved.session.id;assert.equal(f.live.waiter.sessionId,null);
+ const stopped=await f.live.stop({sessionId});assert.equal(stopped.status,'stopped');assert.equal(f.live.waiter,null);release();assert.equal((await pending).status,'stopped');assert.equal(f.timers.size,0);
+ await f.advance(1000);assert.equal((await f.live.status()).status,'stopped');assert.equal((await f.live.wait({sessionId,waitMs:1})).status,'stopped');assert.deepEqual((await f.storage.get(f.live.key)).requests,claims);
+});
+
+test('Pause or revocation resolves an activated wait while its initial status publication is delayed',{timeout:1000},async()=>{
+ for(const operation of ['stop','clear']){
+  const f=fixture();let entered,release,first=true;const entering=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{release=resolve;});
+  // Only the first publication is held; the stop/clear publication itself
+  // remains healthy, as it would during an independently delayed broadcast.
+  f.options.onChange=async()=>{if(first){first=false;entered();await gate;}};
+  const pending=f.live.wait({waitMs:1000});await entering;const sessionId=(await f.live.status()).id;
+  try{if(operation==='stop')await f.live.stop({sessionId});else await f.live.clear();assert.equal((await pending).status,'stopped');assert.equal(f.live.waiter,null);assert.equal(f.timers.size,0);assert.equal(operation==='stop'?(await f.live.status()).status:await f.live.status(),operation==='stop'?'stopped':null);}finally{release();}
+ }
+});
+
 test('cancellation during a durable claim never returns executable work and retains its claimed ID without replay',async()=>{
  const f=fixture(),aborter=new AbortController(),active=await waiting(f.live,{}, {signal:aborter.signal}),original=f.storage.transaction.bind(f.storage);let entered,release;const entering=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{release=resolve;});let hold=true;
  f.storage.transaction=operation=>original(transaction=>operation({...transaction,put:async(...args)=>{if(hold){hold=false;entered();await gate;}return transaction.put(...args);}}));
