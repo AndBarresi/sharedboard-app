@@ -57,8 +57,8 @@ Choose **Connect an AI**, select your app and its board access, then prepare the
 
 Your AI app must support remote MCP tools; availability depends on its capabilities and your plan. Selecting Codex, ChatGPT, Claude, or another client in SharedBoard does not enable tools that the client does not support.
 
-- **Ordinary clients:** use **Copy to AI** for each saved board request, then paste it into the linked chat. The assistant reads its captured context and posts an actual reply back to the mini chat.
-- **Supported hosted Work Cloud clients:** automatic delivery is available only when their MCP event capabilities are connected and verified. A successful pairing alone does not prove automatic delivery works.
+- **Mini chat for connected clients:** draft in **Talk it through**, then use **Copy to AI** and paste the saved request into your linked chat. The assistant reads its captured context and posts an actual reply back to the mini chat. This works with both read-only and requested-edit drawing access.
+- **Automatic delivery:** available when the active connection’s incoming MCP event capabilities are connected and verified. A successful pairing or provider choice alone does not prove automatic delivery works; manual mini chat remains available without it.
 
 Keep the board tab open while your AI reads or edits it. The board saves context before sending, shows delivery and replies separately, and preserves conflicts for you to resolve. SharedBoard connects your existing model; it does not host another model or include an AI subscription. Context you share passes through the Cloudflare relay to the connected AI service.
 

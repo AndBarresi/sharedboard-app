@@ -22,7 +22,7 @@ Your board and chat history stay in this browser profile, while the relay proces
 | Request received | The connected AI read the saved request, or a supported event delivery was acknowledged. |
 | Reply received | The AI explicitly posted an answer using the board reply tool. |
 
-Ordinary remote MCP clients use the explicit **Copy to AI** workflow. Automatic requests are enabled only for a supported hosted Work Cloud client with the required MCP event capabilities. Pairing and a successful protocol fixture alone do not establish that a particular provider/account supports automatic delivery.
+Connected remote MCP clients can use the mini-chat composer and its explicit **Copy to AI** workflow with either read-only or requested-edit drawing access. Their assistant reads the saved request through the board tools and posts an actual reply back into the mini chat. Automatic delivery is checked separately against the active connection’s verified MCP event capabilities. Pairing and a successful protocol fixture alone do not establish that a particular provider/account supports automatic delivery, and a client name must not disable manual mini chat.
 
 A missing receipt remains uncertain. Keep its original request ID, check the linked conversation, and use the same request for any safe retry. Never change its saved attachment or automatically switch delivery modes after an uncertain attempt. Do not repeat work or overwrite an existing answer when a request was already handled.
 

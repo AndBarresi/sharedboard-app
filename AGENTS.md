@@ -6,7 +6,7 @@ SharedBoard is a browser whiteboard at https://sharedboard.app with a hosted Clo
 
 Drawings, images, planning details, projects, history, and mini chat are stored in IndexedDB in each visitor’s browser profile. The browser is the authoritative drawing store. Relay traffic can carry selected context and tool data through Cloudflare to the connected AI service; never claim shared context remains exclusively on the device. SharedBoard does not host a model, bundle a model subscription, or create a replacement AI conversation.
 
-The website prepares a board-scoped connection for Codex, ChatGPT, Claude, or another compatible remote MCP client. Provider selection is not proof that its account supports remote tools. Ordinary clients use an explicit Copy to AI handoff. Automatic board messages are enabled only for a supported hosted Work Cloud client’s actual MCP event capabilities. Do not claim an idle chat can be woken or a provider supports automatic delivery without verifying it.
+The website prepares a board-scoped connection for Codex, ChatGPT, Claude, or another compatible remote MCP client. Provider selection is not proof that its account supports remote tools. Mini chat is available for connected clients with both read-only and requested-edit drawing grants. Ordinary clients use its explicit Copy to AI handoff, and actual replies return through the board tools. Automatic board messages require the active connection’s verified MCP event capabilities; gate automatic delivery separately from the mini-chat composer. Do not disable manual mini chat by provider name or claim an idle chat can be woken without verifying it.
 
 ## Agent connection and authority
 
