@@ -131,11 +131,12 @@ test('finite live waiting enables mini chat for both drawing permissions and exp
  }
 });
 
-test('processing keeps the draft composer but disables new sends and understanding checks',()=>{
+test('processing allows opening drafts but disables new sends and understanding checks',()=>{
  const connection=live();connection.liveSession={...connection.liveSession,status:'processing',waitExpiresAt:Date.now()-1};connection.automaticMessages=false;
- assert.match(chatButton(bubble(connection)),/disabled=/);
+ assert.doesNotMatch(chatButton(bubble(connection)),/disabled=/);
  const html=render(BoardChat,{open:true,setOpen:()=>{},onStopLive:()=>{},view:view(connection)});
  assert.match(html,/<form/);assert.match(html,/AI is not waiting right now/);assert.match(html,/your draft is kept/i);assert.match(html,/<button type="submit" disabled=""/);assert.match(html,/Waiting for AI…/);assert.match(html,/Pause live collaboration/);
+ assert.match(html,/Let’s think together/);assert.doesNotMatch(html,/Saved board requests/);
  const planning={project:{title:'Test project',areas:[],notes:[],library:[]},proposals:[],agentActions:[]};
  const check=render(PlanningPanel,{tab:'proposals',setTab:()=>{},getSync:()=>{},onClose:()=>{},onDiscuss:()=>{},view:{...view(connection),planning}});
  assert.match(check,/<button class="primary-button" disabled="" title="The AI is not waiting/);

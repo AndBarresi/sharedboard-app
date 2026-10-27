@@ -22,8 +22,8 @@ export class LiveSession{
   if(this.waiter!==waiter)return;
   let result;try{result=await this.storage.transaction(async transaction=>{
    const state=await this.load(transaction),session=state.session;if(!session||session.id!==waiter.sessionId)return {sessionId:waiter.sessionId,boardId:this.boardId,connectionId:this.connectionId,status:'stopped',requests:[],expiresAt:new Date(waiter.expiresAt??this.now()).toISOString()};
-   const status=session.expiresAt<=this.now()?'expired':requestedStatus;
-   if(session.waitId!==waiter.id&&requestedStatus==='timeout'&&status!=='expired')return null; // A committed claim wins over its old timeout.
+   const status=session.expiresAt<=this.now()?'expired':session.status==='stopped'?'stopped':requestedStatus;
+   if(session.waitId!==waiter.id&&requestedStatus==='timeout'&&!['stopped','expired'].includes(status))return null; // A committed claim wins over its old timeout; a stopped session remains terminal.
    if(session.waitId===waiter.id||['stopped','expired'].includes(status)&&this.waiter===waiter){session.status=status==='timeout'?'processing':status;session.waitId=null;session.waitExpiresAt=null;await transaction.put(this.key,state);}
    return this.response(session,status);
   });}catch{
@@ -58,7 +58,7 @@ export class LiveSession{
    if(this.closed||waiter.cancelled){await this.finish(waiter,'stopped');return promise;}
    waiter.abort=()=>{waiter.cancelled=true;void this.finish(waiter,'stopped');};signal?.addEventListener('abort',waiter.abort,{once:true});
    waiter.timer=(this.options.setTimer??setTimeout)(()=>this.finish(waiter,'timeout'),Math.max(0,prepared.session.waitExpiresAt-this.now()));
-   if(signal?.aborted)waiter.abort();await this.changed();return promise;
+   if(signal?.aborted)waiter.abort();await Promise.race([this.changed(),promise]);return promise;
   }catch(error){if(this.waiter===waiter){this.waiter=null;(this.options.clearTimer??clearTimeout)(waiter.timer);if(waiter.abort)signal?.removeEventListener('abort',waiter.abort);}if(typeof error?.code==='string'&&error.code.startsWith('LIVE_'))throw error;const category=error?.name==='AbortError'?'CANCELLED':error?.name==='TypeError'?'TYPE_ERROR':'RUNTIME_ERROR';throw fail('Live collaboration could not prepare or activate its bounded wait.',500,`LIVE_WAIT_${phase}_${category}`);}
  }
  async queue(input){
@@ -80,8 +80,8 @@ export class LiveSession{
  }
  async stop(input={}){
   const sessionId=uuid(input.sessionId,'live session ID');
-  const result=await this.storage.transaction(async transaction=>{const state=await this.load(transaction),session=state.session;if(!session||session.id!==sessionId)throw fail('That live session was replaced. Refresh the board connection.',409,'LIVE_SESSION_REPLACED');session.status=session.expiresAt<=this.now()?'expired':'stopped';session.waitId=null;session.waitExpiresAt=null;await transaction.put(this.key,state);return this.response(session,session.status);});
-  if(this.waiter?.sessionId===sessionId)this.settle(this.waiter,result);await this.changed();return result;
+  const {result,waitId}=await this.storage.transaction(async transaction=>{const state=await this.load(transaction),session=state.session;if(!session||session.id!==sessionId)throw fail('That live session was replaced. Refresh the board connection.',409,'LIVE_SESSION_REPLACED');const waitId=session.waitId;session.status=session.expiresAt<=this.now()?'expired':'stopped';session.waitId=null;session.waitExpiresAt=null;await transaction.put(this.key,state);return {result:this.response(session,session.status),waitId};});
+  const waiter=this.waiter;if(waiter&&(waiter.sessionId===sessionId||waitId&&waiter.id===waitId)){waiter.cancelled=true;this.settle(waiter,result);}await this.changed();return result;
  }
  async clear(){this.closed=true;const waiter=this.waiter;if(waiter)waiter.cancelled=true;await this.storage.transaction(async transaction=>{await transaction.delete(this.key);});if(waiter?.sessionId)this.settle(waiter,{sessionId:waiter.sessionId,boardId:this.boardId,connectionId:this.connectionId,status:'stopped',requests:[],expiresAt:new Date(waiter.expiresAt??this.now()).toISOString()});await this.changed();}
 }

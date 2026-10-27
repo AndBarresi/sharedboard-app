@@ -1,6 +1,23 @@
 {
-  "version": "0.10.2",
+  "version": "0.10.4",
   "entries": [
+    {
+      "version": "0.10.4",
+      "title": "Keep chat drafts accessible while the AI is busy",
+      "added": [],
+      "fixed": [
+        "Active live sessions keep the chat bubble and toolbar chat available for drafting between waits; sending still requires an actual listener."
+      ]
+    },
+    {
+      "version": "0.10.3",
+      "title": "Reliable live-session pause and clearer review status",
+      "added": [],
+      "fixed": [
+        "Pausing during wait activation settles the exact pending consumer and preserves earlier request claims.",
+        "Keep the mini-chat title stable while the AI is busy and show accepted review requests without directing users away from the board."
+      ]
+    },
     {
       "version": "0.10.2",
       "title": "Preserve new chat drafts and diagnose transport failures",
@@ -307,5 +324,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "a48a0aa4cada5c846f637b2b37178277e260ebf9c583b09667a2ba072f119cef"
+  "sourceHash": "c9f72d103172343d60426ca4c6aae4114d9a84eafa897ed0eca81ae6e176adfc"
 }

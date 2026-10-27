@@ -1,5 +1,18 @@
 # SharedBoard.app changelog
 
+## 0.10.4 — Keep chat drafts accessible while the AI is busy
+
+### Fixed
+
+- Active live sessions keep the chat bubble and toolbar chat available for drafting between waits; sending still requires an actual listener.
+
+## 0.10.3 — Reliable live-session pause and clearer review status
+
+### Fixed
+
+- Pausing during wait activation settles the exact pending consumer and preserves earlier request claims.
+- Keep the mini-chat title stable while the AI is busy and show accepted review requests without directing users away from the board.
+
 ## 0.10.2 — Preserve new chat drafts and diagnose transport failures
 
 ### Fixed
