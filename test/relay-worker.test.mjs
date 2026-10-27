@@ -32,7 +32,7 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
  try{
   await mf.ready;assert.equal((await http('/health')).data.product,'SharedBoard Relay');const denied=await mf.dispatchFetch(`${origin}/browser/pair`,{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'});assert.equal(denied.status,403);
   // Provider setup names cannot grant extra access or silently reinterpret legacy IDs.
-  for(const [provider,label] of [['codex','Codex'],['claude','Claude (web)'],['chatgpt','ChatGPT'],['other','Other MCP client']]){
+  for(const [provider,label] of [['codex','Codex'],['claude','Claude (web)'],['chatgpt','ChatGPT Work Cloud'],['other','Other MCP client']]){
    const prepared=await http('/browser/pair',{boardId:crypto.randomUUID(),title:'Isolated provider setup',provider,permission:'read',clientId:'isolated-client'});
    assert.equal(prepared.response.status,200,JSON.stringify(prepared.data));assert.equal(prepared.data.connection.provider,provider);assert.equal(prepared.data.connection.permission,'read');assert.equal(prepared.data.connection.connected,false);assert.equal(prepared.data.connection.automaticMessages,false);assert.equal(prepared.data.connection.eventExpiresAt,null);assert.ok(prepared.data.setup.prompt.startsWith(`Connect this existing ${label} conversation`));
   }

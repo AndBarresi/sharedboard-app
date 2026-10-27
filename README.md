@@ -53,29 +53,26 @@ SharedBoard runs in the browser. There is no SharedBoard application or companio
 
 ## Connect the AI conversation you already use
 
-Choose **Connect an AI**, select your app and its board access, then prepare the connection. SharedBoard provides a hosted MCP server URL to add in your AI app and pairing instructions to paste into the conversation you want to keep using. Follow [the connection guide](CONNECTIONS.md).
+The recommended automatic connection is **ChatGPT Work with Cloud selected**, using native event-triggered tasks:
 
-Your AI app must support remote MCP tools; availability depends on its capabilities and your plan. Selecting Codex, ChatGPT, Claude, or another client in SharedBoard does not enable tools that the client does not support.
+1. Choose **Connect an AI → ChatGPT Work Cloud**, select drawing access, and prepare the connection.
+2. Add the website's generated MCP URL in ChatGPT and approve access to the intended board.
+3. Paste SharedBoard's one-time instructions into the existing Work Cloud conversation. They pair, read, and confirm the board, then create or update the message and review tasks sequentially.
+4. Return to SharedBoard. Use **Talk it through** for a question or specific request, and **Ask AI to look** for a captured board review. Actual answers return to the page; individual requests need no copying or Send click in ChatGPT.
 
-Once connected, ask the assistant **in your existing AI conversation** to read the board, explain the current plan, or make a drawing change you request. Read-only access supports inspection and replies; drawing changes require requested-edit access. Keep the browser board open while it uses the tools.
+Your account must expose native event tasks. A provider label never enables delivery by itself: the website checks the actual subscriptions. Keep the board tab open because it owns the saved drawing and captures. Read-only drawing access allows inspection and replies; requested drawing changes require edit access. Follow [the connection guide](CONNECTIONS.md).
 
-### Experimental Live collaboration
+**What has been verified:** native delivery woke an ended AI turn and returned a real board reply. Further mini-chat and review tests completed with the AI browser tabs closed, with no timed waiting session active.
 
-After pairing, open **Start live collaboration · experimental** in the website's connection details and use **Copy start instructions** once in that same AI conversation. This asks the existing AI run to wait for board requests. Individual mini-chat messages and **Ask AI to look** requests need no copying while the session is actually waiting.
+**What still needs acceptance:** reading a request or answering only in AI chat does not deliver a board reply. Burst reply handling has required a task-prompt repair requested from the website. The strengthened delivery contract, pending-reply guard, fresh setup, and further idle use are being tested. Long-term renewal and other accounts/providers remain unverified; this is a testing beta, not a promise of permanent or bug-free connectivity.
 
-| During a live session | What to expect |
-| --- | --- |
-| **Active AI run required** | The assistant waits through a normal remote MCP tool; SharedBoard cannot wake a closed or ended run. |
-| **Finite session** | Each wait defaults to 40 seconds, is capped at 45 seconds, and the session ends after at most 20 minutes. |
-| **Send when waiting** | New sends open only while the backend observes an actual wait. Your draft stays when the AI is processing or no longer waiting. |
-| **Pause from the website** | Choose **Pause live collaboration** in connection details or the mini chat. Restart only when you choose to start another session. |
-| **Normal AI usage** | Empty waits still require model continuations and can use subscription allowance and context. |
+### Other AI clients
 
-**Reliable provider acceptance is still outstanding.** In one ChatGPT Work Cloud test, browser Discuss messages received actual model answers and a board review completed without a per-request Send click in the AI app. An earlier continuation failed and required explicit resumption, so these successful requests do not establish dependable operation. Other accounts and clients still need testing. This is an experimental active-session technique, with no SharedBoard downloads or hosted replacement model. Follow [the connection guide](CONNECTIONS.md) for the test boundary.
+Compatible remote MCP clients can read the board and make authorized edits from their own conversations. Their **Live collaboration · experimental** option uses a finite active AI run: waits default to 40 seconds, allow up to 45 seconds, and share a 20-minute deadline. New sends require an actual pending wait. Empty continuations can use AI allowance, and an ended run needs another explicit start. The website preserves drafts and provides **Pause live collaboration**. This mode still needs provider-specific acceptance testing.
 
-The other delivery paths remain unverified. In both the older and fresh ChatGPT Work Cloud conversations tested on this account, no native incoming-event subscription interface was exposed; this does not establish a limitation for every account. The committed native-event callback allowlist is empty. In the Claude MCP Apps test, `ui/message` filled a composer draft and still required Send in Claude. That panel remains diagnostic and does not enable automatic mini chat. See [connection behavior](BRIDGE.md).
+Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. It does not enable automatic mini chat. See [connection behavior](BRIDGE.md).
 
-Keep the board tab open while your AI reads or edits it. Saved requests retain their captured context, delivery and replies are separate states, and overlapping drawing edits remain visible for you to resolve. SharedBoard connects your existing model; it does not host another model or include an AI subscription. Context you share passes through the Cloudflare relay to the connected AI service.
+SharedBoard uses your existing AI account/conversation through the relay. The AI provider controls model execution and task settings; tasks are not guaranteed to use the model manually selected in a chat. SharedBoard does not host a replacement model or include an AI subscription. Shared context passes through Cloudflare to the connected AI service. Saved requests keep their original captures, and delivery, reading, and actual replies remain distinct states.
 
 Use **Projects & boards** to delete a board or project only after reviewing its confirmation. Project deletion includes every board it contains and revokes those boards’ connections. This permanently removes their local drawings, notes, saved messages, and recovery history. Export wanted backups first. Unrelated boards remain available, and deleting the final board creates a blank board to continue in.
 

@@ -5,6 +5,7 @@ import {realpathSync} from 'node:fs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {chatStorageKey} from '../src/chat-format.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const require=createRequire(import.meta.url),requireWrangler=createRequire(realpathSync(new URL('../node_modules/wrangler/package.json',import.meta.url)));
@@ -81,9 +82,9 @@ test('message expiry controls rendered mini chat independently of an earlier rev
 test('connection choices put coding clients first and distinguish mini-chat availability',()=>{
  const html=render(CloudConnectionSetup,{online:true,onClose:()=>{}});
  const choices=html.match(/<div class="ai-choices">([\s\S]*?)<\/div>/)?.[1]??'';
- assert.deepEqual([...choices.matchAll(/<strong>([^<]+)<\/strong>/g)].map(match=>match[1]),['Codex','Claude Code','ChatGPT','Claude (web)','Other MCP client']);
+ assert.deepEqual([...choices.matchAll(/<strong>([^<]+)<\/strong>/g)].map(match=>match[1]),['Codex','Claude Code','ChatGPT Work Cloud','Claude (web)','Other MCP client']);
  assert.equal([...choices.matchAll(/class="client-mini-badge /g)].length,5);
- assert.equal([...choices.matchAll(/Live mini chat · AI session must stay active/g)].length,5);
+ assert.equal([...choices.matchAll(/Live mini chat · AI session must stay active/g)].length,4);assert.match(choices,/Automatic mini chat · native event setup/);
  assert.match(choices,/Experimental/);assert.match(choices,/only fill a composer draft/);
  assert.doesNotMatch(choices,/Mini chat unavailable|Mini chat needs verification/);
 });
@@ -173,4 +174,34 @@ test('start instructions resume the exact active live ID and only omit it after 
  for(const liveSession of [undefined,{...original.liveSession,status:'stopped'},{...original.liveSession,status:'expired'},{...original.liveSession,status:'processing',expiresAt:Date.now()-1}]){
   const text=instructions({...original,liveSession});assert.match(text,/without sessionId on the first call/);assert.doesNotMatch(text,/Resume the current live session/);assert.ok(!text.includes(original.liveSession.id));
  }
+});
+
+test('connected ChatGPT offers native Work Cloud setup while real subscription state still gates sending',()=>{
+ const props={online:true,onClose:()=>{},onStopLive:()=>{}},connection={id:'native-connection',boardId:board.id,provider:'chatgpt',connected:true,permission:'read',automaticMessages:false,deliveryMode:'manual'};
+ const html=render(CloudConnectionSetup,{...props,connection});
+ assert.match(html,/Native mini chat · setup needed/);assert.match(html,/Work with Cloud selected/);assert.match(html,/Set up automatic ChatGPT delivery/);assert.match(html,/Copy native setup instructions/);
+ const instructions=html.match(/<textarea aria-label="Native ChatGPT setup instructions"[^>]*>([\s\S]*?)<\/textarea>/)?.[1]??'';
+ assert.ok(instructions.includes(board.id));assert.match(instructions,/sharedboard\.message\.created/);assert.match(instructions,/sharedboard\.review\.requested/);assert.match(instructions,/sequentially, never in parallel/);assert.doesNotMatch(instructions,/wait_for_board_request|20 minutes/);
+ assert.doesNotMatch(html,/Start live collaboration · experimental|Copy start instructions/);assert.match(testButton(html),/disabled=/);assert.match(chatButton(bubble(connection)),/disabled=/);
+ assert.match(html,/Your AI app controls model execution and settings/);assert.doesNotMatch(html,/Keep your existing conversation and model/);
+ const available={...connection,...active({provider:'chatgpt'})};assert.doesNotMatch(testButton(render(CloudConnectionSetup,{...props,connection:available})),/disabled=/);assert.doesNotMatch(chatButton(bubble(available)),/disabled=/);
+ const expired={...available,messageExpiresAt:Date.now()-1};assert.match(testButton(render(CloudConnectionSetup,{...props,connection:expired})),/disabled=/);assert.match(chatButton(bubble(expired)),/disabled=/);
+ const offline=render(CloudConnectionSetup,{...props,connection:{...connection,browserOnline:false}});assert.match(offline,/<strong>Mini chat offline<\/strong>/);assert.match(offline,/Keep this board connected to the relay before testing delivery/);assert.doesNotMatch(offline,/<strong>Native mini chat · setup needed<\/strong>/);
+});
+
+test('an older ChatGPT live session retains Pause while its setup instructions use native tasks',()=>{
+ const props={online:true,onClose:()=>{},onStopLive:()=>{}},connection=live({id:'old-live-connection',boardId:board.id,provider:'chatgpt'}),html=render(CloudConnectionSetup,{...props,connection});
+ assert.match(html,/Live AI session · waiting/);assert.match(html,/Pause live collaboration/);assert.match(html,/Native ChatGPT setup instructions/);assert.match(html,/sharedboard\.message\.created/);assert.doesNotMatch(html,/wait_for_board_request|Start live collaboration · experimental/);
+});
+
+test('an outstanding native answer keeps drafts and history open while preventing another send',()=>{
+ const connection=active({id:'native-chat-connection',boardId:board.id,provider:'chatgpt'}),message={id:'native-first',connectionId:connection.id,boardId:board.id,boardRevision:3,intent:'discuss',text:'First native question',delivery:'queued',receipt:'evt_chat_native-first'};
+ const originalStorage=globalThis.sessionStorage;globalThis.sessionStorage={getItem:key=>key===chatStorageKey(board.id,'draft')?'Keep my next question':null};
+ try{
+  const props={open:true,setOpen:()=>{},view:{...view(connection),messages:[message]}},blocked=render(BoardChat,props);
+  assert.match(blocked,/Waiting for the previous reply/);assert.match(blocked,/Your next draft is kept here/);assert.match(blocked,/aria-label="Message the connected model"[^>]*>Keep my next question<\/textarea>/);assert.doesNotMatch(blocked,/<textarea[^>]*disabled=/);
+  assert.match(blocked,/<button type="submit" disabled=""[^>]*>[\s\S]*?Waiting for reply…<\/button>/);assert.match(blocked,/First native question/);assert.doesNotMatch(chatButton(render(BoardChat,{...props,open:false})),/disabled=/);
+  const completed=render(BoardChat,{...props,view:{...props.view,messages:[{...message,status:'answered',reply:'Actual model answer'}]}});assert.doesNotMatch(completed,/Waiting for the previous reply/);assert.match(completed,/Actual model answer/);assert.match(completed,/Keep my next question/);assert.doesNotMatch(completed,/<button type="submit" disabled=/);
+  const stale=render(BoardChat,{...props,view:{...props.view,messages:[{...message,connectionId:'previous-connection'}]}});assert.doesNotMatch(stale,/Waiting for the previous reply/);
+ }finally{if(originalStorage===undefined)delete globalThis.sessionStorage;else globalThis.sessionStorage=originalStorage;}
 });

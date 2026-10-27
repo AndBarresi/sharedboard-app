@@ -64,10 +64,18 @@ export function isAcceptedChatMessage(message){
   // historical queued Codex receipts without accepting arbitrary truthy objects.
   return hasText(message.receipt)||Boolean(message.receipt?.provider==='codex-cli'&&hasText(message.receipt.queueMessageId));
 }
+export const CHAT_REPLY_PENDING_MESSAGE='Waiting for the previous reply. Your next draft is kept here.';
+export function nativeChatAwaitingReply(messages,connection,exceptId){
+  if(!connection?.id)return null;
+  return (messages??[]).find(message=>message&&message.id!==exceptId&&message.connectionId===connection.id&&(!connection.boardId||!message.boardId||message.boardId===connection.boardId)&&!(typeof message.reply==='string'&&message.reply.trim())&&(
+    typeof message.id==='string'&&message.receipt===`evt_chat_${message.id}`||
+    message.deliveryMode==='events'&&['pending','uncertain'].includes(message.delivery)
+  ))??null;
+}
 export function shouldResetChatCapture(error){
   // An ambiguous delivery may already be running. Preserve its original ID and
   // attachment even when retry reports a conflict after events expire.
-  return !error?.deliveryUnknown&&!String(error?.code??'').startsWith('LIVE_')&&!['DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED','DIRECT_DELIVERY_UNAVAILABLE','PANEL_DIRECT_DELIVERY_UNAVAILABLE'].includes(error?.code)&&[400,409,413].includes(error?.status);
+  return !error?.deliveryUnknown&&!String(error?.code??'').startsWith('LIVE_')&&!['CHAT_REPLY_PENDING','DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED','DIRECT_DELIVERY_UNAVAILABLE','PANEL_DIRECT_DELIVERY_UNAVAILABLE'].includes(error?.code)&&[400,409,413].includes(error?.status);
 }
 export function isPreparedContextStale(context,board,planning){
   if(!context)return false;

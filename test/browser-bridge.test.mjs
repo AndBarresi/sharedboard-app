@@ -150,6 +150,30 @@ test('mini chat persists before delivery, pins immutable PNG and notes, and retu
  }finally{t.close();}
 });
 
+test('native chat reserves one outstanding reply atomically across tabs before delivery accepts a receipt',async()=>{
+ const {t,bridge,config}=await fixture('read',{BroadcastChannel:TestChannel});let second,reopened,release;
+ try{
+  Object.assign(bridge.connection,{deliveryMode:'events',messageExpiresAt:new Date(Date.now()+60000).toISOString()});await t.bridgeStatus();
+  second=await createBrowserTransport(config);await second.ready();
+  const firstInput=await capture(t,{text:'First native question',intent:'discuss',automaticRequired:true}),nextInput=await capture(second,{text:'Keep the next draft',intent:'discuss',automaticRequired:true});
+  let entered;const notifying=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{release=resolve;});
+  bridge.onNotify=async body=>{if(body.kind==='chat'&&body.id===firstInput.id){entered();await gate;}};
+  const sending=call(t,'/api/chat',firstInput);await notifying;
+  const staged=(await call(second,'/api/chat')).messages;assert.equal(staged.length,1);assert.equal(staged[0].delivery,'pending');assert.equal(staged[0].deliveryMode,'events');assert.equal(staged[0].receipt,undefined);
+  await assert.rejects(call(second,'/api/chat',nextInput),error=>error.status===409&&error.code==='CHAT_REPLY_PENDING');
+  assert.deepEqual((await call(t,'/api/chat')).messages,staged,'a rejected new send creates no capture or altered original record');assert.equal(bridge.notifyCount,1);
+  const review=await call(second,'/api/reviews',await capture(second,{automaticRequired:true}));assert.equal(review.request.delivery,'queued','the chat guard does not change board reviews');
+  release();const accepted=await sending;assert.equal(accepted.messages[0].receipt,`evt_chat_${firstInput.id}`);
+  for(const [path,input] of [['/api/chat',firstInput],['/api/chat/retry',{id:firstInput.id}]]){const status=await call(second,path,input);assert.equal(status.messages.length,1);assert.equal(status.messages[0].id,firstInput.id);assert.equal(status.messages[0].delivery,'queued');}
+  assert.equal(bridge.notifyCount,2,'same-ID status retries never replay accepted native work');
+  await bridge.command('read_chat_message',{id:firstInput.id});await assert.rejects(call(second,'/api/chat',nextInput),error=>error.code==='CHAT_REPLY_PENDING');
+  await bridge.command('reply_to_chat_message',{id:firstInput.id,text:'The actual first answer returns to the board.'});
+  const next=await call(second,'/api/chat',nextInput);assert.equal(next.messages.length,2);assert.equal(next.messages[1].id,nextInput.id);assert.equal(next.messages[1].text,nextInput.text);assert.equal(next.messages[0].reply,'The actual first answer returns to the board.');assert.equal(bridge.notifyCount,3);
+  second.close();second=null;t.close();await wait(()=>bridge.owner===null);reopened=await createBrowserTransport(config);await reopened.ready();
+  const before=(await call(reopened,'/api/chat')).messages;await assert.rejects(call(reopened,'/api/chat',await capture(reopened,{text:'Third draft after reopening',intent:'discuss',automaticRequired:true})),error=>error.code==='CHAT_REPLY_PENDING');assert.deepEqual((await call(reopened,'/api/chat')).messages,before);assert.equal(bridge.notifyCount,3);
+ }finally{release?.();t.close();second?.close();reopened?.close();}
+});
+
 test('ambiguous delivery retains request ID, uses idempotent queue receipt and never silently retargets another connection',async()=>{
  const {t,bridge}=await fixture();try{
   const input=await capture(t,{text:'Discuss the board',intent:'discuss'});bridge.loseReceipt=true;let out=await call(t,'/api/chat',input);assert.equal(out.messages[0].delivery,'uncertain');assert.equal(out.messages[0].status,'waiting');assert.equal(bridge.receipts.size,1);
@@ -186,6 +210,7 @@ test('cached capability flags route new requests by their own deadlines instead 
   Object.assign(bridge.connection,{automaticMessages:true,automaticReviews:true,messageExpiresAt:future,reviewExpiresAt:past,eventExpiresAt:past});await t.bridgeStatus();
   const chat=await call(t,'/api/chat',await capture(t,{text:'An active chat survives an expired review subscription.',intent:'discuss'})),review=await call(t,'/api/reviews',await capture(t));
   assert.equal(chat.messages[0].delivery,'queued');assert.equal(chat.automaticMessages,true);assert.equal(review.request.delivery,'manual');assert.equal(review.automaticMessages,false);
+  await bridge.command('read_chat_message',{id:chat.messages[0].id});await bridge.command('reply_to_chat_message',{id:chat.messages[0].id,text:'The original chat request is complete before testing the next subscription deadline.'});
   const notifications=bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').map(request=>JSON.parse(request.body).kind);assert.deepEqual(notifications,['chat']);
   Object.assign(bridge.connection,{messageExpiresAt:past,reviewExpiresAt:future});await t.bridgeStatus();
   const newChat=await call(t,'/api/chat',await capture(t,{text:'This new request needs a manual handoff after chat expiry.',intent:'discuss'})),newReview=await call(t,'/api/reviews',await capture(t));

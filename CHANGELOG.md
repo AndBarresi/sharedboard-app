@@ -1,5 +1,35 @@
 # SharedBoard.app changelog
 
+## 0.11.0 — Automatic ChatGPT Work Cloud collaboration
+
+### Added
+
+- Set up native ChatGPT Work Cloud event tasks once, then receive mini-chat replies and board reviews on the website after the AI setup turn ends.
+- Keep the next draft while a native mini-chat answer is pending, with the same protection across browser tabs.
+
+### Fixed
+
+- Verify the approved OpenAI callback using a correctly bound native fetch in Cloudflare Workers.
+- Require a complete board reply for every delivered message, including batched event requests, and preserve matching tasks during setup.
+
+## 0.10.7 — Fix native callback delivery on Cloudflare
+
+### Fixed
+
+- Invoke the native callback fetch function without an incorrect receiver so signed verification and event delivery can reach the provider.
+
+## 0.10.6 — Configure the observed OpenAI event callback
+
+### Fixed
+
+- Allow the exact OpenAI callback origin observed during a real native event activation; signed challenge verification and board-scoped authorization remain required.
+
+## 0.10.5 — Diagnose native event activation safely
+
+### Fixed
+
+- Connection diagnostics distinguish native event activation attempts from discovery and report fixed outcomes without storing private callback paths, signing keys or request content.
+
 ## 0.10.4 — Keep chat drafts accessible while the AI is busy
 
 ### Fixed

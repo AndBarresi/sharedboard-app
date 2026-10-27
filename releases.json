@@ -1,6 +1,42 @@
 {
-  "version": "0.10.4",
+  "version": "0.11.0",
   "entries": [
+    {
+      "version": "0.11.0",
+      "title": "Automatic ChatGPT Work Cloud collaboration",
+      "added": [
+        "Set up native ChatGPT Work Cloud event tasks once, then receive mini-chat replies and board reviews on the website after the AI setup turn ends.",
+        "Keep the next draft while a native mini-chat answer is pending, with the same protection across browser tabs."
+      ],
+      "fixed": [
+        "Verify the approved OpenAI callback using a correctly bound native fetch in Cloudflare Workers.",
+        "Require a complete board reply for every delivered message, including batched event requests, and preserve matching tasks during setup."
+      ]
+    },
+    {
+      "version": "0.10.7",
+      "title": "Fix native callback delivery on Cloudflare",
+      "added": [],
+      "fixed": [
+        "Invoke the native callback fetch function without an incorrect receiver so signed verification and event delivery can reach the provider."
+      ]
+    },
+    {
+      "version": "0.10.6",
+      "title": "Configure the observed OpenAI event callback",
+      "added": [],
+      "fixed": [
+        "Allow the exact OpenAI callback origin observed during a real native event activation; signed challenge verification and board-scoped authorization remain required."
+      ]
+    },
+    {
+      "version": "0.10.5",
+      "title": "Diagnose native event activation safely",
+      "added": [],
+      "fixed": [
+        "Connection diagnostics distinguish native event activation attempts from discovery and report fixed outcomes without storing private callback paths, signing keys or request content."
+      ]
+    },
     {
       "version": "0.10.4",
       "title": "Keep chat drafts accessible while the AI is busy",
@@ -324,5 +360,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "c9f72d103172343d60426ca4c6aae4114d9a84eafa897ed0eca81ae6e176adfc"
+  "sourceHash": "4dc05b75d32547daffd2e275cfe9788d806d7c9f97a53fb8ca156c53ebe8e45a"
 }

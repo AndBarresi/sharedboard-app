@@ -9,7 +9,7 @@
   "vars": {
     "RELAY_ORIGIN": "https://connect.sharedboard.app",
     "APP_ORIGIN": "https://sharedboard.app",
-    "EVENT_CALLBACK_ORIGINS": ""
+    "EVENT_CALLBACK_ORIGINS": "https://connectors.api.openai.com"
   },
   "durable_objects": {"bindings": [
     {"name": "BOARD_RELAY", "class_name": "BoardRelay"},
