@@ -1,5 +1,11 @@
 # SharedBoard.app changelog
 
+## 0.6.3 — Clarify local-bridge browser compatibility
+
+### Fixed
+
+- Include supported browser guidance in the on-page setup help so Mac and Windows testers know to use Chrome or Edge for the local connection.
+
 ## 0.6.2 — Keep planning navigation in one place
 
 ### Fixed

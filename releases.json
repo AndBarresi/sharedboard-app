@@ -1,6 +1,14 @@
 {
-  "version": "0.6.2",
+  "version": "0.6.3",
   "entries": [
+    {
+      "version": "0.6.3",
+      "title": "Clarify local-bridge browser compatibility",
+      "added": [],
+      "fixed": [
+        "Include supported browser guidance in the on-page setup help so Mac and Windows testers know to use Chrome or Edge for the local connection."
+      ]
+    },
     {
       "version": "0.6.2",
       "title": "Keep planning navigation in one place",
@@ -171,5 +179,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "33849aa8db0e81c21283056f48a392c30bf043f16aea56270e76ea2985eb6dd8"
+  "sourceHash": "00874815f1291e78eef1f2215563ca2ebb16d230d82a9e9891eaafed7b7cd217"
 }

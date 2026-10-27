@@ -4,7 +4,7 @@ SharedBoard Bridge connects **https://sharedboard.app** to a local Codex convers
 
 ## First-time setup
 
-1. Open SharedBoard.app and choose **Connect Codex**.
+1. Open SharedBoard.app in **Chrome or Edge** on Windows or Mac and choose **Connect Codex**. Safari bridge connections are not supported in this beta; browser-only drawing remains available. Embedded browsers vary in how they grant local-device access.
 2. Select **Windows**, **Mac · Apple Silicon**, or **Mac · Intel**, download the matching ZIP and extract the whole archive. On a Mac, **Apple menu → About This Mac** shows either a Chip (Apple Silicon) or Processor (Intel).
 3. On Windows, open **Install SharedBoard Bridge.cmd**. On Mac, open **Install SharedBoard Bridge.command**. It installs for your user without administrator access, includes Node, starts the bridge, and registers the webpage's **Open bridge** link. Mac users should read the installation approval note below.
 4. Return to the original board tab and choose **Check for bridge**. The installer starts the helper for you. On later visits, use **Open bridge** if it is stopped. If the browser asks for local access, allow it for SharedBoard.app to reach the companion on this computer.

@@ -70,6 +70,7 @@ export function BrowserBridgeSetup({connection,online,begin,cancel,disconnect,on
       </>}
       {error&&<p className="connection-error" role="alert">{error}</p>}
       <details className="bridge-help"><summary>Connection help</summary><ul>
+        <li><strong>Which browser?</strong> Use Chrome or Edge for the local bridge on Windows or Mac. Safari bridge connections are not supported in this beta; drawing in the browser remains available. Embedded browsers may also require local-device permission.</li>
         <li><strong>Bridge not found?</strong> The installer starts it once. On later visits, use Open bridge. If that link is not recognized, extract the ZIP again and run the matching installer.</li>
         <li><strong>Browser permission blocked?</strong> Open this site’s controls beside the address bar, allow local-device or local-network access if listed, then check again. The bridge runs on this computer.</li>
         <li><strong>Codex will not connect?</strong> Make sure Codex is installed, signed in, and can accept queued messages in existing chats. If queue delivery is unavailable, use Copy to Codex from the mini chat. Paste fresh connection instructions if pairing expired.</li>
