@@ -185,6 +185,42 @@ test('detection verifies the hosted relay product and failed live status does no
  }finally{t.close();}
 });
 
+test('preparing a new connection replaces an explicitly expired or revoked browser grant',async()=>{
+ for(const status of [401,403]){
+  const boardId=crypto.randomUUID(),sessionId=crypto.randomUUID(),oldToken='expired-browser-grant',newToken='fresh-browser-grant',requests=[],saves=[];
+  let state={browserToken:oldToken,sessionId:crypto.randomUUID(),connection:{boardId,connected:false}};
+  const bridge=createBrowserBridge({boardId,clientId:'browser-tab',WebSocket:null,load:async()=>state,save:async(value,options)=>{saves.push({value,options});state=value;return true;},fetch:async(url,options)=>{
+   const path=new URL(url).pathname;requests.push({path,...options});
+   if(path==='/browser/disconnect')return Response.json({error:'This board connection ended. Connect it again from SharedBoard.app.',code:'RELAY_DISCONNECTED'},{status});
+   assert.equal(path,'/browser/pair');assert.equal(options.headers['x-sharedboard-browser'],undefined);assert.deepEqual(JSON.parse(options.body),{boardId,title:'Retained browser board',provider:'chatgpt',permission:'read',clientId:'browser-tab'});
+   return Response.json({browserToken:newToken,sessionId,connection:{id:sessionId,boardId,connected:false},pairing:{code:'new-pairing-code'},setup:{prompt:'Fresh instructions'}});
+  }});
+  try{
+   assert.deepEqual(await bridge.pair({provider:'chatgpt',permission:'read'},'Retained browser board'),{pairing:{code:'new-pairing-code'},setup:{prompt:'Fresh instructions'}});
+   assert.deepEqual(requests.map(request=>request.path),['/browser/disconnect','/browser/pair']);assert.equal(requests[0].headers['x-sharedboard-browser'],oldToken);
+   assert.deepEqual(saves[0],{value:null,options:{expectedToken:oldToken}});assert.equal(state.browserToken,newToken);assert.equal(state.connection.boardId,boardId);assert.equal(saves.length,2);
+  }finally{bridge.close();}
+ }
+});
+
+test('an uncertain or unsuccessful old-grant disconnect preserves it and never prepares a replacement',async()=>{
+ for(const outcome of ['network',503,409,'unreadable','uncertain-401','uncertain-403']){
+  const boardId=crypto.randomUUID(),initial={browserToken:'existing-browser-grant',connection:{boardId,connected:true}},requests=[],saves=[];
+  let state=initial;
+  const bridge=createBrowserBridge({boardId,clientId:'browser-tab',WebSocket:null,load:async()=>state,save:async(value)=>{saves.push(value);state=value;},fetch:async(url)=>{
+   const path=new URL(url).pathname;requests.push(path);assert.equal(path,'/browser/disconnect');
+   if(outcome==='network')throw new Error('Response lost');
+   if(outcome==='unreadable')return new Response('Not JSON',{status:401});
+   const uncertain=typeof outcome==='string',status=uncertain?Number(outcome.slice(-3)):outcome;
+   return Response.json({error:'Disconnect could not be confirmed',...(uncertain?{deliveryUnknown:true}:{})},{status});
+  }});
+  try{
+   await assert.rejects(bridge.pair({provider:'chatgpt',permission:'read'},'Browser board'));
+   assert.deepEqual(requests,['/browser/disconnect'],String(outcome));assert.deepEqual(saves,[],String(outcome));assert.equal(state,initial);
+  }finally{bridge.close();}
+ }
+});
+
 test('hosted WebSocket operations synchronize browser tabs and mini-chat replies without a local process',async()=>{
  const {t,bridge,config}=await fixture('edit',{BroadcastChannel:TestChannel});let second;
  try{

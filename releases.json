@@ -1,6 +1,14 @@
 {
-  "version": "0.7.3",
+  "version": "0.7.4",
   "entries": [
+    {
+      "version": "0.7.4",
+      "title": "Recover expired connection setup",
+      "added": [],
+      "fixed": [
+        "Preparing a fresh connection recovers when the previous pending code has expired, while preserving existing access on uncertain network failures."
+      ]
+    },
     {
       "version": "0.7.3",
       "title": "Reliable message and review delivery checks",
@@ -186,5 +194,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "c7edbf3468f92df90a8725027566958f8839bef55ac41fa641ae42b865bbf983"
+  "sourceHash": "e1855e25280e6e86e34e54c7608cadb7d5e1a6def0726d6db2c6fdfca5297ac4"
 }
