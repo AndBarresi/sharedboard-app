@@ -14,7 +14,7 @@ class TestChannel{
  close(){this.closed=true;TestChannel.channels.get(this.name).delete(this);}
 }
 class FakeBridge{
- token='private-browser-token'; connection=null; commands=[]; receipts=new Map(); results=new Map(); notifyCount=0; owner=null; onNotify=null; loseReceipt=false; offline=false; requests=[]; sockets=[];
+ token='private-browser-token'; connection=null; commands=[]; receipts=new Map(); results=new Map(); notifyCount=0; owner=null; onNotify=null; loseReceipt=false; failHandoff=false; offline=false; requests=[]; sockets=[];
  constructor(){const relay=this;this.WebSocket=class{
   constructor(url){this.url=url;this.readyState=0;relay.sockets.push(this);assert.equal(new URL(url).origin,'wss://connect.sharedboard.app');assert.equal(new URL(url).searchParams.has('token'),false);queueMicrotask(()=>{if(this.readyState!==0)return;this.readyState=1;this.onopen?.();});}
   send(raw){const data=JSON.parse(raw);if(data.type==='authenticate'){assert.equal(data.browserToken,relay.token);this.clientId=data.clientId;if(relay.owner&&relay.owner!==this&&relay.owner.clientId!==this.clientId){this.close(4009);return;}relay.owner=this;this.emit({type:'connection',connection:structuredClone(relay.connection)});relay.flush();return;}if(data.type==='ping'){this.emit({type:'pong'});return;}if(data.type==='result'){const target=relay.results.get(data.id);if(target){relay.results.delete(data.id);target(data);}return;}throw new Error(`Unexpected socket message ${data.type}`);}
@@ -33,7 +33,7 @@ class FakeBridge{
   assert.equal(options.headers['x-sharedboard-browser'],this.token);
   if(path==='/browser/status')return this.response({connection:this.connection});
   if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`evt_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
-  if(path==='/browser/handoff')return this.response({delivery:'manual',handoffPrompt:`Read captured ${body.kind} ${body.id} using the connected SharedBoard tools.`,connection:this.connection});
+  if(path==='/browser/handoff')return this.failHandoff?this.response({error:'Fixture handoff unavailable'},503):this.response({delivery:'manual',handoffPrompt:`Read captured ${body.kind} ${body.id} using the connected SharedBoard tools.`,connection:this.connection});
   if(path==='/browser/disconnect'){this.connection={...this.connection,connected:false};return this.response({connection:this.connection});}
   throw new Error(`Unexpected bridge URL ${path}`);
  }
@@ -116,6 +116,46 @@ test('ambiguous delivery retains request ID, uses idempotent queue receipt and n
   out=await call(t,'/api/chat/retry',{id:input.id});assert.equal(out.messages[0].id,input.id);assert.equal(out.messages[0].delivery,'queued');assert.equal(bridge.receipts.size,1);
   await call(t,'/api/connection/disconnect',{});await call(t,'/api/connection/pairing',{provider:'codex',permission:'edit'});bridge.activate();await t.bridgeStatus();await wait(async()=>(await call(t,'/api/connection')).connected);
   await assert.rejects(call(t,'/api/chat/retry',{id:input.id}),error=>error.status===409);assert.equal((await bridge.command('read_chat_message',{id:input.id})).error.status,403);
+ }finally{t.close();}
+});
+
+test('chat and review subscriptions choose their own delivery paths and expose matching browser and agent status',async()=>{
+ for(const capabilities of [
+  {name:'chat only',automaticMessages:true,automaticReviews:false,chatDelivery:'queued',reviewDelivery:'manual'},
+  {name:'reviews only',automaticMessages:false,automaticReviews:true,chatDelivery:'manual',reviewDelivery:'queued'},
+  {name:'older aggregate capability',automaticMessages:true,automaticReviews:undefined,chatDelivery:'queued',reviewDelivery:'queued'},
+  {name:'missing capabilities fail closed',automaticMessages:undefined,automaticReviews:undefined,chatDelivery:'manual',reviewDelivery:'manual'},
+ ]){
+  const {t,bridge}=await fixture();try{
+   for(const key of ['automaticMessages','automaticReviews'])if(capabilities[key]===undefined)delete bridge.connection[key];else bridge.connection[key]=capabilities[key];
+   await t.bridgeStatus();
+   const chat=await call(t,'/api/chat',await capture(t,{text:`Check ${capabilities.name}`,intent:'discuss'})),review=await call(t,'/api/reviews',await capture(t));
+   assert.equal(chat.messages[0].delivery,capabilities.chatDelivery,capabilities.name);assert.equal(review.request.delivery,capabilities.reviewDelivery,capabilities.name);
+   assert.equal(chat.automaticMessages,capabilities.chatDelivery==='queued');assert.equal(review.automaticMessages,capabilities.reviewDelivery==='queued');
+   assert.equal((await call(t,'/api/reviews')).automaticMessages,capabilities.reviewDelivery==='queued');assert.equal((await bridge.command('list_review_requests')).result.automaticMessages,capabilities.reviewDelivery==='queued');
+   assert.equal((await bridge.command('list_chat_messages')).result.automaticMessages,capabilities.chatDelivery==='queued');
+   const notified=bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').map(request=>JSON.parse(request.body).kind).sort();
+   assert.deepEqual(notified,[...(capabilities.chatDelivery==='queued'?['chat']:[]),...(capabilities.reviewDelivery==='queued'?['review']:[])].sort());
+  }finally{t.close();}
+ }
+});
+
+test('a chat-only connection can retry manual review preparation without creating a second captured request',async()=>{
+ const {t,bridge}=await fixture();try{
+  bridge.connection.automaticReviews=false;await t.bridgeStatus();const input=await capture(t);bridge.failHandoff=true;
+  await assert.rejects(call(t,'/api/reviews',input),/Fixture handoff unavailable/);
+  const saved=await call(t,'/api/reviews');assert.equal(saved.requests[0].id,input.id);assert.equal(saved.requests[0].delivery,'failed');assert.equal(saved.requests[0].boardRevision,input.expectedRevision);
+  bridge.failHandoff=false;const retry=await call(t,'/api/reviews',input);assert.equal(retry.request.id,input.id);assert.equal(retry.request.delivery,'manual');assert.match(retry.request.handoffPrompt,new RegExp(input.id));assert.equal((await call(t,'/api/reviews')).requests.length,1);assert.equal(bridge.notifyCount,0);
+ }finally{t.close();}
+});
+
+test('an uncertain automatic review never becomes a manual resend when its review subscription expires but chat remains subscribed',async()=>{
+ const {t,bridge}=await fixture();try{
+  const input=await capture(t);bridge.loseReceipt=true;const sent=await call(t,'/api/reviews',input);assert.equal(sent.request.delivery,'uncertain');assert.equal(bridge.notifyCount,1);assert.equal(bridge.receipts.size,1);
+  bridge.connection.automaticReviews=false;await t.bridgeStatus();assert.equal((await call(t,'/api/connection')).automaticMessages,true);
+  await assert.rejects(call(t,'/api/reviews/retry',{id:input.id}),error=>error.status===409&&error.code==='DELIVERY_UNCERTAIN'&&error.deliveryUnknown);
+  const current=await call(t,'/api/reviews');assert.equal(current.automaticMessages,false);assert.equal(current.requests[0].id,input.id);assert.equal(current.requests[0].delivery,'uncertain');assert.equal(current.requests[0].boardRevision,input.expectedRevision);assert.equal(current.requests[0].planningVersion,input.expectedPlanningVersion);assert.equal(current.requests[0].handoffPrompt,undefined);assert.equal(bridge.notifyCount,1);
+  assert.equal(bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/handoff').length,0);
  }finally{t.close();}
 });
 

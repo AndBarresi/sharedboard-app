@@ -9,8 +9,9 @@ export const captureSchema=z.object({id:uuid,boardId:uuid,expectedRevision:z.num
 export const chatInputSchema=captureSchema.extend({text:z.string().trim().min(1).max(8000),intent:z.enum(['discuss','work'])});
 export const metadata=item=>{const {snapshot,targetThreadId,...rest}=item;return clone(rest);};
 export const planningContext=(record,ids=[],scope='board')=>({version:record.planning.version,title:record.planning.project.title,areas:clone(record.planning.project.areas),notes:clone(record.planning.project.notes.filter(n=>scope==='board'||!n.elementIds.length||n.elementIds.some(id=>ids.includes(id)))),pendingProposals:[]});
-export const chatView=(record,connection)=>({messages:(record.messages??[]).map(metadata),connected:Boolean(connection?.connected),connectionLabel:connection?.label??'Connect an AI',automaticMessages:Boolean(connection?.automaticMessages)});
-export const reviewView=(record,connection)=>({requests:(record.reviews??[]).map(metadata),connected:Boolean(connection?.connected),automaticMessages:Boolean(connection?.automaticMessages)});
+export const automaticDeliveryFor=(connection,kind)=>Boolean(kind==='review'?(connection?.automaticReviews??connection?.automaticMessages):connection?.automaticMessages);
+export const chatView=(record,connection)=>({messages:(record.messages??[]).map(metadata),connected:Boolean(connection?.connected),connectionLabel:connection?.label??'Connect an AI',automaticMessages:automaticDeliveryFor(connection,'chat')});
+export const reviewView=(record,connection)=>({requests:(record.reviews??[]).map(metadata),connected:Boolean(connection?.connected),automaticMessages:automaticDeliveryFor(connection,'review')});
 
 export function createCaptured(record,raw,kind,connection,at){
  const input=(kind==='chat'?chatInputSchema:captureSchema).parse(raw),list=kind==='chat'?(record.messages??=[]):(record.reviews??=[]),selectedIds=[...new Set(input.selectedIds)].sort();

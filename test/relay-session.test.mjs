@@ -35,6 +35,11 @@ test('relay forwards optimistic-version conflict details without turning them in
  const f=await fixture();let ws;ws=await f.socket(async frame=>{if(frame.type==='command')await f.relay.webSocketMessage(ws,JSON.stringify({type:'result',id:frame.command.id,error:{message:'This object changed.',status:409,code:'VERSION_CONFLICT',conflicts:['shape-a']}}));});
  const response=await f.call('edit',{edits:[{id:'shape-a',expectedVersion:1,changes:{x:10}}]});assert.equal(response.status,409);assert.equal(response.data.code,'VERSION_CONFLICT');
 });
+test('a failed captured-message read does not verify receipt; a successful review read verifies receipt without claiming a reply or chat identity',async()=>{
+ const f=await fixture();let ws;ws=await f.socket(async frame=>{if(frame.type!=='command')return;const command=frame.command;await f.relay.webSocketMessage(ws,JSON.stringify({type:'result',id:command.id,...(command.operation==='chat'?{error:{message:'That captured message does not exist.',status:404,code:'NOT_FOUND'}}:{result:{request:{id:command.input.id,status:'reviewing'},board:{revision:1}}})}));});
+ const failed=await f.call('read_chat_message',{id:crypto.randomUUID()});assert.equal(failed.status,404);assert.equal((await f.relay.connection()).deliveryCheckedAt,null);
+ const reviewed=await f.call('read_review_request',{id:crypto.randomUUID()});assert.equal(reviewed.status,200);const connection=await f.relay.connection();assert.ok(connection.deliveryCheckedAt);assert.equal(connection.replyCheckedAt,null);assert.equal(connection.chatIdentityVerified,false);
+});
 test('multiple browser tabs cannot execute the same board commands concurrently',async()=>{
  const f=await fixture(),owner=await f.socket(),other=await f.socket();assert.equal(other.closed.code,4009);assert.equal(f.relay.owner(),owner);await f.relay.webSocketMessage(owner,JSON.stringify({type:'ping'}));assert.equal(owner.messages.at(-1).type,'pong');
 });
