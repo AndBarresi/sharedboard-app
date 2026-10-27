@@ -14,25 +14,41 @@ Settings names and remote-MCP availability vary between AI apps and plans. The p
 
 For **Claude**, if connector setup asks you to choose a registration method, select **Register automatically**. SharedBoard supports dynamic client registration and PKCE; a client secret is not required.
 
-For **Claude Code**, the website-led setup uses a connector added at claude.ai, then inherited by Claude Code signed in with that same claude.ai subscription account. API-key and third-party-provider sessions do not inherit those connectors. Open `/mcp` in the intended session to check availability before pasting the board pairing instructions. See [Claude Code's connector guidance](https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claudeai).
+For **Claude Code**, the website-led setup uses a connector added at claude.ai, then inherited by Claude Code signed in with that same claude.ai subscription account. API-key and third-party-provider sessions do not inherit those connectors. Check that SharedBoard appears in the intended session's connector settings before using the board pairing instructions. See [Claude Code's connector guidance](https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claudeai).
+
+## Start Live collaboration · experimental
+
+This mode uses your existing AI run, with a normal remote tool waiting for a browser request. It does not install a helper, host another model, or wake a conversation after its AI run ends. **The full repeating loop still needs real provider/account acceptance testing.** Do not treat pairing, a successful tool fixture, or a provider name as proof it works in your account.
+
+1. After pairing, open **Connect an AI** on the website, then expand **Start live collaboration · experimental**.
+2. Choose **Copy start instructions** and send those instructions once in the same AI conversation. No terminal commands or configuration files are needed. When resuming an existing session, use the instructions the website generates so it keeps the original session ID.
+3. Keep the AI run and board open. The website enables **Talk it through**, **Ask AI to look**, and the connection test only while the backend sees the active AI run waiting for a request.
+4. Send a Discuss question or choose **Test with a reply**. A successful test requires the AI to read the saved request and post an actual reply to the board, without another Send click in the AI app. Rendering a draft or queueing an ID is not success.
+5. Wait for the assistant to finish and enter its waiting tool again before sending the next request. You can keep typing a draft while Send is unavailable.
+6. Choose **Pause live collaboration** from the website's connection details or mini chat to end the session. A stopped, expired, or ended run must not restart or replay old requests automatically.
+
+Each tool wait defaults to **40 seconds**, with a maximum of **45 seconds**. The assistant can repeat empty waits only within the explicitly started session, which has a **20-minute hard limit**. Empty timeouts still require model continuations and can use subscription allowance and context. Host timeouts, tool approvals, turn limits, disconnections, or the model ending its turn may stop the loop sooner. A new session needs another explicit start in the intended conversation; this is a per-session setup step, not a per-message copy workflow.
+
+For agents: call **`wait_for_board_request`** without `sessionId` only on the first start. Every later wait must pass the exact returned `sessionId`. Read each returned request through its capture tool, respect Discuss/Request work and drawing access, post the actual reply or review completion, then wait again with that same ID. `stopped`, `expired`, an explicit stop, or an error ends the loop. Do not create a scheduled monitor or a replacement conversation.
 
 ## Board tools and automatic messages
 
 The working workflow starts in your existing AI conversation: ask the assistant to inspect the board or make a particular authorized change. The board’s drawing and notes provide context for that request. Remote MCP access does not by itself let the website start a new assistant turn.
 
-**Talk it through**, **Ask AI to look**, the understanding check, and board-originated connection tests require separately verified incoming-event delivery. The committed deployment has no active, verified production event callback route. New sends remain unavailable when that route is absent or expired; they do not fall back to copying messages or filling another app’s composer. Saved requests and actual replies remain available, and the assistant can still use the board tools from its own conversation.
+**Talk it through**, **Ask AI to look**, the understanding check, and board-originated connection tests require either an actual waiting Live collaboration session or a separately verified incoming-event subscription. New sends remain unavailable while neither route is active; they do not fall back to copying messages or filling another app’s composer. Saved requests and actual replies remain available, and the assistant can still use the board tools from its own conversation.
 
 | Capability | Current boundary |
 | --- | --- |
 | Remote MCP board tools | Read the board, return actual replies to saved requests, and make authorized edits when granted. |
+| Experimental Live collaboration | A finite, active AI turn calls `wait_for_board_request`, reads browser requests, replies, and waits again. Actual waiting gates new sends; full provider-loop acceptance is outstanding. |
 | Incoming MCP Events | A possible automatic route for a compatible host, after operator configuration and a real send/read/reply test. No production route is currently verified. |
 | Experimental MCP Apps panel | Diagnostic WIP. A rendered panel or text-message capability flag does not establish automatic sending. |
 
-On **2026-10-27**, a native Claude test rendered the experimental panel, but **`ui/message`** only populated the composer. The user still needed to press Send; the call did not start a model turn or produce an automatic mini-chat reply. This matches [Anthropic’s explanation of composer-only behavior](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671). The panel is not part of the normal automatic-message setup.
+On **2026-10-27**, a native Claude test rendered the experimental panel, but **`ui/message`** only populated the composer. The user still needed to press Send; the panel acknowledgement did not establish automatic model execution or a reply. This matches the [composer-behavior explanation in Anthropic's MCP issue tracker](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671). The diagnostic panel is separate from the plain waiting tool and is not part of Live collaboration setup.
 
 Ordinary remote MCP tools in **local Codex** or **Claude Code** do not wake an idle session by themselves. Claude Code’s separate Channels mechanism is not implemented by this hosted connector. Cursor, VS Code, Codex, and Claude variants must not be advertised as supporting the full mini-chat workflow based only on remote MCP access. Use **Other MCP client** where appropriate; see [Cursor’s MCP support](https://cursor.com/docs/mcp) and [VS Code’s setup guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
 
-ChatGPT Work Cloud MCP Events remain an option to test separately. The committed callback-origin allowlist is empty, so they are not an active production feature. A provider selection or successful pairing does not replace host/account acceptance testing.
+Native events remain an option to test separately. Both an older and a fresh ChatGPT Work Cloud conversation on the tested account lacked an exposed incoming-event subscription interface. That is evidence about those tested sessions, not a claim that all accounts or hosts lack support. The committed callback-origin allowlist is empty, so native events are not a verified production feature. The finite waiting-tool experiment does not depend on that interface.
 
 The mini chat shows requests originating on this board and replies posted through its tools. It does not mirror the entire external conversation or stream private reasoning. A delivered request can still wait for the assistant to finish other work.
 

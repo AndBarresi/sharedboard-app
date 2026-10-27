@@ -67,7 +67,7 @@ export function isAcceptedChatMessage(message){
 export function shouldResetChatCapture(error){
   // An ambiguous delivery may already be running. Preserve its original ID and
   // attachment even when retry reports a conflict after events expire.
-  return !error?.deliveryUnknown&&!['DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED','DIRECT_DELIVERY_UNAVAILABLE','PANEL_DIRECT_DELIVERY_UNAVAILABLE'].includes(error?.code)&&[400,409,413].includes(error?.status);
+  return !error?.deliveryUnknown&&!String(error?.code??'').startsWith('LIVE_')&&!['DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED','DIRECT_DELIVERY_UNAVAILABLE','PANEL_DIRECT_DELIVERY_UNAVAILABLE'].includes(error?.code)&&[400,409,413].includes(error?.status);
 }
 export function isPreparedContextStale(context,board,planning){
   if(!context)return false;

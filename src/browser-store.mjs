@@ -208,6 +208,7 @@ export async function createBrowserTransport({basePath='',indexedDB=globalThis.i
    if(pathname==='/api/connection/oauth-request'&&method==='GET')return bridge.oauthRequest(url.searchParams.get('id'));
    if(pathname==='/api/connection/approve'&&method==='POST')return bridge.approve(input);
    if(pathname==='/api/connection/pairing'&&method==='POST'){const title=await atomic('readonly',async stores=>checkRecord(await requestResult(stores.boards.get(boardId)),boardId).planning.project.title);return bridge.pair(input,title);}
+   if(pathname==='/api/connection/live/stop'&&method==='POST')return bridge.stopLive(safeUuid(input.sessionId));
    if(['/api/connection/disconnect','/api/connection/cancel'].includes(pathname)&&method==='POST'){await bridge.disconnect();return disconnected();}
    if(pathname==='/api/connection/web/stop'&&method==='POST')return disconnected();
    if(['/api/chat','/api/reviews'].includes(pathname)&&method==='GET')return atomic('readonly',async stores=>{const record=checkRecord(await requestResult(stores.boards.get(boardId)),boardId),connection=(await requestResult(stores.meta.get(`relay:v1:${boardId}`)))?.value?.connection;return pathname==='/api/chat'?chatView(record,connection):reviewView(record,connection);});

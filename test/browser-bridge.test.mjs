@@ -34,6 +34,7 @@ class FakeBridge{
   if(path==='/browser/status')return this.response({connection:this.connection});
   if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`evt_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
   if(path==='/browser/handoff')return this.failHandoff?this.response({error:'Fixture handoff unavailable'},503):this.response({delivery:'manual',handoffPrompt:`Read captured ${body.kind} ${body.id} using the connected SharedBoard tools.`,connection:this.connection});
+  if(path==='/browser/live/stop'){if(body.sessionId!==this.connection.liveSession?.id)return this.response({error:'The live session changed.',code:'LIVE_SESSION_CHANGED'},409);this.connection={...this.connection,automaticMessages:false,automaticReviews:false,messageExpiresAt:null,reviewExpiresAt:null,liveSession:{...this.connection.liveSession,status:'stopped',waitExpiresAt:null}};return this.response({connection:this.connection});}
   if(path==='/browser/disconnect'){this.connection={...this.connection,connected:false};return this.response({connection:this.connection});}
   throw new Error(`Unexpected bridge URL ${path}`);
  }
@@ -81,6 +82,22 @@ test('hosted bridge edits real browser objects and enforces optimistic versions,
   const plan=await call(t,'/api/planning');assert.equal(plan.agentActions[0].count,2);assert.equal(plan.agentActions[0].after.length,2);
  }finally{t.close();}
  const readonly=await fixture('read');try{assert.equal((await readonly.bridge.command('read_board')).result.access.permission,'read');assert.equal((await readonly.bridge.command('add_elements',{elements:[{id:'denied'}]})).error.status,403);}finally{readonly.t.close();}
+});
+
+test('live captures pin the listening session and pause preserves board, requests and connection',async()=>{
+ const {t,bridge}=await fixture();try{
+  const sessionId=crypto.randomUUID(),expiresAt=new Date(Date.now()+120000).toISOString(),waitExpiresAt=new Date(Date.now()+40000).toISOString();
+  Object.assign(bridge.connection,{deliveryMode:'live-session',automaticMessages:true,automaticReviews:true,messageExpiresAt:waitExpiresAt,reviewExpiresAt:waitExpiresAt,liveSession:{id:sessionId,status:'waiting',expiresAt,waitExpiresAt}});await t.bridgeStatus();
+  const input=await capture(t,{automaticRequired:true,text:'Read the test board only',intent:'discuss',liveSessionId:crypto.randomUUID()}),sent=await call(t,'/api/chat',input);
+  assert.equal(sent.messages[0].liveSessionId,sessionId,'session is derived from the connection, never caller-supplied');
+  const before=await call(t,'/api/board');
+  await assert.rejects(call(t,'/api/connection/live/stop',{sessionId:crypto.randomUUID()}),error=>error.code==='LIVE_SESSION_CHANGED');
+  assert.equal((await call(t,'/api/connection')).automaticMessages,true);
+  Object.assign(bridge.connection,{liveSession:{...bridge.connection.liveSession,status:'processing'}});await t.bridgeStatus();
+  await assert.rejects(call(t,'/api/reviews',await capture(t,{automaticRequired:true})),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  const paused=await call(t,'/api/connection/live/stop',{sessionId});assert.equal(paused.connected,true);assert.equal(paused.automaticMessages,false);assert.equal(paused.liveSession.status,'stopped');
+  assert.deepEqual(await call(t,'/api/board'),before);assert.equal((await call(t,'/api/chat')).messages[0].id,input.id);
+ }finally{t.close();}
 });
 
 test('expired or malformed bridge command deadlines reject late writes without changing the scene or recovery history',async()=>{

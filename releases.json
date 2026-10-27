@@ -1,6 +1,26 @@
 {
-  "version": "0.9.3",
+  "version": "0.10.1",
   "entries": [
+    {
+      "version": "0.10.1",
+      "title": "Live-session cancellation and connection diagnostics",
+      "added": [],
+      "fixed": [
+        "Propagate cancelled requests through the hosted relay and report fixed diagnostic codes without exposing private error details.",
+        "Pairing instructions start an explicitly authorized finite live session and explain its time and usage limits."
+      ]
+    },
+    {
+      "version": "0.10.0",
+      "title": "Experimental live AI collaboration",
+      "added": [
+        "An experimental live session lets a compatible AI wait for mini-chat and board-review requests during an active conversation turn.",
+        "Live session status and Pause controls keep requests tied to the correct board and session."
+      ],
+      "fixed": [
+        "Drafts remain available while an AI is busy; sending requires an actual pending wait or verified incoming-event connection."
+      ]
+    },
     {
       "version": "0.9.3",
       "title": "Retire stale experimental panel links",
@@ -278,5 +298,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "ad27b346b7fd45b31b617edddfb8a4f3d46ab753bcedcac9637dee1313e1f854"
+  "sourceHash": "040ecb55a05cbdb40915b0cdb6c097cb9833f27cb57cef7da30a3db17d39a2fb"
 }

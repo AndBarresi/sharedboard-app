@@ -6,6 +6,7 @@ import {BoardRelay} from './relay.mjs';
 import {json,fail,body,failureResponse,uuid,tokenSession,internal,hash,permissionFor} from './protocol.mjs';
 import {attachEventHandlers} from './events.mjs';
 import {attachChatPanel} from './chat-panel.mjs';
+import {attachLiveTools} from './live-tools.mjs';
 import {APP_VERSION} from '../shared/version.mjs';
 export {BoardRelay};
 const ORIGIN='https://connect.sharedboard.app',APP='https://sharedboard.app';
@@ -62,7 +63,7 @@ export async function handleRequest(request,env){
   }
   if(path.startsWith('/browser/')){
    requireBrowser(request,env);const token=request.headers.get('x-sharedboard-browser'),id=tokenSession(token),stub=sessionStub(env,id),input=request.method==='POST'?await body(request,8192):{};
-   if(!['/browser/status','/browser/disconnect','/browser/handoff','/browser/notify','/browser/approve'].includes(path))throw fail('Unknown browser connector operation.',404);
+   if(!['/browser/status','/browser/disconnect','/browser/handoff','/browser/notify','/browser/approve','/browser/live/stop'].includes(path))throw fail('Unknown browser connector operation.',404);
    if(path==='/browser/status'&&request.method!=='GET'||path!=='/browser/status'&&request.method!=='POST')throw fail('This connector method is not supported.',405);
    if(path==='/browser/approve'){
     if(typeof input.allow!=='boolean')throw fail('Choose whether to approve this AI connection.');const info=await internal(authStub(env),'/request',{id:input.requestId});
@@ -75,6 +76,7 @@ export async function handleRequest(request,env){
    const handler=createMcpHandler(()=>{
     const mcp=createBoardMcp((operation,input)=>internal(stub,'/agent/call',{grant,operation,input}),{remote:true,remotePair:true,proposals:false});
     attachEventHandlers(mcp,(method,params)=>internal(stub,'/agent/events',{grant,method,params}));
+    attachLiveTools(mcp,(operation,input)=>internal(stub,'/agent/live',{grant,operation,input},{signal:request.signal}));
     return attachChatPanel(mcp,(operation,input)=>internal(stub,'/agent/panel',{grant,operation,input}),{serverURL:`${origin}/mcp`,provider:async()=>(await internal(stub,'/agent/check',{grant,connected:false})).connection.provider});
    },{responseMode:'auto',maxRequestBodySize:4_000_000});
    const response=await handler.fetch(request,{authInfo:{token:'verified',clientId:grant.clientId,scopes:grant.scope.split(' '),extra:{grant}}});return cors(response,request,env,{publicRoute:true});

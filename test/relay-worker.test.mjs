@@ -14,7 +14,7 @@ const wait=async check=>{const deadline=Date.now()+10000;while(Date.now()<deadli
 
 test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK MCP round-trip without a local companion',{timeout:60000},async()=>{
  const bundle=await build({entryPoints:[`${root}cloudflare/worker.mjs`],bundle:true,format:'esm',platform:'neutral',target:'es2022',conditions:['workerd','worker','browser'],external:['node:*'],write:false,logLevel:'silent'});
- const mfOptions=convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat'],bindings:{RELAY_ORIGIN:origin,APP_ORIGIN:appOrigin,EVENT_CALLBACK_ORIGINS:''},durableObjects:{BOARD_RELAY:{className:'BoardRelay',useSQLite:true},RELAY_AUTH:{className:'RelayAuth',useSQLite:true}},durableObjectsPersist:false}),mf=new Miniflare(mfOptions);
+ const mfOptions=convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat','enable_request_signal','request_signal_passthrough'],bindings:{RELAY_ORIGIN:origin,APP_ORIGIN:appOrigin,EVENT_CALLBACK_ORIGINS:''},durableObjects:{BOARD_RELAY:{className:'BoardRelay',useSQLite:true},RELAY_AUTH:{className:'RelayAuth',useSQLite:true}},durableObjectsPersist:false}),mf=new Miniflare(mfOptions);
  let browser,client,reopened;const sockets=new Set();
  const dispatch=async(input,init)=>{const request=new Request(input,init);return mf.dispatchFetch(request.url,{method:request.method,headers:Object.fromEntries(request.headers),...(request.method==='GET'||request.method==='HEAD'?{}:{body:await request.arrayBuffer()}),redirect:request.redirect,signal:request.signal});};
  // Keep browser acceptance traffic separate from the setup-validation actor's
@@ -94,6 +94,28 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
    const directRead=await readCall('read_chat_message',{id:directInput.id});assert.equal(directRead.structuredContent.message.text,directInput.text);assert.ok(!(await readCall('reply_to_chat_message',{id:directInput.id,text:`Actual isolated SDK reply for ${provider} saved request.`})).isError);assert.match((await callBrowser('/api/chat')).messages.find(item=>item.id===directInput.id).reply,/saved request/);
    assert.equal((await browser.bridgeStatus()).automaticMessages,false,'manual model reads and replies do not verify future automatic submission');
    assert.equal((await panelCall('panel_detach')).structuredContent.linked,false);assert.equal((await browser.bridgeStatus()).automaticMessages,false);
+   // Exercise a genuine pending SDK tool through workerd, then browser-owned
+   // captures and replies. This proves transport behavior, not model compliance.
+   // Exercise the full real default-sized empty wait once, not only requests
+   // delivered immediately after a five-second wait starts.
+   const timeoutResult=await readCall('wait_for_board_request',{waitMs:provider==='codex'?40000:20});assert.ok(!timeoutResult.isError,JSON.stringify(timeoutResult));assert.equal(timeoutResult.structuredContent.status,'timeout');assert.deepEqual(timeoutResult.structuredContent.requests,[]);assert.equal((await browser.bridgeStatus()).automaticMessages,false);
+   const firstWait=readCall('wait_for_board_request',{sessionId:timeoutResult.structuredContent.sessionId,waitMs:5000});
+   await wait(async()=>(await browser.bridgeStatus())?.liveSession?.status==='waiting');
+   const listening=await browser.bridgeStatus();assert.equal(listening.automaticMessages,true);assert.equal(listening.deliveryMode,'live-session');const liveSessionId=listening.liveSession.id;
+   const liveInput={...readMessage,id:crypto.randomUUID(),text:`Live ${provider} captured discussion`,automaticRequired:true};
+   const liveSent=await callBrowser('/api/chat',liveInput),liveSaved=liveSent.messages.find(item=>item.id===liveInput.id);assert.equal(liveSaved.liveSessionId,liveSessionId);assert.match(liveSaved.receipt,/^live_[a-f0-9]{64}$/);
+   const liveResult=await firstWait;assert.ok(!liveResult.isError,JSON.stringify(liveResult));assert.equal(liveResult.structuredContent.requests[0].id,liveInput.id);assert.equal(liveResult.structuredContent.sessionId,liveSessionId);
+   assert.equal((await browser.bridgeStatus()).automaticMessages,false);assert.equal((await browser.bridgeStatus()).deliveryMode,'live-session');
+   assert.equal((await readCall('read_chat_message',{id:liveInput.id})).structuredContent.message.text,liveInput.text);
+   assert.ok(!(await readCall('reply_to_chat_message',{id:liveInput.id,text:`Isolated live SDK reply for ${provider}.`})).isError);assert.match((await callBrowser('/api/chat')).messages.find(item=>item.id===liveInput.id).reply,/live SDK reply/);
+   const reviewWait=readCall('wait_for_board_request',{sessionId:liveSessionId,waitMs:5000});await wait(async()=>(await browser.bridgeStatus())?.automaticReviews);
+   const reviewInput={id:crypto.randomUUID(),boardId:readBoard.id,expectedRevision:readBoard.revision,expectedPlanningVersion:readPlanning.version,scope:'board',selectedIds:[],automaticRequired:true};
+   const liveReview=await callBrowser('/api/reviews',reviewInput);assert.equal(liveReview.request.liveSessionId,liveSessionId);
+   const reviewResult=await reviewWait;assert.equal(reviewResult.structuredContent.requests[0].kind,'review');assert.equal(reviewResult.structuredContent.requests[0].id,reviewInput.id);
+   assert.ok(!(await readCall('read_review_request',{id:reviewInput.id})).isError);assert.ok(!(await readCall('complete_review_request',{id:reviewInput.id,summary:'The isolated client reviewed the exact captured revision without drawing changes.'})).isError);
+   assert.equal((await callBrowser('/api/reviews')).requests.find(item=>item.id===reviewInput.id).status,'reviewed');
+   const finalWait=readCall('wait_for_board_request',{sessionId:liveSessionId,waitMs:5000});await wait(async()=>(await browser.bridgeStatus())?.automaticMessages);
+   await callBrowser('/api/connection/live/stop',{sessionId:liveSessionId});assert.equal((await finalWait).structuredContent.status,'stopped');assert.equal((await browser.bridgeStatus()).automaticMessages,false);assert.equal((await browser.bridgeStatus()).connected,true);
    for(const [name,args] of [['add_elements',{elements:[{id:`blocked-${provider}`,text:'Must not be drawn',x:0,y:0}]}],['edit_elements',{edits:[{id:'actual-relay-shape',expectedVersion:2,changes:{x:999}}]}]]){const deniedEdit=await readCall(name,args);assert.equal(deniedEdit.isError,true);assert.match(deniedEdit.content.map(item=>item.text??'').join(' '),/read.only/i);}
    const unchanged=await callBrowser('/api/board');assert.equal(unchanged.revision,2);assert.equal(unchanged.elements.find(element=>element.id==='actual-relay-shape').x,40);assert.equal(unchanged.elements.some(element=>element.id===`blocked-${provider}`),false);
    await callBrowser('/api/connection/disconnect',{});await client.close();client=null;

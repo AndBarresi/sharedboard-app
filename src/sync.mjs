@@ -245,6 +245,7 @@ export async function connectBoard(onState) {
     bridgeStatus:()=>browserTransport?browserTransport.bridgeStatus():request('/api/connection'),
     cancelPairing:()=>request('/api/connection/cancel',{method:'POST',body:'{}'}),
     disconnect:()=>request('/api/connection/disconnect',{method:'POST',body:'{}'}),
+    stopLiveSession:sessionId=>request('/api/connection/live/stop',{method:'POST',body:JSON.stringify({sessionId})}),
     startWeb:unavailableWeb,
     stopWeb:()=>request('/api/connection/web/stop',{method:'POST',body:'{}'}),
     approveWeb:unavailableWeb,
