@@ -22,7 +22,7 @@ const board={id:'11111111-1111-4111-8111-111111111111',revision:3,elements:[]};
 const view=connection=>({board,storageMode:'browser',chatConnected:Boolean(connection?.connected),connection,messages:[],selectedIds:[],online:true,planning:{project:{areas:[]}}});
 const bubble=connection=>render(BoardChat,{open:false,focused:false,setOpen:()=>{},view:view(connection)});
 const chatButton=html=>html.match(/<button[^>]*aria-label="(?:Open board chat(?:, new reply)?|Talk it through unavailable)"[^>]*>/)?.[0]??'';
-const active=changes=>({connected:true,automaticMessages:true,messageExpiresAt:new Date(Date.now()+60_000).toISOString(),...changes});
+const active=changes=>({connected:true,automaticMessages:true,deliveryMode:'events',messageExpiresAt:new Date(Date.now()+60_000).toISOString(),...changes});
 const testButton=html=>html.match(/<button[^>]*>Test with a reply<\/button>/)?.[0]??'';
 
 test('Talk it through stays unavailable until a direct route is active and online',()=>{
@@ -37,23 +37,22 @@ test('a connected board without direct delivery preserves history, removes hando
  const savedView={...view(connection),messages:[{id:'old-reply',boardRevision:3,intent:'discuss',text:'Keep this saved question',reply:'Keep this actual answer',repliedAt:'2026-10-27T12:00:00Z'},{id:'saved-handoff',boardRevision:3,intent:'discuss',text:'Prepared request',delivery:'manual',handoffPrompt:'Read the same captured request'}]};
  const html=render(BoardChat,{open:true,setOpen:()=>{},onConnect:()=>{},view:savedView});
  assert.match(html,/Saved board requests/);assert.match(html,/Keep this saved question/);assert.match(html,/Keep this actual answer/);assert.match(html,/Prepared request/);
- assert.match(html,/Saved without automatic delivery/);assert.match(html,/will not replay/);assert.match(html,/conversation panel.*Link this chat/);
+ assert.match(html,/Saved without automatic delivery/);assert.match(html,/will not replay/);assert.match(html,/no-download incoming-message route has not been verified/);
  assert.doesNotMatch(html,/<form|aria-label="Message the connected model"|Copy to (?:AI|Codex)|Read the same captured request/);
 });
 
-test('every provider requires direct delivery, while read and edit grants can both use linked mini chat',()=>{
+test('every provider requires verified incoming events, while cached panel links stay disabled',()=>{
  for(const provider of ['codex','claude-code','claude','chatgpt','other'])for(const permission of ['read','edit']){
   const connection={provider,permission,connected:true,automaticMessages:false};
   assert.match(chatButton(bubble(connection)),/disabled=/);
   const unavailable=render(BoardChat,{open:true,setOpen:()=>{},view:view(connection)});assert.doesNotMatch(unavailable,/<form/);
-  for(const deliveryMode of ['panel','events']){
-   const linked=active({...connection,automaticMessages:true,deliveryMode}),html=render(BoardChat,{open:true,setOpen:()=>{},onConnect:()=>{},view:view(linked)});
-   assert.doesNotMatch(chatButton(bubble(linked)),/disabled=/);
-   assert.match(html,/<form/);assert.match(html,/aria-label="Message the connected model"/);assert.match(html,/>Send<\/button>/);
-   assert.doesNotMatch(html,/Copy to (?:AI|Codex)|paste.*request/i);
-   if(permission==='read'){assert.match(html,/Read-only drawing access/);assert.match(html,/Change drawing access/);}
-   if(deliveryMode==='panel')assert.match(html,/Keep the SharedBoard conversation panel and this board open/);
-  }
+  const linked=active({...connection,automaticMessages:true}),html=render(BoardChat,{open:true,setOpen:()=>{},onConnect:()=>{},view:view(linked)});
+  assert.doesNotMatch(chatButton(bubble(linked)),/disabled=/);
+  assert.match(html,/<form/);assert.match(html,/aria-label="Message the connected model"/);assert.match(html,/>Send<\/button>/);
+  assert.doesNotMatch(html,/Copy to (?:AI|Codex)|paste.*request|Link this chat/i);
+  if(permission==='read'){assert.match(html,/Read-only drawing access/);assert.match(html,/Change drawing access/);}
+  const cached=active({...connection,automaticMessages:true,deliveryMode:'panel',panelConnected:true});
+  assert.match(chatButton(bubble(cached)),/disabled=/);assert.doesNotMatch(render(BoardChat,{open:true,setOpen:()=>{},view:view(cached)}),/<form/);
  }
 });
 
@@ -71,11 +70,11 @@ test('fullscreen chat entry honors the same disabled capability and explains why
 
 test('message expiry controls rendered mini chat independently of an earlier review expiry',()=>{
  const future=new Date(Date.now()+60_000).toISOString(),past=new Date(Date.now()-1000).toISOString();
- const available={connected:true,automaticMessages:true,automaticReviews:false,eventExpiresAt:past,messageExpiresAt:future};
+ const available={connected:true,deliveryMode:'events',automaticMessages:true,automaticReviews:false,eventExpiresAt:past,messageExpiresAt:future};
  assert.doesNotMatch(chatButton(bubble(available)),/disabled=/);
  const expired={...available,automaticReviews:true,eventExpiresAt:future,messageExpiresAt:past};
  assert.match(chatButton(bubble(expired)),/disabled=/);
- const openExpired=render(BoardChat,{open:true,setOpen:()=>{},view:view(expired)});assert.match(openExpired,/Direct mini chat needs a link/);assert.doesNotMatch(openExpired,/<form|Copy to AI/);
+ const openExpired=render(BoardChat,{open:true,setOpen:()=>{},view:view(expired)});assert.match(openExpired,/Automatic mini chat unavailable/);assert.doesNotMatch(openExpired,/<form|Copy to AI|Link this chat/);
 });
 
 test('connection choices put coding clients first and distinguish mini-chat availability',()=>{
@@ -83,20 +82,20 @@ test('connection choices put coding clients first and distinguish mini-chat avai
  const choices=html.match(/<div class="ai-choices">([\s\S]*?)<\/div>/)?.[1]??'';
  assert.deepEqual([...choices.matchAll(/<strong>([^<]+)<\/strong>/g)].map(match=>match[1]),['Codex','Claude Code','ChatGPT','Claude (web)','Other MCP client']);
  assert.equal([...choices.matchAll(/class="client-mini-badge /g)].length,5);
- assert.equal([...choices.matchAll(/Direct mini chat · Link in your AI/g)].length,5);
- assert.match(choices,/Direct chat needs a supported conversation panel/);
+ assert.equal([...choices.matchAll(/Automatic mini chat · Work in progress/g)].length,5);
+ assert.match(choices,/fill a draft in Claude and do not start its model/);
  assert.doesNotMatch(choices,/Mini chat unavailable|Mini chat needs verification/);
 });
 
-test('connection status instructs linking and enables tests only for actual direct support',()=>{
+test('connection status explains unavailable mini chat without a diagnostic-panel link loop',()=>{
  const props={online:true,onClose:()=>{},onHistory:()=>{},hasSavedRequests:true};
  const manual=render(CloudConnectionSetup,{...props,connection:{id:'manual',provider:'codex',connected:true,automaticMessages:false}});
- assert.match(manual,/<strong>Direct mini chat needs a link<\/strong>/);assert.match(manual,/open_sharedboard_chat/);assert.match(manual,/Link this chat/);assert.match(manual,/Saved requests &amp; replies/);assert.match(testButton(manual),/disabled=/);
- assert.doesNotMatch(manual,/Copy a test|Copy to AI|paste.*prepared/i);
+ assert.match(manual,/<strong>Automatic mini chat · Work in progress<\/strong>/);assert.match(manual,/no-download incoming-message route has not been verified/);assert.match(manual,/Saved requests &amp; replies/);assert.match(testButton(manual),/disabled=/);
+ assert.doesNotMatch(manual,/open_sharedboard_chat|Link this chat|Copy a test|Copy to AI|paste.*prepared/i);
  const automatic=render(CloudConnectionSetup,{...props,connection:active({id:'events',provider:'other',deliveryMode:'events'})});
- assert.match(automatic,/<strong>Direct mini chat linked<\/strong>/);assert.doesNotMatch(testButton(automatic),/disabled=/);assert.match(automatic,/Saved requests &amp; replies/);assert.match(automatic,/Verified incoming messages/);
+ assert.match(automatic,/<strong>Automatic mini chat connected<\/strong>/);assert.doesNotMatch(testButton(automatic),/disabled=/);assert.match(automatic,/Saved requests &amp; replies/);assert.match(automatic,/Verified incoming messages/);
  const panel=render(CloudConnectionSetup,{...props,connection:active({id:'panel',provider:'claude',deliveryMode:'panel'})});
- assert.match(panel,/Keep that panel and this board open/);assert.doesNotMatch(testButton(panel),/disabled=/);
+ assert.match(panel,/fill a draft/);assert.match(panel,/does not submit it or start the model/);assert.match(testButton(panel),/disabled=/);assert.doesNotMatch(panel,/Link this chat/);
  const expired=render(CloudConnectionSetup,{...props,connection:active({id:'expired',messageExpiresAt:Date.now()-1})});assert.match(testButton(expired),/disabled=/);
  const unpaired=render(CloudConnectionSetup,props);assert.match(unpaired,/Saved requests &amp; replies/);
 });
@@ -105,7 +104,19 @@ test('AI understanding checks require the same direct link and never offer a cop
  const planning={project:{title:'Test project',areas:[],notes:[],library:[]},proposals:[],agentActions:[]};
  const props={tab:'proposals',setTab:()=>{},getSync:()=>{},onClose:()=>{},onDiscuss:()=>{}};
  const unavailable=render(PlanningPanel,{...props,view:{...view({connected:true}),planning}});
- assert.match(unavailable,/<button[^>]+disabled=""[^>]*>Link direct mini chat to check understanding<\/button>/);assert.doesNotMatch(unavailable,/Copy understanding|Copy to AI/);
- const available=render(PlanningPanel,{...props,view:{...view(active({deliveryMode:'panel'})),planning}});
- assert.match(available,/<button class="primary-button" title="[^"]+">Check AI understanding<\/button>/);assert.match(available,/Keep its SharedBoard panel and this board open/);
+ assert.match(unavailable,/<button[^>]+disabled=""[^>]*>[^<]+<\/button>/);assert.doesNotMatch(unavailable,/Copy understanding|Copy to AI|Link this chat/);
+ const available=render(PlanningPanel,{...props,view:{...view(active()),planning}});
+ assert.match(available,/<button class="primary-button" title="[^"]+">Check AI understanding<\/button>/);
+ const panel=render(PlanningPanel,{...props,view:{...view(active({deliveryMode:'panel'})),planning}});assert.match(panel,/<button[^>]+disabled=""[^>]*>[^<]+<\/button>/);
+});
+
+test('saved queued records do not claim submission when panel delivery is disabled or events expired',()=>{
+ const saved={id:'saved-draft',text:'Keep the original pending question',intent:'discuss',boardRevision:3,delivery:'queued',receipt:'panel_original'};
+ for(const connection of [active({provider:'claude',deliveryMode:'panel'}),active({messageExpiresAt:Date.now()-1000}),{connected:false}]){
+  const html=render(BoardChat,{open:true,setOpen:()=>{},view:{...view(connection),messages:[saved]}});
+  assert.match(html,/Keep the original pending question/);assert.match(html,/Automatic submission is unverified\. Check its AI conversation before retrying\./);
+  assert.doesNotMatch(html,/Queued (?:in|for) your|replies when ready|Copy to AI|Retry delivery/);
+ }
+ const replied=render(BoardChat,{open:true,setOpen:()=>{},view:{...view({connected:true,provider:'claude'}),messages:[{...saved,reply:'Keep the actual answer'}]}});
+ assert.match(replied,/Keep the actual answer/);assert.doesNotMatch(replied,/Automatic submission is unverified/);
 });

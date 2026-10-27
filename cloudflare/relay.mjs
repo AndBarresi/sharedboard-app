@@ -1,19 +1,22 @@
 import {fail,json,body,failureResponse,uuid,secret,hash,tokenSession,object,stable,MAX_RESULT,errorData,manualPrompt,permissionFor} from './protocol.mjs';
 import {dispatchEvent,eventStatus,clearEventSubscriptions,handleEventRpc} from './events.mjs';
 import {clientProfile,isClientProvider} from '../shared/client-profiles.mjs';
-import {panelStatus,panelOperation,queuePanelRequest,clearPanel} from './panel-state.mjs';
+import {panelStatus,panelOperation,clearPanel} from './panel-state.mjs';
 
 const supported=new Set(['connection','pair','confirm','read','read_full','visual','reviews','review','complete_review','add','chats','chat','reply','edit']);
 const writes=new Set(['add','edit']);
 const aliases={read_board:'read',view_board:'visual',add_elements:'add',edit_elements:'edit',confirm_connection:'confirm',list_chat_messages:'chats',read_chat_message:'chat',reply_to_chat_message:'reply',list_review_requests:'reviews',read_review_request:'review',complete_review_request:'complete_review'};
 const defaultOrigin='https://connect.sharedboard.app';
+const panelDeliveryReason='This AI app may accept a panel message as a composer draft without sending it or starting a model turn. Automatic panel delivery has not been verified and is unavailable.';
 export class BoardRelay{
  constructor(ctx,env){this.ctx=ctx;this.env=env;this.pending=new Map();this.ready=ctx.blockConcurrencyWhile(async()=>{this.meta=await ctx.storage.get('session')??null;});if(typeof WebSocketRequestResponsePair==='function')ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}
  eventContext(){return {principal:this.meta.id,boardId:this.meta.boardId,storage:this.ctx.storage,callbackFetch:fetch,allowedCallbackOrigins:this.env.EVENT_CALLBACK_ORIGINS??''};}
  panelContext(){return {storage:this.ctx.storage,boardId:this.meta.boardId,connectionId:this.meta.id,familyId:this.meta.authorizedFamily,label:this.meta.label,permission:permissionFor(this.meta.authorizedScope)};}
  async connection(){
   const events=this.meta?await eventStatus(this.eventContext()):{},panel=this.meta?.activatedAt&&this.meta.authorizedFamily&&!this.meta.revoked?await panelStatus(this.panelContext()):{linked:false};
-  return {connected:Boolean(this.meta?.activatedAt&&!this.meta.revoked),id:this.meta?.id??null,boardId:this.meta?.boardId??null,provider:this.meta?.provider??null,label:this.meta?.label??'Connect an AI',permission:this.meta?.authorizedScope?permissionFor(this.meta.authorizedScope):this.meta?.permission??null,automaticMessages:Boolean(panel.linked||events.automaticMessages),automaticReviews:Boolean(panel.linked||events.automaticReviews),panelConnected:Boolean(panel.linked),panelExpiresAt:panel.expiresAt??null,eventExpiresAt:events.eventExpiresAt??null,messageExpiresAt:panel.linked?panel.expiresAt:events.messageExpiresAt??null,reviewExpiresAt:panel.linked?panel.expiresAt:events.reviewExpiresAt??null,browserOnline:Boolean(this.owner()),boardCheckedAt:this.meta?.boardCheckedAt??null,deliveryCheckedAt:this.meta?.deliveryCheckedAt??null,replyCheckedAt:this.meta?.replyCheckedAt??null,connectedAt:this.meta?.activatedAt??null,authorized:Boolean(this.meta?.authorizedClient),chatIdentityVerified:false,deliveryMode:panel.linked?'panel':events.automaticMessages?'events':'manual',...(this.meta?.revoked?{revoked:true}:{})};
+  // Legacy deliveryCheckedAt also recorded panel/event acknowledgements. Only
+  // a captured-request read (or an actual saved reply) proves model receipt.
+  return {connected:Boolean(this.meta?.activatedAt&&!this.meta.revoked),id:this.meta?.id??null,boardId:this.meta?.boardId??null,provider:this.meta?.provider??null,label:this.meta?.label??'Connect an AI',permission:this.meta?.authorizedScope?permissionFor(this.meta.authorizedScope):this.meta?.permission??null,automaticMessages:Boolean(events.automaticMessages),automaticReviews:Boolean(events.automaticReviews),panelConnected:Boolean(panel.linked),panelAutomaticDelivery:false,panelDeliveryReason,panelExpiresAt:panel.expiresAt??null,eventExpiresAt:events.eventExpiresAt??null,messageExpiresAt:events.messageExpiresAt??null,reviewExpiresAt:events.reviewExpiresAt??null,browserOnline:Boolean(this.owner()),boardCheckedAt:this.meta?.boardCheckedAt??null,deliveryCheckedAt:this.meta?.modelRequestReadAt??this.meta?.replyCheckedAt??null,replyCheckedAt:this.meta?.replyCheckedAt??null,connectedAt:this.meta?.activatedAt??null,authorized:Boolean(this.meta?.authorizedClient),chatIdentityVerified:false,deliveryMode:events.automaticMessages||events.automaticReviews?'events':'manual',...(this.meta?.revoked?{revoked:true}:{})};
  }
  sockets(){return this.ctx.getWebSockets().filter(ws=>{try{return ws.readyState===1&&ws.deserializeAttachment()?.authenticated===true;}catch{return false;}});}
  owner(){return this.sockets().find(ws=>ws.deserializeAttachment().owner===true);}
@@ -46,8 +49,8 @@ export class BoardRelay{
   if(!this.meta.activatedAt)throw fail('Connect this board to your AI before sending a request.',409,'PAIRING_REQUIRED');if(!['chat','review'].includes(input.kind))throw fail('Choose a chat message or board review.');uuid(input.id,'request ID');if(input.connectionId&&input.connectionId!==this.meta.id)throw fail('This request belongs to another board connection.',403);
   const list=await this.rpc(input.kind==='chat'?'chats':'reviews'),item=(list[input.kind==='chat'?'messages':'requests']??[]).find(item=>item.id===input.id);if(!item||item.connectionId!==this.meta.id)throw fail('That saved request does not belong to this board connection.',404);
   if(notify){
-   if((await panelStatus(this.panelContext())).linked){const queued=await queuePanelRequest({id:input.id,kind:input.kind,intent:item.intent??'discuss'},this.panelContext());return {delivery:'queued',automaticMessages:true,receipt:queued.receipt,connection:await this.connection()};}
-   const delivered=await dispatchEvent({id:input.id,kind:input.kind,intent:item.intent},this.eventContext());if(delivered.delivery!=='manual'){if(delivered.delivery==='queued'){this.meta.deliveryCheckedAt=new Date().toISOString();await this.save();await this.publish();}return {...delivered,connection:await this.connection()};}}
+   const delivered=await dispatchEvent({id:input.id,kind:input.kind,intent:item.intent},this.eventContext());if(delivered.delivery!=='manual'){if(delivered.delivery==='queued')await this.publish();return {...delivered,connection:await this.connection()};}
+   throw fail('Direct mini-chat delivery is not available for this connection. A panel acknowledgement may only create a draft in the AI app. Your captured request remains saved in this browser.',409,'DIRECT_DELIVERY_UNAVAILABLE');}
   return {delivery:'manual',handoffPrompt:manualPrompt(input.kind,input.id,this.meta.boardId),connection:await this.connection()};
  }
  async fetch(request){
@@ -76,16 +79,22 @@ export class BoardRelay{
     await this.authorized(input.grant,{connected:input.operation!=='pair'&&input.operation!=='connection'});if(input.operation==='pair')return json(await this.activate(input.input??{},input.grant));if(input.operation==='connection')return json(await this.connection());
     const args=input.input??{},operation=aliases[input.operation]??input.operation;let requestId=args.requestId;const clean={...args};delete clean.requestId;
     if(requestId)uuid(requestId,'request ID');else if(writes.has(operation))requestId=(await hash(`${this.meta.id}:${JSON.stringify(stable({operation,input:clean}))}`)).slice(0,32); // Stable retries; new copies must use new element IDs or requestId.
-    const result=await this.rpc(operation,clean,requestId);await this.authorized(input.grant);const checkedField={confirm:'boardCheckedAt',chat:'deliveryCheckedAt',review:'deliveryCheckedAt',reply:'replyCheckedAt'}[operation];if(checkedField){this.meta[checkedField]=new Date().toISOString();await this.save();await this.publish();}return json(result);
+    const result=await this.rpc(operation,clean,requestId);await this.authorized(input.grant);const checkedField={confirm:'boardCheckedAt',chat:'modelRequestReadAt',review:'modelRequestReadAt',reply:'replyCheckedAt'}[operation];if(checkedField){this.meta[checkedField]=new Date().toISOString();await this.save();await this.publish();}return json(result);
    }
    if(url.pathname==='/agent/panel'){
-    await this.authorized(input.grant);const result=await panelOperation(input.operation,input.input??{},this.panelContext());
-    if(input.operation==='attach')await clearEventSubscriptions(this.eventContext());
     await this.authorized(input.grant);
-    if(input.operation==='confirm'){this.meta.deliveryCheckedAt=new Date().toISOString();await this.save();}
-    if(input.operation!=='open')await this.publish();return json(result);
+    // Text-message capability and a successful ui/message acknowledgement do
+    // not prove that a host submits the message or starts a model turn. Keep
+    // existing receipts intact, and stop cached panels before they can replay.
+    if(['attach','claim','confirm'].includes(input.operation))throw fail(panelDeliveryReason,409,'PANEL_DIRECT_DELIVERY_UNAVAILABLE');
+    // Older cached views ignore the policy fields and heartbeat while linked.
+    // Expire only this validated view's lease so they pause instead of keeping
+    // an unusable route alive. Detach preserves views and request receipts.
+    const result=await panelOperation(input.operation==='state'?'detach':input.operation,input.input??{},this.panelContext());
+    await this.authorized(input.grant);
+    if(input.operation!=='open')await this.publish();return json({...result,directDeliveryAvailable:false,directDeliveryReason:panelDeliveryReason});
    }
-   if(url.pathname==='/agent/events'){await this.authorized(input.grant,{connected:input.method!=='events/list'});if(input.method==='events/subscribe'&&(await panelStatus(this.panelContext())).linked)throw fail('Pause the connected conversation panel before choosing a different incoming-message route.',409,'PANEL_ALREADY_CONNECTED');const result=await handleEventRpc(input.method,input.params??{},this.eventContext());await this.publish();return json(result);}
+   if(url.pathname==='/agent/events'){await this.authorized(input.grant,{connected:input.method!=='events/list'});const result=await handleEventRpc(input.method,input.params??{},this.eventContext());await this.publish();return json(result);}
    throw fail('Unknown connector operation.',404);
   }catch(error){return failureResponse(error);}
  }

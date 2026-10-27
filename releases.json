@@ -1,20 +1,38 @@
 {
-  "version": "0.9.1",
+  "version": "0.9.3",
   "entries": [
     {
-      "version": "0.9.1",
-      "title": "Reliable conversation panel lifecycle",
+      "version": "0.9.3",
+      "title": "Retire stale experimental panel links",
       "added": [],
       "fixed": [
-        "Pause forwarding when the conversation panel closes and require a fresh Link action after it is reopened."
+        "Previously opened panels now pause automatically instead of renewing an unverified delivery link; their saved request and receipt history stays intact."
+      ]
+    },
+    {
+      "version": "0.9.2",
+      "title": "Verify model receipt and report automatic-chat limits",
+      "added": [],
+      "fixed": [
+        "A real Claude test showed that conversation panels fill a draft without submitting it; keep automatic mini chat and board reviews unavailable until a verified incoming-message route exists.",
+        "Separate panel acknowledgement from an actual model read or reply, including older saved receipt checks.",
+        "Preserve captured request IDs and replies, block cached panels from forwarding or replaying requests, and show accurate connection availability."
+      ]
+    },
+    {
+      "version": "0.9.1",
+      "title": "Conversation panel lifecycle checks",
+      "added": [],
+      "fixed": [
+        "Hardened the experimental diagnostic panel against stale views and closing conversation windows."
       ]
     },
     {
       "version": "0.9.0",
-      "title": "Confirmed workspace deletion and direct conversation panels",
+      "title": "Confirmed workspace deletion and conversation diagnostics",
       "added": [
         "Delete boards or whole projects from the workspace picker, with a named confirmation and affected-board count.",
-        "A SharedBoard panel can forward mini-chat requests into the existing AI conversation when its host supports MCP Apps text messages; link it once and keep the panel and browser board open."
+        "Added experimental conversation-panel diagnostics to check whether an AI app accepts text and actually starts a response."
       ],
       "fixed": [
         "Require an active direct-chat route before sending; preserve drafts and original request IDs when a link expires, with no per-message copy-and-paste fallback.",
@@ -107,8 +125,7 @@
       "added": [
         "Connect an existing AI client through the hosted Cloudflare relay, without downloading a SharedBoard helper.",
         "Approve board-scoped read or edit access in the browser and keep drawings, images, notes, history and chat saved locally.",
-        "Remote MCP tools read and edit the live board, review captured context, and return actual replies to the mini chat.",
-        "Supported Work Cloud clients can subscribe to board events after their callback is verified; other clients use Copy to AI."
+        "Remote MCP tools read and edit the live board, review captured context, and return actual replies to the mini chat."
       ],
       "fixed": [
         "Retired native installers, launcher downloads and their release workflow, and rewrote historical notes for removed features.",
@@ -261,5 +278,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "dc9e1dafbee16e5cd8e92c48c5966f1a112d7868c6fbf12b41f762e912212237"
+  "sourceHash": "ad27b346b7fd45b31b617edddfb8a4f3d46ab753bcedcac9637dee1313e1f854"
 }

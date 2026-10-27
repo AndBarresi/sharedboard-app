@@ -4,7 +4,7 @@ import {Icon} from './Icons.jsx';
 const tools=[['selection','select','Select','V'],['hand','hand','Pan','H'],['rectangle','rectangle','Rectangle','R'],['diamond','diamond','Diamond','D'],['ellipse','ellipse','Ellipse','O'],['arrow','arrow','Arrow','A'],['line','line','Line','L'],['freedraw','freedraw','Draw','P'],['text','text','Text','T'],['image','image','Image','9'],['eraser','eraser','Eraser','E']];
 const colors=['#26352e','#275c46','#718b64','#b56c43','#657c9b','#896284','#ffffff'];
 const fills=['transparent','#e5eadc','#dff0e5','#fff0d9','#dce9f6','#eedfee','#ffffff'];
-export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,chatDisabled=false,chatUnavailableReason='',onConnect,onReview,reviewDisabled,onExport,onImport,onError,onPlanner,onReference,onChangelog,onExportProject,onImportProject,onWorkspace,onNavigator,browserOnly=false,onStorageDetails}){
+export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,chatDisabled=false,chatUnavailableReason='',onConnect,onReview,reviewDisabled,reviewUnavailableReason='',onExport,onImport,onError,onPlanner,onReference,onChangelog,onExportProject,onImportProject,onWorkspace,onNavigator,browserOnly=false,onStorageDetails}){
   const [panel,setPanel]=useState(null);const root=useRef(null);const file=useRef(null);
   useEffect(()=>{const close=e=>{if(!root.current?.contains(e.target))setPanel(null);};const escape=e=>{if(e.key==='Escape')setPanel(null);};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[]);
   const button=(name,label,onClick,active=false,disabled=false,title=label)=><button type="button" key={label} className={`tool-button ${active?'active':''}`} aria-label={label} title={title} onClick={onClick} aria-pressed={active} disabled={disabled}><Icon name={name}/></button>;
@@ -29,7 +29,7 @@ export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,chatDisabl
       {button('palette','Drawing style',()=>setPanel(panel==='style'?null:'style'),panel==='style')}
       {button('undo','Undo',()=>history(false))}{button('redo','Redo',()=>history(true))}
       <span className="tool-divider"/>
-      {button('review','Ask AI to look',onReview,false,reviewDisabled)}
+      {button('review','Ask AI to look',onReview,false,reviewDisabled,reviewDisabled?reviewUnavailableReason||'Board review unavailable for this connection':'Ask AI to look')}
       {focused&&button('chat','Open board chat',()=>{if(!chatDisabled)onChat();},false,chatDisabled,chatDisabled?chatUnavailableReason||'Mini chat unavailable for this connection':'Open board chat')}
       {button(focused?'collapse':'expand',focused?'Exit full screen':'Full screen',()=>{setPanel(null);onFullscreen();},focused)}
     </div>

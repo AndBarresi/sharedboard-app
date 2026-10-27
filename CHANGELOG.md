@@ -1,17 +1,31 @@
 # SharedBoard.app changelog
 
-## 0.9.1 — Reliable conversation panel lifecycle
+## 0.9.3 — Retire stale experimental panel links
 
 ### Fixed
 
-- Pause forwarding when the conversation panel closes and require a fresh Link action after it is reopened.
+- Previously opened panels now pause automatically instead of renewing an unverified delivery link; their saved request and receipt history stays intact.
 
-## 0.9.0 — Confirmed workspace deletion and direct conversation panels
+## 0.9.2 — Verify model receipt and report automatic-chat limits
+
+### Fixed
+
+- A real Claude test showed that conversation panels fill a draft without submitting it; keep automatic mini chat and board reviews unavailable until a verified incoming-message route exists.
+- Separate panel acknowledgement from an actual model read or reply, including older saved receipt checks.
+- Preserve captured request IDs and replies, block cached panels from forwarding or replaying requests, and show accurate connection availability.
+
+## 0.9.1 — Conversation panel lifecycle checks
+
+### Fixed
+
+- Hardened the experimental diagnostic panel against stale views and closing conversation windows.
+
+## 0.9.0 — Confirmed workspace deletion and conversation diagnostics
 
 ### Added
 
 - Delete boards or whole projects from the workspace picker, with a named confirmation and affected-board count.
-- A SharedBoard panel can forward mini-chat requests into the existing AI conversation when its host supports MCP Apps text messages; link it once and keep the panel and browser board open.
+- Added experimental conversation-panel diagnostics to check whether an AI app accepts text and actually starts a response.
 
 ### Fixed
 
@@ -89,7 +103,6 @@
 - Connect an existing AI client through the hosted Cloudflare relay, without downloading a SharedBoard helper.
 - Approve board-scoped read or edit access in the browser and keep drawings, images, notes, history and chat saved locally.
 - Remote MCP tools read and edit the live board, review captured context, and return actual replies to the mini chat.
-- Supported Work Cloud clients can subscribe to board events after their callback is verified; other clients use Copy to AI.
 
 ### Fixed
 

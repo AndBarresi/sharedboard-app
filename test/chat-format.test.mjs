@@ -67,6 +67,6 @@ test('only a confirmed receipt, prepared manual instructions, or an actual reply
 });
 
 test('an uncertain automatic request retains its retry ID and capture after switching to manual chat',()=>{
- for(const error of [{status:409,code:'DIRECT_CHAT_NOT_LINKED'},{status:409,code:'DELIVERY_UNCERTAIN',deliveryUnknown:true},{status:409,code:'DELIVERY_UNCERTAIN'},{status:409,deliveryUnknown:true},{status:500},new Error('Network unavailable')])assert.equal(shouldResetChatCapture(error),false);
+ for(const error of [{status:409,code:'DIRECT_CHAT_NOT_LINKED'},{status:409,code:'DIRECT_DELIVERY_UNAVAILABLE'},{status:409,code:'PANEL_DIRECT_DELIVERY_UNAVAILABLE'},{status:409,code:'DELIVERY_UNCERTAIN',deliveryUnknown:true},{status:409,code:'DELIVERY_UNCERTAIN'},{status:409,deliveryUnknown:true},{status:500},new Error('Network unavailable')])assert.equal(shouldResetChatCapture(error),false);
  for(const status of [400,409,413])assert.equal(shouldResetChatCapture({status,code:'INVALID_PREVIEW'}),true);
 });

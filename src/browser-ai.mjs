@@ -10,6 +10,7 @@ export const chatInputSchema=captureSchema.extend({text:z.string().trim().min(1)
 export const metadata=item=>{const {snapshot,targetThreadId,...rest}=item;return clone(rest);};
 export const planningContext=(record,ids=[],scope='board')=>({version:record.planning.version,title:record.planning.project.title,areas:clone(record.planning.project.areas),notes:clone(record.planning.project.notes.filter(n=>scope==='board'||!n.elementIds.length||n.elementIds.some(id=>ids.includes(id)))),pendingProposals:[]});
 export function automaticDeliveryFor(connection,kind,now=Date.now()){
+ if(['panel','panel-draft'].includes(connection?.deliveryMode))return false;
  const enabled=kind==='review'?(connection?.automaticReviews??connection?.automaticMessages):connection?.automaticMessages;
  if(enabled!==true)return false;
  const deadline=(kind==='review'?connection?.reviewExpiresAt:connection?.messageExpiresAt)??connection?.eventExpiresAt;
@@ -25,7 +26,7 @@ export function createCaptured(record,raw,kind,connection,at){
  const duplicate=list.find(item=>item.id===input.id);
  if(duplicate){if(duplicate.boardRevision!==input.expectedRevision||duplicate.planningVersion!==input.expectedPlanningVersion||duplicate.scope!==input.scope||duplicate.areaId!==input.areaId||!same(duplicate.selectedIds,selectedIds)||kind==='chat'&&(duplicate.text!==input.text||duplicate.intent!==input.intent))throw browserFailure('That request ID already belongs to different content. Retry the original request.',409);return {item:duplicate,created:false};}
  if(!connection?.connected||!connection.id)throw browserFailure('Connect this board to your existing AI chat before sending.',409,'BRIDGE_NOT_CONNECTED');
- if(input.automaticRequired&&!automaticDeliveryFor(connection,kind,Date.parse(at)))throw browserFailure('Open the SharedBoard panel in your AI conversation and click Link this chat before sending.',409,'DIRECT_CHAT_NOT_LINKED');
+ if(input.automaticRequired&&!automaticDeliveryFor(connection,kind,Date.parse(at)))throw browserFailure('Automatic delivery is unavailable for this connection. Your AI app needs a verified incoming-message route; board tools are still connected.',409,'DIRECT_CHAT_NOT_LINKED');
  if(input.boardId!==record.id)throw browserFailure('This preview belongs to another board. Prepare a new preview.');
  if(input.expectedRevision!==record.board.revision)throw browserFailure('The drawing changed before sending. Refresh the context preview.');
  if(input.expectedPlanningVersion!==record.planning.version)throw browserFailure('The planning notes changed. Refresh the context preview.');
