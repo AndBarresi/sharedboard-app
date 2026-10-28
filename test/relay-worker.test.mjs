@@ -12,7 +12,11 @@ const root=fileURLToPath(new URL('../',import.meta.url)),requireWrangler=createR
 const origin='https://connect.sharedboard.app',appOrigin='https://sharedboard.app';
 const wait=async check=>{const deadline=Date.now()+10000;while(Date.now()<deadline){if(await check())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Timed out waiting for the isolated relay browser.');};
 
-test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK MCP round-trip without a local companion',{timeout:60000},async()=>{
+// Reserve the intentional real 40-second default wait plus 50 seconds for native
+// workerd startup, three OAuth/MCP client flows, and teardown on hosted runners.
+// Production wait/RPC deadlines and all per-operation assertions stay unchanged.
+test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK MCP round-trip without a local companion',{timeout:90_000},async t=>{
+ const started=performance.now(),phase=label=>t.diagnostic(`Relay integration phase: ${label}; elapsed ${Math.round(performance.now()-started)}ms`);phase('native runtime setup');
  const bundle=await build({entryPoints:[`${root}cloudflare/worker.mjs`],bundle:true,format:'esm',platform:'neutral',target:'es2022',conditions:['workerd','worker','browser'],external:['node:*'],write:false,logLevel:'silent'});
  const mfOptions=convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat','enable_request_signal','request_signal_passthrough'],bindings:{RELAY_ORIGIN:origin,APP_ORIGIN:appOrigin,EVENT_CALLBACK_ORIGINS:''},durableObjects:{BOARD_RELAY:{className:'BoardRelay',useSQLite:true},RELAY_AUTH:{className:'RelayAuth',useSQLite:true}},durableObjectsPersist:false}),mf=new Miniflare(mfOptions);
  let browser,client,reopened;const sockets=new Set();
@@ -34,7 +38,7 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
  const callBrowser=(path,input)=>browser.request(path,{method:input===undefined?'GET':'POST',...(input===undefined?{}:{body:JSON.stringify(input)})});
  const http=async(path,input,{token,method}={})=>{const response=await mf.dispatchFetch(`${origin}${path}`,{method:method??(input===undefined?'GET':'POST'),headers:{origin:appOrigin,...(input===undefined?{}:{'content-type':'application/json'}),...(token?{'x-sharedboard-browser':token}:{})},...(input===undefined?{}:{body:JSON.stringify(input)})});return {response,data:await response.json()};};
  try{
-  await mf.ready;assert.equal((await http('/health')).data.product,'SharedBoard Relay');const denied=await mf.dispatchFetch(`${origin}/browser/pair`,{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'});assert.equal(denied.status,403);
+  await mf.ready;phase('provider setup and initial OAuth');assert.equal((await http('/health')).data.product,'SharedBoard Relay');const denied=await mf.dispatchFetch(`${origin}/browser/pair`,{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'});assert.equal(denied.status,403);
   // Provider setup names cannot grant extra access or silently reinterpret legacy IDs.
   for(const [provider,label] of [['codex','Codex'],['claude','Claude (web)'],['chatgpt','ChatGPT Work Cloud'],['other','Other MCP client']]){
    const prepared=await http('/browser/pair',{boardId:crypto.randomUUID(),title:'Isolated provider setup',provider,permission:'read',clientId:'isolated-client'});
@@ -57,7 +61,7 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
   for(const method of ['events/subscribe','events/unsubscribe']){const rejected=await eventRequest(method,subscription);assert.match(rejected.data.error?.message??'',/call connect_board first/,JSON.stringify(rejected.data));}
   client=new Client({name:'Workerd integration client',version:'1'});await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/mcp`),{fetch:dispatch,requestInit:{headers:{Authorization:`Bearer ${tokens.access_token}`}}}));
   const call=(name,args={})=>client.callTool({name,arguments:args});const tools=await client.listTools();assert.ok(tools.tools.some(tool=>tool.name==='connect_board'));assert.equal((await call('read_board')).isError,true);const connected=await call('connect_board',{code:paired.pairing.code});assert.ok(!connected.isError,JSON.stringify(connected));await wait(async()=>(await callBrowser('/api/connection')).connected);await wait(async()=>(await callBrowser('/api/connection')).browserOnline);const clientStatus=await browser.bridgeStatus();assert.equal(clientStatus.provider,'claude-code');assert.equal(clientStatus.label,'My Claude Code connection');assert.equal(clientStatus.permission,'edit');assert.equal(clientStatus.automaticMessages,false);assert.equal(clientStatus.eventExpiresAt,null);
-  const read=await call('read_board');assert.equal(read.structuredContent.revision,0);await call('confirm_connection',{revision:0});const added=await call('add_elements',{elements:[{id:'actual-relay-shape',text:'Persist this browser-only design',x:20,y:30}],requestId:crypto.randomUUID()});assert.ok(!added.isError,JSON.stringify(added));assert.equal((await callBrowser('/api/board')).revision,1);assert.equal((await callBrowser('/api/board')).elements.some(element=>element.id==='actual-relay-shape'),true);
+  phase('browser edits, captured reply, and reopen');const read=await call('read_board');assert.equal(read.structuredContent.revision,0);await call('confirm_connection',{revision:0});const added=await call('add_elements',{elements:[{id:'actual-relay-shape',text:'Persist this browser-only design',x:20,y:30}],requestId:crypto.randomUUID()});assert.ok(!added.isError,JSON.stringify(added));assert.equal((await callBrowser('/api/board')).revision,1);assert.equal((await callBrowser('/api/board')).elements.some(element=>element.id==='actual-relay-shape'),true);
   const edited=await call('edit_elements',{edits:[{id:'actual-relay-shape',expectedVersion:1,changes:{x:40}}]});assert.ok(!edited.isError,JSON.stringify(edited));const conflict=await call('edit_elements',{edits:[{id:'actual-relay-shape',expectedVersion:1,changes:{x:80}}]});assert.equal(conflict.isError,true);
   await mf.unsafeEvictDurableObject(mfOptions.workers[0].config.name,'BoardRelay',{name:state.sessionId,webSockets:'hibernate'});const afterHibernate=await call('read_board');assert.ok(afterHibernate.structuredContent,JSON.stringify(afterHibernate));assert.equal(afterHibernate.structuredContent.revision,2);
   const board=await callBrowser('/api/board'),planning=await callBrowser('/api/planning'),message={id:crypto.randomUUID(),boardId:board.id,expectedRevision:board.revision,expectedPlanningVersion:planning.version,scope:'board',selectedIds:[],text:'Please inspect this captured browser board and reply. Discuss only.',intent:'discuss'};
@@ -68,6 +72,7 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
   // Manual mini chat and replies remain usable with read-only drawing grants.
   // Exercise real browser storage, OAuth and MCP tools for each affected client.
   for(const provider of ['codex','claude','claude-code']){
+   phase(`${provider}: read-only OAuth and saved replies`);
    const readPair=await callBrowser('/api/connection/pairing',{provider,permission:'read'}),readState=await savedGrant();
    const readRegistration=(await http('/register',{client_name:`Isolated ${provider} read-only client`,redirect_uris:['https://client.example/callback']})).data;
    const readAuthorize=await mf.dispatchFetch(`${origin}/authorize?${new URLSearchParams({client_id:readRegistration.client_id,redirect_uri:readRegistration.redirect_uris[0],response_type:'code',code_challenge:challenge,code_challenge_method:'S256',state:provider,resource:`${origin}/mcp`})}`,{redirect:'manual'});assert.equal(readAuthorize.status,302);
@@ -102,8 +107,8 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
    // captures and replies. This proves transport behavior, not model compliance.
    // Exercise the full real default-sized empty wait once, not only requests
    // delivered immediately after a five-second wait starts.
-   const timeoutResult=await readCall('wait_for_board_request',{waitMs:provider==='codex'?40000:20});assert.ok(!timeoutResult.isError,JSON.stringify(timeoutResult));assert.equal(timeoutResult.structuredContent.status,'timeout');assert.deepEqual(timeoutResult.structuredContent.requests,[]);assert.equal((await browser.bridgeStatus()).automaticMessages,false);
-   const firstWait=readCall('wait_for_board_request',{sessionId:timeoutResult.structuredContent.sessionId,waitMs:5000});
+   phase(`${provider}: bounded empty wait started`);const timeoutResult=await readCall('wait_for_board_request',{waitMs:provider==='codex'?40000:20});assert.ok(!timeoutResult.isError,JSON.stringify(timeoutResult));assert.equal(timeoutResult.structuredContent.status,'timeout');assert.deepEqual(timeoutResult.structuredContent.requests,[]);assert.equal((await browser.bridgeStatus()).automaticMessages,false);phase(`${provider}: bounded empty wait completed`);
+   phase(`${provider}: live message, review, and stop`);const firstWait=readCall('wait_for_board_request',{sessionId:timeoutResult.structuredContent.sessionId,waitMs:5000});
    await wait(async()=>(await browser.bridgeStatus())?.liveSession?.status==='waiting');
    const listening=await browser.bridgeStatus();assert.equal(listening.automaticMessages,true);assert.equal(listening.deliveryMode,'live-session');const liveSessionId=listening.liveSession.id;
    const liveInput={...readMessage,id:crypto.randomUUID(),text:`Live ${provider} captured discussion`,automaticRequired:true};
@@ -124,5 +129,5 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
    const unchanged=await callBrowser('/api/board');assert.equal(unchanged.revision,2);assert.equal(unchanged.elements.find(element=>element.id==='actual-relay-shape').x,40);assert.equal(unchanged.elements.some(element=>element.id===`blocked-${provider}`),false);
    await callBrowser('/api/connection/disconnect',{});await client.close();client=null;
   }
- }finally{browser?.close();reopened?.close();await client?.close().catch(()=>{});for(const socket of sockets)socket.close();await mf.dispose();}
+ }finally{phase('native runtime teardown');browser?.close();reopened?.close();await client?.close().catch(()=>{});for(const socket of sockets)socket.close();await mf.dispose();phase('complete');}
 });
