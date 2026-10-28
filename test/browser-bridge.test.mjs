@@ -276,6 +276,30 @@ test('detection verifies the hosted relay product and failed live status does no
  }finally{t.close();}
 });
 
+test('temporary network loss preserves native captured IDs, offline browser edits and leases without replay after reopening',async()=>{
+ const bridge=new FakeBridge(),BaseSocket=bridge.WebSocket,Socket=class extends BaseSocket{constructor(url){if(bridge.offline)throw new Error('Fixture socket network unavailable');super(url);}};
+ const config={indexedDB:new IDBFactory(),dbName:crypto.randomUUID(),origin:'https://sharedboard.app',BroadcastChannel:null,bridgeFetch:bridge.fetch.bind(bridge),bridgeWebSocket:Socket,bridgePollDelay:10};
+ let t=await createBrowserTransport(config);try{
+  await t.ready();await call(t,'/api/connection/pairing',{provider:'chatgpt',permission:'edit'});bridge.activate();
+  Object.assign(bridge.connection,{deliveryMode:'events',messageExpiresAt:new Date(Date.now()+60000).toISOString(),reviewExpiresAt:new Date(Date.now()+120000).toISOString()});await t.bridgeStatus();await wait(()=>bridge.owner?.readyState===1);
+  const identity=structuredClone(bridge.connection),token=bridge.token;
+  await bridge.command('add_elements',{elements:[{id:'before-loss',text:'Keep the captured original'}]});
+  const input=await capture(t,{text:'Keep this exact uncertain native request',intent:'discuss',automaticRequired:true});bridge.loseReceipt=true;
+  const uncertain=(await call(t,'/api/chat',input)).messages[0];assert.equal(uncertain.delivery,'uncertain');assert.equal(bridge.receipts.size,1);assert.equal(bridge.notifyCount,1);
+  bridge.offline=true;bridge.owner.close(1006);await wait(async()=>(await call(t,'/api/connection')).connected===false);
+  const offlineElement={id:'saved-offline',type:'rectangle',x:10,y:20,width:40,height:40};await call(t,'/api/board',{changes:[{id:offlineElement.id,expectedVersion:0,element:offlineElement}]},'PATCH');const offlineBoard=await call(t,'/api/board');
+  t.close();t=await createBrowserTransport(config);await t.ready();await t.bridgeStatus();
+  assert.deepEqual(await call(t,'/api/board'),offlineBoard);assert.deepEqual((await call(t,'/api/chat')).messages,[uncertain]);assert.equal(bridge.notifyCount,1);assert.equal(bridge.token,token);
+  bridge.offline=false;await wait(()=>bridge.owner?.readyState===1);await wait(async()=>(await call(t,'/api/connection')).connected===true);
+  const recovered=await call(t,'/api/connection');for(const key of ['id','boardId','deliveryMode','messageExpiresAt','reviewExpiresAt'])assert.equal(recovered[key],identity[key]);
+  assert.deepEqual(await call(t,'/api/board'),offlineBoard);assert.deepEqual((await call(t,'/api/chat')).messages,[uncertain]);assert.equal(bridge.notifyCount,1,'returning online does not notify or replay the uncertain effect');
+  assert.equal(bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/pair').length,1,'recovery reuses the original board grant');
+  const retry=(await call(t,'/api/chat/retry',{id:input.id})).messages[0];assert.equal(retry.id,input.id);assert.equal(retry.receipt,`evt_chat_${input.id}`);assert.equal(bridge.receipts.size,1,'an explicit original-ID retry resolves the already accepted receipt');
+  const read=await bridge.command('read_chat_message',{id:input.id});assert.equal(read.result.board.revision,input.expectedRevision);assert.equal(read.result.board.elements.some(element=>element.id==='saved-offline'),false);assert.equal(read.result.board.visual.dataURL,png);
+  await bridge.command('reply_to_chat_message',{id:input.id,text:'The actual saved capture survived the outage.'});assert.equal((await call(t,'/api/chat')).messages[0].reply,'The actual saved capture survived the outage.');assert.deepEqual(await call(t,'/api/board'),offlineBoard);
+ }finally{t.close();}
+});
+
 test('Claude Code pairing uses the shared provider registry and invalid choices cannot replace a grant',async()=>{
  const boardId=crypto.randomUUID(),sessionId=crypto.randomUUID(),requests=[],saves=[];let state=null,loads=0;
  const bridge=createBrowserBridge({boardId,clientId:'browser-tab',WebSocket:null,load:async()=>{loads++;return state;},save:async value=>{saves.push(value);state=value;return true;},fetch:async(url,options)=>{

@@ -47,7 +47,7 @@ Keep requirements, named areas, and reusable building blocks beside the drawing 
 2. Draw something, add a reference or note, and wait for the saved indicator.
 3. Use **Export board** to keep a `.sharedboard` backup outside the browser.
 
-SharedBoard runs in the browser. There is no SharedBoard application or companion to install on Windows or Mac.
+SharedBoard runs in the browser. The current hosted flow has no standalone SharedBoard application or companion to install on Windows or Mac. A Claude Code plugin is the approved direction for automatic messages in an existing Claude Code session; that integration is not implemented or verified yet.
 
 > **Your boards stay in your browser.** They are saved on this device in this browser profile, with no cross-device sync. Clearing site data or leaving private browsing can remove them. Export regularly; each backup contains one board's drawing and planning details. Another domain or preview address has separate storage.
 
@@ -62,17 +62,21 @@ The recommended automatic connection is **ChatGPT Work with Cloud selected**, us
 
 Your account must expose native event tasks. A provider label never enables delivery by itself: the website checks the actual subscriptions. Keep the board tab open because it owns the saved drawing and captures. Read-only drawing access allows inspection and replies; requested drawing changes require edit access. Follow [the connection guide](CONNECTIONS.md).
 
+The website-generated post-pair instructions have also passed a real reuse test: the existing conversation read and confirmed the board, then updated its two tasks sequentially without duplicates or drawing changes. This covers an existing account and connection, not first-time OAuth or a new account.
+
 **What has been verified:** native delivery woke an ended AI turn, and mini-chat and review tests completed with AI browser tabs closed and no timed wait active. The production page reloaded with its board, connection, and history preserved. After more than ten minutes with AI tabs closed, another actual reply returned to the website. The next draft stayed editable while Send was disabled, then unlocked with the text intact when the reply arrived.
 
-The preserved draft was then sent and received a second actual automatic reply from the same native Work Cloud chat, with AI tabs still closed.
+The preserved draft was then sent and received a second actual automatic reply from the same native Work Cloud chat, with AI tabs still closed. Both native subscriptions have also renewed autonomously, with an actual reply verified after renewal. Navigating away from the board made reads fail explicitly while it was offline; returning in the same browser profile restored the board, connection, history, and unsent draft. Sending that draft returned another actual reply.
 
-**What still needs acceptance:** fresh one-time setup, sleep/reconnect, long-term host renewal, other accounts/providers, and a full editing workflow need separate tests. Eighteen focused lifecycle tests cover renewal, revocation, signing-key rotation, and receipt preservation; they do not replace those real-client checks. Reading a request or answering only in AI chat does not deliver a board reply; burst reply handling has required a task-prompt repair requested from the website. This remains a testing beta, without a promise of permanent or bug-free connectivity.
+Browser transport recovery detects stalled connections and missing pongs, then reuses the saved grant when the page returns online or to the foreground. It does not re-pair or replay uncertain messages. Isolated tests cover retained browser storage and transport races.
+
+**What still needs acceptance:** first-time OAuth and new-account setup, actual OS sleep, multiday renewal, other accounts/providers, and a full editing workflow need separate tests. The observed renewal and leave/return tests cover one real account, not every interruption. Reading a request or answering only in AI chat does not deliver a board reply; burst reply handling has required a task-prompt repair requested from the website. This remains a testing beta, without a promise of permanent or bug-free connectivity.
 
 ### Other AI clients
 
 Compatible remote MCP clients can read the board and make authorized edits from their own conversations. Their **Live collaboration · experimental** option uses a finite active AI run: waits default to 40 seconds, allow up to 45 seconds, and share a 20-minute deadline. New sends require an actual pending wait. Empty continuations can use AI allowance, and an ended run needs another explicit start. The website preserves drafts and provides **Pause live collaboration**. This mode still needs provider-specific acceptance testing.
 
-Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. It does not enable automatic mini chat. See [connection behavior](BRIDGE.md).
+Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. A one-off OpenAI immediate-send test is offered only when the host advertises that extension; it does not enable automatic mini chat or establish Codex support. The planned Claude Code Channels plugin will be installed and managed inside Claude Code, with an outbound connection to SharedBoard's relay rather than a standalone bridge or home server. Setup, platform support, and actual automatic replies still need implementation and testing. Separate cloud runs are not the chosen path. See [connection behavior](BRIDGE.md).
 
 SharedBoard uses your existing AI account/conversation through the relay. The AI provider controls model execution and task settings; tasks are not guaranteed to use the model manually selected in a chat. SharedBoard does not host a replacement model or include an AI subscription. Shared context passes through Cloudflare to the connected AI service. Saved requests keep their original captures, and delivery, reading, and actual replies remain distinct states.
 

@@ -100,20 +100,22 @@ async function host(options={}){
  const flush=()=>new Promise(resolve=>setImmediate(resolve));
  const emit=message=>listeners.get('message')?.({source:parent,data:{jsonrpc:'2.0',...message}});
  const reply=(id,result,error)=>queueMicrotask(()=>emit({id,...(error?{error}:{result})}));
- const parent={postMessage:message=>{sent.push(message);if(message.method==='ui/initialize'&&!options.deferInitialize)reply(message.id,{hostCapabilities:options.capabilities??{message:{text:{}}}});}};
+ const initialization=()=>({hostInfo:options.hostInfo??{name:'test-host'},hostCapabilities:options.capabilities??{message:{text:{}}}});
+ const parent={postMessage:message=>{sent.push(message);if(message.method==='ui/initialize'&&!options.deferInitialize)reply(message.id,initialization());if(message.method==='ui/message'&&!options.deferMessage)reply(message.id,options.messageResult??{},options.messageError);}};
  const window={parent,addEventListener:(name,callback)=>listeners.set(name,callback)};
  const context={window,document:{getElementById:element},setTimeout:(callback,delay)=>{const id=++serial;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id),setInterval:()=>{intervals++;return intervals;},clearInterval:()=>{}};
  const running=vm.runInNewContext('(async()=>{'+script+'})()',context);
  if(!options.deferInitialize)await running;
  emit({method:'ui/notifications/tool-result',params:{_meta:metadata,structuredContent:opened}});await flush();
- return {sent,element,flush,running,emit,
+ return {sent,element,flush,running,emit,reply,
   count:method=>sent.filter(message=>message.method===method).length,
   toolCalls:()=>sent.filter(message=>message.method==='tools/call'),
   intervalCount:()=>intervals,
   async link(){await element('link').onclick?.();await flush();},
+  async probe(trusted=true){await element('probe').onclick?.({isTrusted:trusted});await flush();},
   async close(id='teardown-request'){emit({id,method:'ui/resource-teardown',params:{}});await flush();await running;},
   async foreign(message){listeners.get('message')({source:{},data:{jsonrpc:'2.0',...message}});await flush();},
-  async initialize(){const request=sent.find(message=>message.method==='ui/initialize');reply(request.id,{hostCapabilities:{message:{text:{}}}});await running;await flush();},
+  async initialize(){const request=sent.find(message=>message.method==='ui/initialize');reply(request.id,initialization());await running;await flush();},
  };
 }
 
@@ -132,11 +134,50 @@ test('advertised text messaging leaves the panel diagnostic only, without attach
 });
 
 test('missing text capabilities cannot enable automatic mini chat or forwarding',async()=>{
- for(const capabilities of [{},{message:{}},{message:{text:true}},{message:{text:null}}]){
+ for(const capabilities of [{},{message:{}},{message:{text:true}},{message:{text:null}},{message:{text:[]}}]){
   const h=await host({capabilities});await h.link();
   assert.equal(h.element('link').disabled,true);assert.match(h.element('status').textContent,/text support not advertised/);
   assert.equal(h.toolCalls().length,0);assert.equal(h.count('ui/message'),0);
  }
+});
+
+test('native immediate-send capability offers only one user-click diagnostic to the current conversation',async()=>{
+ const h=await host({capabilities:{message:{text:{}},experimental:{'openai/message':{}}},hostInfo:{name:'Codex <Desktop>\u202e\n',version:'private-host-version',privateToken:'host-private-token'}});
+ assert.equal(h.element('identity').textContent,'Host app: Codex Desktop');assert.equal(h.element('immediate-support').textContent,'OpenAI immediate-send advertised: true');
+ assert.equal(h.element('probe').hidden,false);assert.equal(h.element('probe').disabled,false);assert.equal(h.element('link').disabled,true);
+ assert.equal(h.count('ui/message'),0,'mounting and tool results do not send');await h.probe(false);assert.equal(h.count('ui/message'),0,'programmatic clicks do not send');
+ await h.probe();assert.equal(h.count('ui/message'),1);assert.equal(h.element('probe').disabled,true);
+ const request=h.sent.find(message=>message.method==='ui/message');
+ assert.deepEqual(JSON.parse(JSON.stringify(request.params)),{role:'user',content:[{type:'text',text:'SharedBoard immediate-send connection test only. Please acknowledge receipt in this existing chat. No drawing changes, code, new conversations, or other work are requested.'}],_meta:{'openai/message':{target:'active',send:true}}});
+ assert.match(h.element('probe-detail').textContent,/accepted; waiting for actual model response/);assert.match(h.element('probe-detail').textContent,/does not verify model execution or enable mini chat/);
+ await h.probe();h.emit({method:'ui/notifications/tool-result',params:{_meta:metadata,structuredContent:{...opened,linked:true,pending:[entry()]}}});await h.close();
+ assert.equal(h.count('ui/message'),1);assert.equal(h.toolCalls().length,0);assert.equal(h.intervalCount(),0);
+ const visible=['identity','status','detail','immediate-support','probe-detail','error'].map(id=>h.element(id).textContent).join(' ');
+ for(const privateValue of ['private-host-version','host-private-token',viewKey,connectionId,boardId])assert.equal(visible.includes(privateValue),false);
+});
+
+test('plain text support and malformed OpenAI capabilities cannot enable the immediate-send diagnostic',async()=>{
+ for(const value of [undefined,null,true,false,1,'yes',[]]){
+  const capabilities={message:{text:{}},experimental:{'openai/message':value}},h=await host({capabilities});
+  assert.equal(h.element('immediate-support').textContent,'OpenAI immediate-send advertised: false');assert.equal(h.element('probe').disabled,true);assert.equal(h.element('probe').hidden,true);
+  await h.probe();h.emit({method:'ui/notifications/host-context-changed',params:{hostCapabilities:{experimental:{'openai/message':{}}}}});await h.close();assert.equal(h.count('ui/message'),0);
+ }
+ const nativeOnly=await host({capabilities:{experimental:{'openai/message':{}}}});
+ assert.match(nativeOnly.element('status').textContent,/text support not advertised/);assert.equal(nativeOnly.element('immediate-support').textContent,'OpenAI immediate-send advertised: true');assert.equal(nativeOnly.element('probe').disabled,false);assert.equal(nativeOnly.count('ui/message'),0);
+});
+
+test('rejected diagnostic sends show fixed failure text without retries or private host errors',async()=>{
+ for(const changes of [{messageError:{code:-32000,message:'private-error-token'}},{messageResult:{isError:true,privateToken:'private-error-token'}}]){
+  const h=await host({capabilities:{experimental:{'openai/message':{}}},...changes});await h.probe();
+  assert.match(h.element('probe-detail').textContent,/Diagnostic failed/);assert.equal(h.element('error').hidden,false);assert.equal(h.element('error').textContent.includes('private-error-token'),false);
+  assert.equal(h.element('link').disabled,true);assert.equal(h.element('probe').disabled,true);await h.probe();assert.equal(h.count('ui/message'),1);assert.equal(h.toolCalls().length,0);
+ }
+});
+
+test('closing during a diagnostic cannot revive it or cause another send',async()=>{
+ const h=await host({capabilities:{experimental:{'openai/message':{}}},deferMessage:true}),pending=h.probe();await h.flush();
+ const request=h.sent.find(message=>message.method==='ui/message');assert.ok(request);await h.close();await pending;
+ const before=h.element('probe-detail').textContent;h.reply(request.id,{});await h.flush();await h.probe();assert.equal(h.count('ui/message'),1);assert.equal(h.element('probe').disabled,true);assert.equal(h.element('probe-detail').textContent,before);
 });
 
 test('a host teardown ID colliding with initialization is handled as a host request, never an RPC response',async()=>{
