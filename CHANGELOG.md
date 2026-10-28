@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.13.5 — Imagine without a written brief and dependable undo
+
+### Fixed
+
+- Explain that both Imagine fields are optional and the selected wireframe and reference can supply the brief.
+- Preserve AI undo after the editor assigns initial ordering, measures text, and repairs deleted bindings while protecting later human edits.
+
 ## 0.13.4 — Distinct drawing icons and reliable board lists
 
 ### Fixed

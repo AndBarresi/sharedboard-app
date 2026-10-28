@@ -1,0 +1,462 @@
+{
+  "description": "Sanitized synthetic live Imagine output: browser-measured geometry and initial indices from Excalidraw 0.18.1.",
+  "specs": [
+    {
+      "id": "imagine_live_contact_surface",
+      "type": "rectangle",
+      "x": 1140,
+      "y": 0,
+      "width": 1000,
+      "height": 760,
+      "backgroundColor": "#f6f4ee",
+      "strokeColor": "#f6f4ee"
+    },
+    {
+      "id": "imagine_live_contact_brand",
+      "type": "text",
+      "x": 1182,
+      "y": 29,
+      "text": "NORTH / STUDIO",
+      "fontSize": 18,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_nav",
+      "type": "text",
+      "x": 1830,
+      "y": 30,
+      "text": "Work     About     Contact",
+      "fontSize": 15,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_eyebrow",
+      "type": "text",
+      "x": 1202,
+      "y": 108,
+      "text": "CONTACT",
+      "fontSize": 12,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_heading",
+      "type": "text",
+      "x": 1200,
+      "y": 145,
+      "text": "Let’s start a\nconversation.",
+      "fontSize": 48,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_intro",
+      "type": "text",
+      "x": 1202,
+      "y": 280,
+      "text": "Tell us about the space you have in mind.",
+      "fontSize": 18,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_name_label",
+      "type": "text",
+      "x": 1202,
+      "y": 330,
+      "text": "YOUR NAME",
+      "fontSize": 12,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_name_field",
+      "type": "rectangle",
+      "x": 1202,
+      "y": 354,
+      "width": 450,
+      "height": 48,
+      "backgroundColor": "#ffffff",
+      "strokeColor": "#d8dfd2"
+    },
+    {
+      "id": "imagine_live_contact_name_hint",
+      "type": "text",
+      "x": 1218,
+      "y": 367,
+      "text": "Your name",
+      "fontSize": 17,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_email_label",
+      "type": "text",
+      "x": 1202,
+      "y": 426,
+      "text": "EMAIL ADDRESS",
+      "fontSize": 12,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_email_field",
+      "type": "rectangle",
+      "x": 1202,
+      "y": 450,
+      "width": 450,
+      "height": 48,
+      "backgroundColor": "#ffffff",
+      "strokeColor": "#d8dfd2"
+    },
+    {
+      "id": "imagine_live_contact_email_hint",
+      "type": "text",
+      "x": 1218,
+      "y": 463,
+      "text": "you@example.com",
+      "fontSize": 17,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_message_label",
+      "type": "text",
+      "x": 1202,
+      "y": 522,
+      "text": "YOUR PROJECT",
+      "fontSize": 12,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_message_field",
+      "type": "rectangle",
+      "x": 1202,
+      "y": 546,
+      "width": 450,
+      "height": 104,
+      "backgroundColor": "#ffffff",
+      "strokeColor": "#d8dfd2"
+    },
+    {
+      "id": "imagine_live_contact_message_hint",
+      "type": "text",
+      "x": 1218,
+      "y": 562,
+      "text": "A little about your project…",
+      "fontSize": 17,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_send",
+      "type": "rectangle",
+      "x": 1202,
+      "y": 678,
+      "width": 184,
+      "height": 48,
+      "backgroundColor": "#244b3e",
+      "strokeColor": "#244b3e",
+      "text": "Send message",
+      "fontSize": 16,
+      "textColor": "#ffffff"
+    },
+    {
+      "id": "imagine_live_contact_reply_note",
+      "type": "text",
+      "x": 1410,
+      "y": 695,
+      "text": "Usually within two business days.",
+      "fontSize": 12,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_details_card",
+      "type": "rectangle",
+      "x": 1750,
+      "y": 330,
+      "width": 300,
+      "height": 320,
+      "backgroundColor": "#dfe7d5",
+      "strokeColor": "#dfe7d5"
+    },
+    {
+      "id": "imagine_live_contact_details_heading",
+      "type": "text",
+      "x": 1774,
+      "y": 358,
+      "text": "Visit the studio",
+      "fontSize": 24,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_details_intro",
+      "type": "text",
+      "x": 1774,
+      "y": 400,
+      "text": "Thoughtful spaces start\nwith a simple conversation.",
+      "fontSize": 16,
+      "strokeColor": "#6d7f72"
+    },
+    {
+      "id": "imagine_live_contact_details_email_label",
+      "type": "text",
+      "x": 1774,
+      "y": 468,
+      "text": "EMAIL",
+      "fontSize": 12,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_details_email",
+      "type": "text",
+      "x": 1774,
+      "y": 492,
+      "text": "hello@north.studio",
+      "fontSize": 17,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_details_studio_label",
+      "type": "text",
+      "x": 1774,
+      "y": 548,
+      "text": "STUDIO",
+      "fontSize": 12,
+      "strokeColor": "#244b3e"
+    },
+    {
+      "id": "imagine_live_contact_details_studio",
+      "type": "text",
+      "x": 1774,
+      "y": 572,
+      "text": "By appointment\nMonday–Friday, 9–5",
+      "fontSize": 17,
+      "strokeColor": "#6d7f72"
+    }
+  ],
+  "normalized": [
+    {
+      "id": "imagine_live_contact_surface",
+      "x": 1140,
+      "y": 0,
+      "width": 1000,
+      "height": 760,
+      "index": "aR",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_brand",
+      "x": 1182,
+      "y": 29,
+      "width": 146.671875,
+      "height": 22.5,
+      "index": "aS",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_nav",
+      "x": 1830,
+      "y": 30,
+      "width": 167.29248046875,
+      "height": 18.75,
+      "index": "aT",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_eyebrow",
+      "x": 1202,
+      "y": 108,
+      "width": 57.10546875,
+      "height": 15,
+      "index": "aU",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_heading",
+      "x": 1200,
+      "y": 145,
+      "width": 285.4921875,
+      "height": 120,
+      "index": "aV",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_intro",
+      "x": 1202,
+      "y": 280,
+      "width": 330.205078125,
+      "height": 22.5,
+      "index": "aW",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_name_label",
+      "x": 1202,
+      "y": 330,
+      "width": 72.673828125,
+      "height": 15,
+      "index": "aX",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_name_field",
+      "x": 1202,
+      "y": 354,
+      "width": 450,
+      "height": 48,
+      "index": "aY",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_name_hint",
+      "x": 1218,
+      "y": 367,
+      "width": 81.5966796875,
+      "height": 21.25,
+      "index": "aZ",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_email_label",
+      "x": 1202,
+      "y": 426,
+      "width": 97.359375,
+      "height": 15,
+      "index": "aa",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_email_field",
+      "x": 1202,
+      "y": 450,
+      "width": 450,
+      "height": 48,
+      "index": "ab",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_email_hint",
+      "x": 1218,
+      "y": 463,
+      "width": 145.76171875,
+      "height": 21.25,
+      "index": "ac",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_message_label",
+      "x": 1202,
+      "y": 522,
+      "width": 94.0078125,
+      "height": 15,
+      "index": "ad",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_message_field",
+      "x": 1202,
+      "y": 546,
+      "width": 450,
+      "height": 104,
+      "index": "ae",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_message_hint",
+      "x": 1218,
+      "y": 562,
+      "width": 204.099609375,
+      "height": 21.25,
+      "index": "af",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_send",
+      "x": 1202,
+      "y": 678,
+      "width": 184,
+      "height": 48,
+      "index": "ag",
+      "boundElements": [
+        {
+          "id": "imagine_live_contact_send_label",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "imagine_live_contact_send_label",
+      "x": 1240.6328125,
+      "y": 692,
+      "width": 106.734375,
+      "height": 20,
+      "index": "ah",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_reply_note",
+      "x": 1410,
+      "y": 695,
+      "width": 178.078125,
+      "height": 15,
+      "index": "ai",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_card",
+      "x": 1750,
+      "y": 330,
+      "width": 300,
+      "height": 320,
+      "index": "aj",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_heading",
+      "x": 1774,
+      "y": 358,
+      "width": 155.6484375,
+      "height": 30,
+      "index": "ak",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_intro",
+      "x": 1774,
+      "y": 400,
+      "width": 192.0859375,
+      "height": 40,
+      "index": "al",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_email_label",
+      "x": 1774,
+      "y": 468,
+      "width": 36.01171875,
+      "height": 15,
+      "index": "am",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_email",
+      "x": 1774,
+      "y": 492,
+      "width": 142.009765625,
+      "height": 21.25,
+      "index": "an",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_studio_label",
+      "x": 1774,
+      "y": 548,
+      "width": 45.333984375,
+      "height": 15,
+      "index": "ao",
+      "boundElements": []
+    },
+    {
+      "id": "imagine_live_contact_details_studio",
+      "x": 1774,
+      "y": 572,
+      "width": 153.7138671875,
+      "height": 42.5,
+      "index": "ap",
+      "boundElements": []
+    }
+  ]
+}

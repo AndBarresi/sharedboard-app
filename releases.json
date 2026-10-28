@@ -1,6 +1,15 @@
 {
-  "version": "0.13.4",
+  "version": "0.13.5",
   "entries": [
+    {
+      "version": "0.13.5",
+      "title": "Imagine without a written brief and dependable undo",
+      "added": [],
+      "fixed": [
+        "Explain that both Imagine fields are optional and the selected wireframe and reference can supply the brief.",
+        "Preserve AI undo after the editor assigns initial ordering, measures text, and repairs deleted bindings while protecting later human edits."
+      ]
+    },
     {
       "version": "0.13.4",
       "title": "Distinct drawing icons and reliable board lists",
@@ -488,5 +497,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "c854e47e83e41277a9b771eb27b8a3311c3505cfc236526553a2b4b9774163ce"
+  "sourceHash": "3cadb3e005a20b39ab38881e62ee69115b40b13fee33d6b57b74f9c53eae798d"
 }

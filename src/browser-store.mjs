@@ -67,8 +67,8 @@ function restoreChanges(board,snapshot,now){
  return {changes,files:snapshot.board.files};
 }
 function recordNormalization(record,before,after,changes){
- let dirty=false;
- for(const change of changes){const previous=before.elements.find(element=>element.id===change.id);if(!isRenderNormalization(previous,change.element))continue;
+ let dirty=false;const rendered=new Map(after.elements.map(element=>[element.id,element]));
+ for(const change of changes){const previous=before.elements.find(element=>element.id===change.id);if(!isRenderNormalization(previous,change.element,rendered))continue;
   for(const action of record.planning.agentActions){if(action.undone)continue;const reference=action.after?.find(element=>element.id===change.id);if(reference&&reference.expectedVersion===before.elementVersions[change.id]){reference.expectedVersion=after.elementVersions[change.id];dirty=true;}}
  }
  if(dirty)record.planning.version++;
