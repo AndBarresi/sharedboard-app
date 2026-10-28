@@ -1,6 +1,25 @@
 {
-  "version": "0.13.3",
+  "version": "0.13.5",
   "entries": [
+    {
+      "version": "0.13.5",
+      "title": "Imagine without a written brief and dependable undo",
+      "added": [],
+      "fixed": [
+        "Explain that both Imagine fields are optional and the selected wireframe and reference can supply the brief.",
+        "Preserve AI undo after the editor assigns initial ordering, measures text, and repairs deleted bindings while protecting later human edits."
+      ]
+    },
+    {
+      "version": "0.13.4",
+      "title": "Distinct drawing icons and reliable board lists",
+      "added": [],
+      "fixed": [
+        "Distinguish Laser from Imagine and show grouped geometry on the Shapes button.",
+        "Keep long project and board lists above the picker footer and reachable on narrow screens.",
+        "Record the completed live production Imagine reference and wireframe acceptance pass."
+      ]
+    },
     {
       "version": "0.13.3",
       "title": "Shared branding and clearer plugin setup",
@@ -478,5 +497,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "b0e2c88208f18c40b8cfb981eeab155bf7f005745fb59eeef74d3ae1b82f8def"
+  "sourceHash": "3cadb3e005a20b39ab38881e62ee69115b40b13fee33d6b57b74f9c53eae798d"
 }

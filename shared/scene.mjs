@@ -1,11 +1,22 @@
 export const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 export const indexById = (elements) => new Map(elements.map((element) => [element.id, element]));
-// The editor measures text and assigns ordering keys without changing its edit nonce.
-// Those derived updates should not make a just-applied AI action impossible to undo.
-export function isRenderNormalization(before,after){
-  if(!before||!after||before.version!==after.version||before.versionNonce!==after.versionNonce||before.updated!==after.updated)return false;
+// restoreElements assigns missing ordering keys with mutateElement, which bumps
+// version/nonce/time once. It also measures text and repairs empty/deleted
+// bindings. Those derived updates must not make an AI action impossible to undo.
+export function isRenderNormalization(before,after,scene=[]){
+  if(!before||!after)return false;
+  const sameEdit=before.version===after.version&&before.versionNonce===after.versionNonce&&before.updated===after.updated;
+  const firstIndex=before.index==null&&typeof after.index==='string'&&after.index.length>0&&after.version===before.version+1&&Number.isFinite(after.updated)&&after.updated>=before.updated;
+  if(!sameEdit&&!firstIndex)return false;
   const allowed=new Set(before.type==='text'?['x','y','width','height','baseline','index']:['index']);
+  if(firstIndex)for(const key of ['version','versionNonce','updated'])allowed.add(key);
   if(before.type==='text'&&typeof before.originalText==='string'&&before.originalText===after.originalText)allowed.add('text');
+  const oldBindings=before.boundElements??[],newBindings=after.boundElements??[];
+  if(Array.isArray(oldBindings)&&Array.isArray(newBindings)){
+    const map=scene instanceof Map?scene:indexById(scene),kept=new Set(newBindings.map(binding=>binding.id));
+    const expected=oldBindings.filter(binding=>kept.has(binding.id)||!map.get(binding.id)?.isDeleted);
+    if(same(oldBindings,newBindings)||same(expected,newBindings))allowed.add('boundElements');
+  }
   const changed=[...new Set([...Object.keys(before),...Object.keys(after)])].filter(key=>!same(before[key],after[key]));
   return changed.length>0&&changed.every(key=>allowed.has(key));
 }
