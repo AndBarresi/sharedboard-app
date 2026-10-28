@@ -17426,7 +17426,7 @@ var board_tools_default = [
 // plugins/claude-code/package.json
 var package_default = {
   name: "sharedboard-claude-code",
-  version: "0.12.1",
+  version: "0.12.2",
   private: true,
   type: "module",
   description: "SharedBoard.app Channels plugin for an existing Claude Code session",
@@ -17517,7 +17517,12 @@ function createClaimStore(dataDirectory) {
     }
   };
   return {
-    ready: prepare,
+    ready() {
+      return run2(prepare);
+    },
+    drain() {
+      return tail;
+    },
     async claim(connection, request) {
       return run2(async () => {
         await prepare();
@@ -17593,7 +17598,7 @@ function createChannelClient({ store, notify, fetch: fetcher = globalThis.fetch,
   if (origin !== RELAY_ORIGIN) throw pluginError("CHANNEL_ORIGIN_INVALID", "Use the official SharedBoard relay.");
   if (!["claude-channel", "codex-channel"].includes(expectedDeliveryMode)) throw pluginError("CHANNEL_PROVIDER_MISMATCH", "Choose this plugin's supported native connection on the website.");
   if (!store?.claim || typeof notify !== "function" || typeof fetcher !== "function" || typeof Socket !== "function" || !UUID.test(instanceId)) throw pluginError("CHANNEL_RUNTIME_REQUIRED", "The channel requires Node 22 or newer and private receipt storage.");
-  let credential = null, connection = null, socket = null, stopped = false, deliverySuspended = false, generation = 0, retryTimer = null, openTimer = null, pingTimer = null, pongTimer = null, attempt = 0, frames = Promise.resolve(), connecting = false, pairing = false, authenticated = false;
+  let credential = null, connection = null, socket = null, stopped = false, deliverySuspended = false, generation = 0, retryTimer = null, openTimer = null, pingTimer = null, pongTimer = null, attempt = 0, frames = Promise.resolve(), connecting = false, pairing = false, authenticated = false, closing = null;
   const readiness = /* @__PURE__ */ new Set();
   const settleReadiness = (error2) => {
     for (const waiter of [...readiness]) if (error2 || waiter.scoped !== credential || authenticated) waiter.finish(error2 ?? (waiter.scoped !== credential ? pluginError("CHANNEL_REPLACED", "This channel connection changed.") : null));
@@ -17706,7 +17711,7 @@ function createChannelClient({ store, notify, fetch: fetcher = globalThis.fetch,
       if (!claimed || !owns(owner, epoch)) return;
       let deadline;
       try {
-        await Promise.race([Promise.resolve().then(() => notify(channelNotification(request))), new Promise((_, reject) => {
+        await Promise.race([Promise.resolve().then(() => owns(owner, epoch) ? notify(channelNotification(request)) : void 0), new Promise((_, reject) => {
           deadline = timers.setTimeout(() => reject(pluginError("CHANNEL_WRITE_UNCERTAIN", "The stdio write did not complete.")), 1e4);
         })]);
       } finally {
@@ -17845,12 +17850,14 @@ function createChannelClient({ store, notify, fetch: fetcher = globalThis.fetch,
       }
     },
     close() {
-      if (stopped) return;
+      if (closing) return closing;
       stopped = true;
       credential = null;
       connection = null;
       stopSocket();
       settleReadiness(pluginError("CHANNEL_CLOSED", messages.CHANNEL_CLOSED));
+      closing = frames.then(() => store.drain?.());
+      return closing;
     }
   };
 }
@@ -17907,9 +17914,12 @@ function createPluginServer({ dataDirectory, client: providedClient, clientOptio
       return { isError: true, content: [{ type: "text", text: `${safe.code}: ${safe.message}` }] };
     }
   });
-  return { server, client, async close() {
-    client.close();
-    await server.close();
+  let closing;
+  return { server, client, close() {
+    return closing ??= (async () => {
+      await client.close();
+      await server.close();
+    })();
   } };
 }
 
@@ -17949,7 +17959,7 @@ function createCodexQueue({ execute = run, executable = "codex" } = {}) {
 // plugins/codex/package.json
 var package_default2 = {
   name: "sharedboard-codex",
-  version: "0.12.1",
+  version: "0.12.2",
   private: true,
   type: "module",
   description: "SharedBoard.app local plugin for an existing Codex conversation",
@@ -18002,18 +18012,19 @@ try {
   const codexHome = process.env.CODEX_HOME || path2.join(homedir(), ".codex");
   plugin = createCodexPlugin({ dataDirectory: path2.join(codexHome, "sharedboard-plugin"), nativeThreadId: process.env.CODEX_THREAD_ID, onDiagnostic: diagnostic });
   const shutdown = () => {
-    plugin?.client.close();
-    void plugin?.server.close().catch(() => {
-    });
+    void plugin?.close().catch(() => diagnostic("PLUGIN_SHUTDOWN_FAILED"));
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
   process.stdin.once("end", shutdown);
   plugin.server.onerror = () => diagnostic("PLUGIN_PROTOCOL_ERROR");
-  plugin.server.onclose = () => plugin.client.close();
+  plugin.server.onclose = () => {
+    void plugin.client.close().catch(() => diagnostic("PLUGIN_SHUTDOWN_FAILED"));
+  };
   await plugin.server.connect(new StdioServerTransport());
 } catch {
-  plugin?.client.close();
+  await plugin?.close().catch(() => {
+  });
   diagnostic("PLUGIN_START_FAILED");
   process.exitCode = 1;
 }

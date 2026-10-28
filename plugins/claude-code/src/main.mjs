@@ -9,9 +9,9 @@ try{
   if(Number(process.versions.node.split('.')[0])<22)throw new Error('runtime');
   plugin=createPluginServer({dataDirectory:process.env.CLAUDE_PLUGIN_DATA,onDiagnostic:diagnostic});
   const transport=new StdioServerTransport();
-  const shutdown=()=>{plugin?.client.close();void plugin?.server.close().catch(()=>{});};
+  const shutdown=()=>{void plugin?.close().catch(()=>diagnostic('CHANNEL_SHUTDOWN_FAILED'));};
   process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);process.stdin.once('end',shutdown);
   plugin.server.onerror=()=>diagnostic('CHANNEL_PROTOCOL_ERROR');
-  plugin.server.onclose=()=>plugin.client.close();
+  plugin.server.onclose=()=>{void plugin.client.close().catch(()=>diagnostic('CHANNEL_SHUTDOWN_FAILED'));};
   await plugin.server.connect(transport);
-}catch{plugin?.client.close();diagnostic('CHANNEL_START_FAILED');process.exitCode=1;}
+}catch{await plugin?.close().catch(()=>{});diagnostic('CHANNEL_START_FAILED');process.exitCode=1;}

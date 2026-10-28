@@ -38,7 +38,8 @@ export function createClaimStore(dataDirectory){
     finally{await handle?.close().catch(()=>{});await fs.unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   };
   return {
-    ready:prepare,
+    ready(){return run(prepare);},
+    drain(){return tail;},
     async claim(connection,request){return run(async()=>{
       await prepare();const file=fileFor(connection),state=await load(connection,file),existing=state.claims.find(item=>item.id===request.id&&item.kind===request.kind);
       if(existing){if(existing.receipt!==request.receipt)throw pluginError('CHANNEL_REQUEST_CONFLICT','This request already has another notification receipt.');return false;}

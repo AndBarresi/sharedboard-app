@@ -37,5 +37,5 @@ export function createPluginServer({dataDirectory,client:providedClient,clientOp
       return toolResult(result);
     }catch(error){const safe=safeFailure(error);return {isError:true,content:[{type:'text',text:`${safe.code}: ${safe.message}`}]};}
   });
-  return {server,client,async close(){client.close();await server.close();}};
+  let closing;return {server,client,close(){return closing??=(async()=>{await client.close();await server.close();})();}};
 }
