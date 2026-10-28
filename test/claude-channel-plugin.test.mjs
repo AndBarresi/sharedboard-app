@@ -187,6 +187,19 @@ test('malformed pairing, alternate origins and raw upstream errors cannot leak c
   await assert.rejects(bad.client.connect({connectionCode}),error=>error.code==='READ_ONLY'&&!error.message.includes(channelToken)&&!error.message.includes('private.example'));
 });
 
+test('pre-proof drawing rejection explains the real website reply test without exposing the upstream private error',async t=>{
+  const calls=[],f=await fixture(t,{fetch:async(url,init)=>{
+    const input=JSON.parse(init.body);calls.push(input);
+    if(url.endsWith('/channel/pair'))return Response.json({channelToken,sessionId,boardId,permission:'edit',expiresAt:new Date(Date.now()+3600000).toISOString(),connection:{...f.connection,permission:'edit'},socketURL:`wss://connect.sharedboard.app/channel/socket?session=${sessionId}`});
+    return Response.json({code:'CHANNEL_TEST_READ_ONLY',error:`private ${channelToken} https://private.example/callback`},{status:403});
+  }});f.connection.permission='edit';await f.pair();
+  const plugin=createPluginServer({client:f.client}),client=new Client({name:'pre-proof-error-test',version:'1'}),[left,right]=InMemoryTransport.createLinkedPair();
+  try{
+    await plugin.server.connect(right);await client.connect(left);const result=await client.callTool({name:'add_elements',arguments:{elements:[],summary:'Requested drawing change'}});
+    assert.equal(result.isError,true);assert.match(result.content[0].text,/CHANNEL_TEST_READ_ONLY: Complete Test automatic reply on SharedBoard.app first/);assert.match(result.content[0].text,/captured Discuss message and post your actual board reply/);assert.match(result.content[0].text,/Drawing changes stay blocked/);assert.match(result.content[0].text,/Keep the current permission; do not bypass this test/);assert.doesNotMatch(result.content[0].text,/request could not be confirmed|private|https:\/\/private/);assert.equal(JSON.stringify(result).includes(channelToken),false);assert.equal(calls.filter(call=>call.operation==='add').length,1);
+  }finally{await client.close();await plugin.close();}
+});
+
 test('concurrent pairing and a late response after process close cannot silently connect another session',async t=>{
   let release;const blocked=new Promise(resolve=>{release=resolve;}),f=await fixture(t,{fetch:async()=>{await blocked;return Response.json({});}});
   const pending=f.client.connect({connectionCode});await settle();await assert.rejects(f.client.connect({connectionCode}),error=>error.code==='CHANNEL_ALREADY_CONNECTED');f.client.close();release();await assert.rejects(pending,error=>error.code==='CHANNEL_CLOSED');assert.equal(f.sockets.length,0);

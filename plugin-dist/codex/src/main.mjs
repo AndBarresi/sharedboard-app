@@ -17426,7 +17426,7 @@ var board_tools_default = [
 // plugins/claude-code/package.json
 var package_default = {
   name: "sharedboard-claude-code",
-  version: "0.12.3",
+  version: "0.12.4",
   private: true,
   type: "module",
   description: "SharedBoard.app Channels plugin for an existing Claude Code session",
@@ -17548,6 +17548,7 @@ var MAX_FRAME = 8192;
 var object4 = (value) => value && typeof value === "object" && !Array.isArray(value);
 var messages = { READ_ONLY: "This board connection has read-only drawing access. Reconnect from the website to request edit access.", BROWSER_OFFLINE: "The browser board is offline. Keep its tab open; the relay has no saved copy of the drawing.", BROWSER_TIMEOUT: "The browser did not answer in time. Keep its tab open and inspect the same captured request before retrying.", CHANNEL_REPLACED: "This channel connection belongs to another process or has been replaced. Prepare a fresh code on the website.", CHANNEL_NOT_CONNECTED: "This running Claude Code session needs a fresh connection code from the website.", RELAY_DISCONNECTED: "This board connection ended. Prepare a fresh code on the website.", PAIRING_EXPIRED: "The one-time code expired or was already used. Prepare a fresh code on the website.", PAIRING_INVALID: "Use the exact fresh code from the website and only an actual native session ID, if available.", CHANNEL_ALREADY_CONNECTED: "This process is already paired or pairing. Disconnect it explicitly before connecting another board.", CHANNEL_CLOSED: "This plugin process has closed. Connect the intended running session explicitly.", CHANNEL_SCOPE_MISMATCH: "The relay data did not match this process and board. Reconnect explicitly from the website.", INVALID_REQUEST: "The tool arguments are invalid. Use the advertised tool schema.", UNSUPPORTED_TOOL: "Choose an advertised SharedBoard tool." };
 Object.assign(messages, { CHANNEL_NOT_CONNECTED: "This running AI session needs a fresh connection code from the website.", CHANNEL_CONNECTING: "The connection is still opening or recovering. Its pairing is retained; check connection_status and try this tool again once ready. Do not re-pair or automatically repeat uncertain work.", CHANNEL_PROVIDER_MISMATCH: "This code belongs to another AI plugin. Choose this plugin's provider on the website.", CHANNEL_NOTIFICATION_UNCONFIRMED: "A notification write was uncertain. Disconnect this process and prepare a fresh website connection; do not replay pending work automatically.", CODEX_THREAD_REQUIRED: "Use the actual CODEX_THREAD_ID read from this conversation's environment; never guess or substitute another conversation.", CODEX_QUEUE_UNCONFIRMED: "Codex did not confirm the exact queue receipt. Its outcome may be uncertain; do not resend automatically. Check the connection and pending request." });
+messages.CHANNEL_TEST_READ_ONLY = "Complete Test automatic reply on SharedBoard.app first: read its captured Discuss message and post your actual board reply. Drawing changes stay blocked until verification succeeds. Keep the current permission; do not bypass this test.";
 function safeFailure(error2) {
   return pluginError(typeof error2?.code === "string" && /^[A-Z_]{1,64}$/.test(error2.code) ? error2.code : "CHANNEL_REQUEST_FAILED", messages[error2?.code] ?? (error2?.name === "AbortError" || error2?.name === "TimeoutError" ? "The channel request timed out. Its outcome may be uncertain; do not replay work automatically." : "The channel request could not be confirmed. Check the website before retrying the same request."));
 }
@@ -17959,7 +17960,7 @@ function createCodexQueue({ execute = run, executable = "codex" } = {}) {
 // plugins/codex/package.json
 var package_default2 = {
   name: "sharedboard-codex",
-  version: "0.12.3",
+  version: "0.12.4",
   private: true,
   type: "module",
   description: "SharedBoard.app local plugin for an existing Codex conversation",
