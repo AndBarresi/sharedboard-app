@@ -26,7 +26,7 @@ export function createChannelClient({store,notify,fetch:fetcher=globalThis.fetch
   if(origin!==RELAY_ORIGIN)throw pluginError('CHANNEL_ORIGIN_INVALID','Use the official SharedBoard relay.');
   if(!['claude-channel','codex-channel'].includes(expectedDeliveryMode))throw pluginError('CHANNEL_PROVIDER_MISMATCH','Choose this plugin\'s supported native connection on the website.');
   if(!store?.claim||typeof notify!=='function'||typeof fetcher!=='function'||typeof Socket!=='function'||!UUID.test(instanceId))throw pluginError('CHANNEL_RUNTIME_REQUIRED','The channel requires Node 22 or newer and private receipt storage.');
-  let credential=null,connection=null,socket=null,stopped=false,deliverySuspended=false,generation=0,retryTimer=null,openTimer=null,pingTimer=null,pongTimer=null,attempt=0,frames=Promise.resolve(),connecting=false,pairing=false,authenticated=false;
+  let credential=null,connection=null,socket=null,stopped=false,deliverySuspended=false,generation=0,retryTimer=null,openTimer=null,pingTimer=null,pongTimer=null,attempt=0,frames=Promise.resolve(),connecting=false,pairing=false,authenticated=false,closing=null;
   const readiness=new Set();
   const settleReadiness=error=>{for(const waiter of [...readiness])if(error||waiter.scoped!==credential||authenticated)waiter.finish(error??(waiter.scoped!==credential?pluginError('CHANNEL_REPLACED','This channel connection changed.'):null));};
   const waitForReadiness=scoped=>{if(authenticated)return Promise.resolve();return new Promise((resolve,reject)=>{const waiter={scoped,finish(error){timers.clearTimeout(waiter.timer);readiness.delete(waiter);error?reject(error):resolve();}};waiter.timer=timers.setTimeout(()=>waiter.finish(pluginError('CHANNEL_CONNECTING','The connection is still opening or recovering. Its pairing is retained; check connection_status and try this tool again once ready. Do not re-pair or automatically repeat uncertain work.')),10000);readiness.add(waiter);});};
@@ -51,7 +51,7 @@ export function createChannelClient({store,notify,fetch:fetcher=globalThis.fetch
     let request;try{request=validateRouting(message,credential,instanceId);}catch{diagnostic('CHANNEL_SCOPE_MISMATCH');return;}
     try{
       const claimed=await store.claim(credential,request);if(!claimed||!owns(owner,epoch))return;
-      let deadline;try{await Promise.race([Promise.resolve().then(()=>notify(channelNotification(request))),new Promise((_,reject)=>{deadline=timers.setTimeout(()=>reject(pluginError('CHANNEL_WRITE_UNCERTAIN','The stdio write did not complete.')),10000);})]);}finally{if(deadline!==undefined)timers.clearTimeout(deadline);}
+      let deadline;try{await Promise.race([Promise.resolve().then(()=>owns(owner,epoch)?notify(channelNotification(request)):undefined),new Promise((_,reject)=>{deadline=timers.setTimeout(()=>reject(pluginError('CHANNEL_WRITE_UNCERTAIN','The stdio write did not complete.')),10000);})]);}finally{if(deadline!==undefined)timers.clearTimeout(deadline);}
       if(owns(owner,epoch))owner.send(JSON.stringify({type:'channel_written',id:request.id,kind:request.kind,receipt:request.receipt}));
     }catch{if(owns(owner,epoch)){deliverySuspended=true;stopSocket();settleReadiness(pluginError('CHANNEL_NOTIFICATION_UNCONFIRMED','The notification write was uncertain; automatic delivery stopped.'));}diagnostic('CHANNEL_NOTIFICATION_UNCONFIRMED');}
   };
@@ -99,6 +99,6 @@ export function createChannelClient({store,notify,fetch:fetcher=globalThis.fetch
       const previous=credential;credential=null;connection=null;deliverySuspended=false;stopSocket();settleReadiness(pluginError('CHANNEL_NOT_CONNECTED',messages.CHANNEL_NOT_CONNECTED));if(!previous)return {disconnected:true};
       try{await post('/channel/call',{instanceId,operation:'disconnect',input:{}},previous.channelToken);return {disconnected:true};}catch(error){throw safeFailure(error);}
     },
-    close(){if(stopped)return;stopped=true;credential=null;connection=null;stopSocket();settleReadiness(pluginError('CHANNEL_CLOSED',messages.CHANNEL_CLOSED));},
+    close(){if(closing)return closing;stopped=true;credential=null;connection=null;stopSocket();settleReadiness(pluginError('CHANNEL_CLOSED',messages.CHANNEL_CLOSED));closing=frames.then(()=>store.drain?.());return closing;},
   };
 }

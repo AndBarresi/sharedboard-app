@@ -1,6 +1,6 @@
 {
   "name": "sharedboard-claude-code",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "private": true,
   "type": "module",
   "description": "SharedBoard.app Channels plugin for an existing Claude Code session",

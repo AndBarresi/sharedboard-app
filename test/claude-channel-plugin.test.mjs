@@ -26,7 +26,7 @@ class Clock{
   async advance(duration){const end=this.now+duration;while(true){const next=[...this.pending].sort((a,b)=>a[1].at-b[1].at).find(([,item])=>item.at<=end);if(!next)break;this.now=next[1].at;this.pending.delete(next[0]);next[1].fn();await settle();}this.now=end;await settle();}
 }
 async function fixture(t,overrides={}){
-  const directory=await fs.mkdtemp(path.join(os.tmpdir(),"SharedBoard channel ' spaces-"));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),"SharedBoard channel ' spaces-"));
   const sockets=[],http=[],notifications=[],diagnostics=[],clock=new Clock();
   class Socket extends EventTarget{
     readyState=0;sent=[];
@@ -45,11 +45,11 @@ async function fixture(t,overrides={}){
     if(input.operation==='read'||input.operation==='read_full')return Response.json({board:{revision:3,elements:[]}});
     return Response.json({ok:true});
   };
-  const client=createChannelClient({store:createClaimStore(directory),notify:async notification=>{notifications.push(notification);if(overrides.notify)await overrides.notify(notification);},fetch:overrides.fetch??fetcher,WebSocket:Socket,timers:clock,instanceId,expectedDeliveryMode,onDiagnostic:code=>diagnostics.push(code)});
-  t.after(()=>client.close());
+  const claims=createClaimStore(directory),client=createChannelClient({store:overrides.store?overrides.store(claims):claims,notify:async notification=>{notifications.push(notification);if(overrides.notify)await overrides.notify(notification);},fetch:overrides.fetch??fetcher,WebSocket:Socket,timers:clock,instanceId,expectedDeliveryMode,onDiagnostic:code=>diagnostics.push(code)});
+  t.after(async()=>{await client.close();await fs.rm(directory,{recursive:true,force:true});});
   const request=(change={})=>({type:'channel_request',id,kind:'chat',intent:'discuss',boardId,connectionId:sessionId,instanceId,receipt:`ch_chat_${id}`,...change});
   const pair=async()=>{const result=await client.connect({connectionCode});sockets.at(-1).open();sockets.at(-1).message({type:'connection',connection});await settle();return result;};
-  return {client,clock,directory,http,sockets,notifications,diagnostics,connection,pair,request};
+  return {client,claims,clock,directory,http,sockets,notifications,diagnostics,connection,pair,request};
 }
 
 test('the Claude plugin uses compatible MCP v1 and generated board schemas without a wait or diagnostic panel',async()=>{
@@ -121,6 +121,15 @@ test('atomic local claims deduplicate concurrent notices and survive a recreated
   await f.pair();f.sockets[0].message(request);f.sockets[0].message(request);await settle();assert.equal(f.notifications.length,0);
 });
 
+test('close drains a delayed duplicate claim before storage removal and suppresses queued frames after credential release',async t=>{
+  let release,started=false,attempts=0;const blocked=new Promise(resolve=>{release=resolve;}),f=await fixture(t,{store:claims=>({...claims,async claim(...args){attempts++;started=true;await blocked;return claims.claim(...args);}})});
+  await f.pair();await f.claims.claim({sessionId,boardId},f.request());f.sockets[0].message(f.request());f.sockets[0].message(f.request());await waitFor(()=>started);
+  const closing=f.client.close();assert.equal(f.client.close(),closing);let removed=false;const removing=closing.then(()=>fs.rm(f.directory,{recursive:true,force:true})).then(()=>{removed=true;});
+  try{await settle();assert.equal(removed,false);assert.equal(f.sockets[0].readyState,3);assert.equal((await f.client.status()).connection.connected,false);}
+  finally{release();await removing;}
+  assert.equal(attempts,1);assert.equal(f.notifications.length,0);assert.equal(f.sockets[0].sent.some(frame=>frame.type==='channel_written'),false);f.sockets[0].message(f.request());await settle();assert.equal(attempts,1);await assert.rejects(fs.stat(f.directory),error=>error.code==='ENOENT');
+});
+
 test('foreign boards, processes, receipts, review intent, and malformed frames never notify the model',async t=>{
   const f=await fixture(t);await f.pair();
   for(const change of [{boardId:nextId},{connectionId:nextId},{instanceId:nextId},{receipt:'another-receipt'},{kind:'review',intent:'work',receipt:`ch_review_${id}`},{id:'not-an-id'}])f.sockets[0].message(f.request(change));
@@ -149,9 +158,10 @@ test('an uncertain stdio write stops delivery and board tools without replay, wh
   assert.deepEqual(await f.client.disconnect(),{disconnected:true});assert.equal(f.http.at(-1).input.operation,'disconnect');
 });
 
-test('a stuck notification write has a bounded deadline, and late completion never acknowledges a replacement socket',async t=>{
-  let release;const blocked=new Promise(resolve=>{release=resolve;}),f=await fixture(t,{notify:()=>blocked});await f.pair();f.sockets[0].message(f.request());await waitFor(()=>f.notifications.length===1);await f.clock.advance(10000);
-  assert.ok(f.diagnostics.includes('CHANNEL_NOTIFICATION_UNCONFIRMED'));assert.equal(f.sockets[0].readyState,3);release();await settle();assert.ok(!f.sockets[0].sent.some(frame=>frame.type==='channel_written'));
+test('close drains an in-flight notification up to its bounded deadline, and late completion never acknowledges after shutdown',async t=>{
+  let release;const blocked=new Promise(resolve=>{release=resolve;}),f=await fixture(t,{notify:()=>blocked});await f.pair();f.sockets[0].message(f.request());await waitFor(()=>f.notifications.length===1);
+  let drained=false;const closing=f.client.close().then(()=>{drained=true;});await f.clock.advance(9999);assert.equal(drained,false);await f.clock.advance(1);await closing;
+  assert.ok(f.diagnostics.includes('CHANNEL_NOTIFICATION_UNCONFIRMED'));assert.equal(f.sockets[0].readyState,3);release();await settle();assert.ok(!f.sockets[0].sent.some(frame=>frame.type==='channel_written'));assert.equal(f.notifications.length,1);
 });
 
 test('damaged local receipts fail closed without overwriting them or forwarding a notification',async t=>{

@@ -1,5 +1,11 @@
 # SharedBoard.app changelog
 
+## 0.12.2 — Close plugin delivery cleanly
+
+### Fixed
+
+- Stop incoming plugin delivery immediately and finish pending receipt writes before shutdown, without late acknowledgements or replay.
+
 ## 0.12.1 — Clarify Claude Code account requirements
 
 ### Fixed

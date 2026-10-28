@@ -1,6 +1,14 @@
 {
-  "version": "0.12.1",
+  "version": "0.12.2",
   "entries": [
+    {
+      "version": "0.12.2",
+      "title": "Close plugin delivery cleanly",
+      "added": [],
+      "fixed": [
+        "Stop incoming plugin delivery immediately and finish pending receipt writes before shutdown, without late acknowledgements or replay."
+      ]
+    },
     {
       "version": "0.12.1",
       "title": "Clarify Claude Code account requirements",
@@ -400,5 +408,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "02c56aaf1c2d6667ee352ecb01e6c93a6970609f8db97617de922f6ae0dc633a"
+  "sourceHash": "b4c7c2b03c6b77a63e51d9180f6d82dd0682a5651b2d4de81f3478250edbb01e"
 }
