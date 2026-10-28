@@ -16,6 +16,10 @@ import './planning.css';
 import {PlanningPanel,SelectionBar,NotePins} from './PlanningPanel.jsx';
 import {ReferenceImport} from './ReferenceImport.jsx';
 import {SelectionDetails} from './SelectionDetails.jsx';
+import {ImaginePanel} from './ImaginePanel.jsx';
+import {ImagineSelectionFlow} from './ImagineSelectionFlow.jsx';
+import {imagineRoleSelection} from './imagine-state.mjs';
+import {isSupportedEmbed} from '../shared/embeds.mjs';
 import {jumpTo,renderScene} from './canvas-actions.mjs';
 import {ProjectTransfer} from './ProjectTransfer.jsx';
 import {WorkspacePicker} from './WorkspacePicker.jsx';
@@ -64,6 +68,8 @@ function App() {
   const connectionTestInFlight=useRef(false);
   const [changelogOpen,setChangelogOpen]=useState(false);
   const [storageDetailsOpen,setStorageDetailsOpen]=useState(false);
+  const [imagineOpen,setImagineOpen]=useState(false),[imagineDraft,setImagineDraft]=useState({});
+  const [imaginePicking,setImaginePicking]=useState(null),[imagineReferenceIds,setImagineReferenceIds]=useState([]),[imagineTargetIds,setImagineTargetIds]=useState([]),[imaginePickError,setImaginePickError]=useState('');
   const [planner,setPlanner]=useState(null),[plannerAction,setPlannerAction]=useState(null),[referenceOpen,setReferenceOpen]=useState(false),[selectionOpen,setSelectionOpen]=useState(false);
   const [projectImportOpen,setProjectImportOpen]=useState(false);
   const [workspaceOpen,setWorkspaceOpen]=useState(false),[navigatorOpen,setNavigatorOpen]=useState(false);
@@ -73,7 +79,7 @@ function App() {
   const onDrawingChange = useCallback((elements, appState) => {
     sync.current?.onChange(elements, appState);
     const selection=elements.find(e=>appState.selectedElementIds[e.id]&&!e.isDeleted);
-    const next={tool:appState.activeTool.type,zoom:appState.zoom.value,scrollX:appState.scrollX,scrollY:appState.scrollY,width:appState.width,height:appState.height,selected:Boolean(selection),stroke:selection?.strokeColor??appState.currentItemStrokeColor,fill:selection?.backgroundColor??appState.currentItemBackgroundColor,strokeWidth:selection?.strokeWidth??appState.currentItemStrokeWidth,fontSize:selection?.fontSize??appState.currentItemFontSize,roughness:selection?.roughness??appState.currentItemRoughness};
+    const next={tool:appState.activeTool.type,zoom:appState.zoom.value,scrollX:appState.scrollX,scrollY:appState.scrollY,width:appState.width,height:appState.height,selected:Boolean(selection),stroke:selection?.strokeColor??appState.currentItemStrokeColor,fill:selection?.backgroundColor??appState.currentItemBackgroundColor,strokeWidth:selection?.strokeWidth??appState.currentItemStrokeWidth,fontSize:selection?.fontSize??appState.currentItemFontSize,roughness:selection?.roughness??appState.currentItemRoughness,fontFamily:selection?.fontFamily??appState.currentItemFontFamily,gridModeEnabled:Boolean(appState.gridModeEnabled),gridSize:appState.gridSize};
     const signature=JSON.stringify(next);if(uiSignature.current!==signature){uiSignature.current=signature;setUi(next);}
     if (!initiallyFramed.current && sync.current?.initial.elements.some((element) => !element.isDeleted) && elements.some((element) => !element.isDeleted)) {
       initiallyFramed.current = true;
@@ -84,15 +90,31 @@ function App() {
   const drawingUi = useMemo(() => ({ canvasActions: { loadScene: true, saveToActiveFile: false, export: { saveFileToDisk: true }, toggleTheme: false } }), []);
   const openPlanner=(tab,action=null)=>{if(window.innerWidth<1200)setChatOpen(false);setNavigatorOpen(false);setPlanner(tab);setPlannerAction(action?{...action,id:crypto.randomUUID()}:null);};
   const setChatVisibility=(value,{saved=false}={})=>{if(value&&!saved&&!canOpenChat)return;if(value&&window.innerWidth<1200){setPlanner(null);setNavigatorOpen(false);}setChatOpen(value);};
+  const selectForImagine=ids=>{
+    const api=sync.current?.getApi();if(!api)return;
+    const active=new Set(api.getSceneElements().filter(element=>!element.isDeleted).map(element=>element.id));
+    api.setActiveTool({type:'selection'});
+    api.updateScene({appState:{selectedElementIds:Object.fromEntries(ids.filter(id=>active.has(id)).map(id=>[id,true])),selectedGroupIds:{}}});
+  };
+  const pickImagineRole=(phase,restore=false)=>{
+    setImagineOpen(false);setImaginePickError('');setChatOpen(false);setPlanner(null);setNavigatorOpen(false);setImaginePicking(phase);
+    if(restore)selectForImagine(phase==='reference'?imagineReferenceIds:imagineTargetIds);
+    else sync.current?.getApi()?.setActiveTool({type:'selection'});
+  };
+  const useImagineSelection=()=>{
+    const api=sync.current?.getApi();if(!api)return;
+    const state=api.getAppState(),ids=Object.keys(state.selectedElementIds).filter(id=>state.selectedElementIds[id]);
+    const picked=imagineRoleSelection(api.getSceneElements(),ids,{role:imaginePicking,referenceIds:imagineReferenceIds});
+    if(picked.error){setImaginePickError(picked.error);return;}
+    setImaginePickError('');
+    if(imaginePicking==='reference'){setImagineReferenceIds(picked.ids);setImaginePicking('target');selectForImagine(imagineTargetIds);}
+    else {setImagineTargetIds(picked.ids);setImaginePicking(null);setImagineOpen(true);}
+  };
   useEffect(()=>{
     const parse=value=>typeof value==='number'?value:Date.parse(value),deadlines=[view.connection?.messageExpiresAt,view.connection?.reviewExpiresAt,view.connection?.eventExpiresAt,view.connection?.liveSession?.expiresAt,view.connection?.liveSession?.waitExpiresAt].map(parse).filter(Number.isFinite);
     let timer;const schedule=()=>{const future=deadlines.filter(value=>value>Date.now());if(future.length)timer=setTimeout(()=>{refreshMiniChatGate(value=>value+1);schedule();},Math.min(2147483647,Math.min(...future)-Date.now()+1));};schedule();
     return()=>clearTimeout(timer);
   },[view.connection?.id,view.connection?.automaticMessages,view.connection?.messageExpiresAt,view.connection?.reviewExpiresAt,view.connection?.eventExpiresAt,view.connection?.liveSession?.id,view.connection?.liveSession?.status,view.connection?.liveSession?.expiresAt,view.connection?.liveSession?.waitExpiresAt]);
-  useEffect(()=>{
-    const shortcut=e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPlanner('areas');}};
-    document.addEventListener('keydown',shortcut);return()=>document.removeEventListener('keydown',shortcut);
-  },[]);
   useEffect(() => {
     let disposed = false;
     connectBoard((next) => { if (!disposed) setView(next); }).then((connection) => {
@@ -202,22 +224,25 @@ function App() {
             onChange={onDrawingChange}
             theme="light"
             UIOptions={drawingUi}
+            validateEmbeddable={isSupportedEmbed}
             renderTopRightUI={() => null}
             handleKeyboardGlobally={true}
           /> : <div className="loading"><span className="loading-mark">↗</span>{browserOnly?'Opening your saved browser canvas…':'Opening our canvas…'}</div>}
-          {initial&&<DrawingToolbar browserOnly={browserOnly} onStorageDetails={()=>setStorageDetailsOpen(true)} getApi={()=>sync.current?.getApi()} ui={ui} focused={focused} onFullscreen={toggleFullscreen} chatDisabled={!canOpenChat} chatUnavailableReason={miniChat.reason} onChat={()=>setChatVisibility(!chatOpen)} onConnect={()=>setConnectionOpen(true)} onReview={askForReview} reviewUnavailableReason={miniReview.reason} reviewDisabled={requestingReview||samePendingReview||!view.agentConnected||browserOnly&&!miniReview.enabled||view.status==='conflict'||!view.online} onExport={exportBoard} onImport={importBoard} onError={setReviewError} onPlanner={tab=>openPlanner(tab)} onReference={()=>setReferenceOpen(true)} onChangelog={()=>setChangelogOpen(true)} onExportProject={exportProject} onImportProject={()=>setProjectImportOpen(true)} onWorkspace={()=>setWorkspaceOpen(true)} onNavigator={()=>{setPlanner(null);setNavigatorOpen(v=>!v);}}/>}
+          {initial&&<DrawingToolbar onImagine={()=>imaginePicking?useImagineSelection():pickImagineRole("reference")} browserOnly={browserOnly} onStorageDetails={()=>setStorageDetailsOpen(true)} getApi={()=>sync.current?.getApi()} ui={ui} focused={focused} onFullscreen={toggleFullscreen} chatDisabled={!canOpenChat} chatUnavailableReason={miniChat.reason} onChat={()=>setChatVisibility(!chatOpen)} onConnect={()=>setConnectionOpen(true)} onReview={askForReview} reviewUnavailableReason={miniReview.reason} reviewDisabled={requestingReview||samePendingReview||!view.agentConnected||browserOnly&&!miniReview.enabled||view.status==='conflict'||!view.online} onExport={exportBoard} onImport={importBoard} onError={setReviewError} onPlanner={tab=>openPlanner(tab)} onReference={()=>setReferenceOpen(true)} onChangelog={()=>setChangelogOpen(true)} onExportProject={exportProject} onImportProject={()=>setProjectImportOpen(true)} onWorkspace={()=>setWorkspaceOpen(true)} onNavigator={()=>{setPlanner(null);setNavigatorOpen(v=>!v);}}/>}
           {initial&&<NotePins view={view} ui={ui} onOpen={noteId=>openPlanner('notes',{type:'note-open',noteId})}/>}
-          {initial&&!planner&&!navigatorOpen&&<SelectionBar view={view} getApi={()=>sync.current.getApi()} onNote={()=>openPlanner('notes',{type:'note'})} onArea={()=>openPlanner('areas',{type:'area'})} onInspect={()=>setSelectionOpen(true)}/>}
+          {initial&&!planner&&!navigatorOpen&&!imaginePicking&&<SelectionBar view={view} getApi={()=>sync.current.getApi()} onNote={()=>openPlanner('notes',{type:'note'})} onArea={()=>openPlanner('areas',{type:'area'})} onInspect={()=>setSelectionOpen(true)}/>}
+          {initial&&imaginePicking&&<ImagineSelectionFlow phase={imaginePicking} selectedCount={view.selectedIds.length} referenceCount={imagineReferenceIds.length} error={imaginePickError} onUseSelection={useImagineSelection} onCancel={()=>{setImaginePicking(null);setImaginePickError("");}} onBack={()=>pickImagineRole("reference",true)}/>}
           {initial&&navigatorOpen&&<ObjectNavigator view={view} ui={ui} getApi={()=>sync.current.getApi()} onClose={()=>setNavigatorOpen(false)}/>}
           {initial&&planner&&<PlanningPanel browserOnly={browserOnly} tab={planner} setTab={setPlanner} view={view} getSync={()=>sync.current} action={plannerAction} onClose={()=>{setPlanner(null);setPlannerAction(null);}} onReference={()=>setReferenceOpen(true)} onDiscuss={async text=>{if(browserOnly&&!miniChat.automatic){setConnectionOpen(true);return;}setChatVisibility(true,{saved:!miniChat.enabled});const id=crypto.randomUUID();const result=await sync.current.sendChat({id,text,intent:'discuss'});const message=result.messages.find(m=>m.id===id);if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'Direct delivery could not be confirmed. Check the linked chat before retrying.');}}/>}
           {initial&&<BoardChat onStopLive={()=>sync.current.stopLiveSession(view.connection?.liveSession?.id)} onConnect={()=>setConnectionOpen(true)} browserOnly={browserOnly} open={chatOpen} setOpen={setChatVisibility} onExpand={expanded=>{if(expanded){setPlanner(null);setNavigatorOpen(false);}}} view={view} send={input=>{const available=miniChatState(view.chatConnected?view.connection:null);if(!available.enabled)throw new Error(available.reason);return sync.current.sendChat(input);}} retry={id=>sync.current.retryChat(id)} focused={focused} prepareContext={options=>sync.current.prepareContext(options)} legacyDraftBoardId={view.workspace?.legacyBoardId} onJump={ids=>{const api=sync.current.getApi();const elements=api.getSceneElements().filter(e=>ids.includes(e.id));if(elements.length)api.scrollToContent(elements,{fitToViewport:true,viewportZoomFactor:.7,maxZoom:1});}}/>}
-          {initial&&count===0&&!planner&&!navigatorOpen&&!chatOpen&&<div className="canvas-welcome"><span className="welcome-symbol">↗</span><p className="eyebrow">EVERY GOOD BUILD STARTS SOMEWHERE</p><h2>What are we thinking through?</h2><p>Start with a screen, a system, or a screenshot.<br/>{browserOnly?'Sketch first. Your work stays in this browser.':'Your AI and your ideas share the same space.'}</p><div onPointerDown={e=>e.stopPropagation()}><button className="primary-button" onClick={()=>openPlanner('library')}>Choose a starting block</button><button className="secondary-button" onClick={()=>setReferenceOpen(true)}>Add a screenshot</button></div><small>Or pick a tool above and make your first mark.</small></div>}
+          {initial&&count===0&&!planner&&!navigatorOpen&&!chatOpen&&!imaginePicking&&<div className="canvas-welcome"><span className="welcome-symbol">↗</span><p className="eyebrow">EVERY GOOD BUILD STARTS SOMEWHERE</p><h2>What are we thinking through?</h2><p>Start with a screen, a system, or a screenshot.<br/>{browserOnly?'Sketch first. Your work stays in this browser.':'Your AI and your ideas share the same space.'}</p><div onPointerDown={e=>e.stopPropagation()}><button className="primary-button" onClick={()=>openPlanner('library')}>Choose a starting block</button><button className="secondary-button" onClick={()=>setReferenceOpen(true)}>Add a screenshot</button></div><small>Or pick a tool above and make your first mark.</small></div>}
         </div>
         <footer className="canvas-footer"><span><span className="footer-dot" />{statusText}</span><a className="footer-creator" href={CREATOR_URL} target="_blank" rel="author noopener noreferrer">Created by {CREATOR_NAME}</a><button className="footer-changelog" onClick={()=>setChangelogOpen(true)}>v{APP_VERSION} · What’s new</button></footer>
       </main>
       {changelogOpen&&<Changelog onClose={()=>setChangelogOpen(false)}/>}
       {referenceOpen&&<ReferenceImport getApi={()=>sync.current.getApi()} onClose={()=>setReferenceOpen(false)}/>}
       {selectionOpen&&<SelectionDetails getApi={()=>sync.current.getApi()} onClose={()=>setSelectionOpen(false)}/>}
+      {imagineOpen&&<ImaginePanel referenceIds={imagineReferenceIds} targetIds={imagineTargetIds} onChangeReference={()=>pickImagineRole("reference",true)} onChangeTarget={()=>pickImagineRole("target",true)} view={view} getSync={()=>sync.current} draft={imagineDraft} onDraft={setImagineDraft} onClose={()=>setImagineOpen(false)} onConnect={()=>{setImagineOpen(false);setImaginePicking("target");setConnectionOpen(true);}} onHistory={()=>{setImagineOpen(false);setChatVisibility(true,{saved:true});}}/>}
       {projectImportOpen&&<ProjectTransfer getSync={()=>sync.current} onClose={()=>setProjectImportOpen(false)}/>}
       {workspaceOpen&&view.workspace&&<WorkspacePicker browserOnly={browserOnly} workspace={view.workspace} onClose={()=>setWorkspaceOpen(false)} run={input=>sync.current.workspaceAction(input)} openBoard={id=>sync.current.openBoard(id)} previewDelete={browserOnly?input=>sync.current.previewWorkspaceDelete(input):undefined} onDeleted={result=>sync.current.openAfterDeletion(result)}/>}
       {storageDetailsOpen&&<BrowserStorageDetails onClose={()=>setStorageDetailsOpen(false)} onExport={exportProject}/>}
@@ -227,6 +252,10 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+// A dependency update during development must reuse the root instead of
+// leaving a second board connection attached to the same container.
+const appRoot=import.meta.hot?.data.appRoot??createRoot(document.getElementById('root'));
+if(import.meta.hot)import.meta.hot.data.appRoot=appRoot;
+appRoot.render(<App />);
 
 

@@ -4,10 +4,16 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {embedFrameSources} from '../shared/embeds.mjs';
 
 export const projectRoot=fileURLToPath(new URL('../',import.meta.url));
 export const webDirectory=path.join(projectRoot,'dist-web');
 export const pagesAssetLimit=25*1024*1024;
+// Excalidraw 0.18.1's direct iframe destinations (element/embeddable.ts).
+// Its Twitter/Reddit/Gist srcDoc widgets require external scripts and remain
+// subject to the existing script/connect/image policies. SimplePDF uses
+// customer subdomains; this bounded suffix is the only frame wildcard.
+const frameSourcePolicy=`frame-src 'self' ${embedFrameSources.join(' ')}`;
 const read=name=>JSON.parse(readFileSync(path.join(projectRoot,name),'utf8'));
 
 export function listStaticFiles(directory,prefix=''){
@@ -36,6 +42,8 @@ export function validateWebBuild(directory=webDirectory,{version,sourceHash,maxF
   if(/^\s*\/downloads(?:\/|\s)|SharedBoard-Bridge-/im.test(redirects))throw new Error('Native bridge downloads have been retired from the browser build.');
   const policy=readFileSync(path.join(directory,'_headers'),'utf8');
   if(!/^\s*Content-Security-Policy:.*(?:^|; )connect-src 'self' https:\/\/connect\.sharedboard\.app wss:\/\/connect\.sharedboard\.app(?:;|$)/m.test(policy)||/localhost|127\.0\.0\.1|\[::1\]/i.test(policy))throw new Error('The browser build must connect only to its hosted relay.');
+  const csp=policy.match(/^\s*Content-Security-Policy:\s*(.+)$/m)?.[1],frames=csp?.split(';').map(value=>value.trim()).filter(value=>/^frame-src(?:\s|$)/.test(value));
+  if(frames?.length!==1||frames[0]!==frameSourcePolicy)throw new Error('The browser build must allow only its supported HTTPS web-embed frames.');
   return {files,version:info.version,sourceHash:info.sourceHash,totalBytes:files.reduce((total,file)=>total+file.size,0),largestFile:files.reduce((largest,file)=>file.size>largest.size?{name:file.name,size:file.size}:largest,{name:null,size:0})};
 }
 
@@ -45,7 +53,7 @@ export function installPagesFiles(directory=webDirectory){
   writeFileSync(path.join(directory,'_redirects'),`${boardRoutes}\n`);
   const html=readFileSync(path.join(directory,'index.html'),'utf8'),hashes=[];
   for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(!/\bsrc\s*=/i.test(match[1])&&match[2])hashes.push(`'sha256-${createHash('sha256').update(match[2]).digest('base64')}'`);
-  const policy=["default-src 'self'",`script-src 'self' 'wasm-unsafe-eval' ${hashes.join(' ')}`.trim(),"style-src 'self' 'unsafe-inline'","img-src 'self' data: blob:","font-src 'self' data:","connect-src 'self' https://connect.sharedboard.app wss://connect.sharedboard.app","worker-src 'self' blob:","object-src 'none'","base-uri 'self'","form-action 'self'","frame-ancestors 'none'"].join('; ');
+  const policy=["default-src 'self'",`script-src 'self' 'wasm-unsafe-eval' ${hashes.join(' ')}`.trim(),"style-src 'self' 'unsafe-inline'","img-src 'self' data: blob:","font-src 'self' data:","connect-src 'self' https://connect.sharedboard.app wss://connect.sharedboard.app",frameSourcePolicy,"worker-src 'self' blob:","object-src 'none'","base-uri 'self'","form-action 'self'","frame-ancestors 'none'"].join('; ');
   writeFileSync(path.join(directory,'_headers'),`/*\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Referrer-Policy: no-referrer\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Resource-Policy: same-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()\n  Content-Security-Policy: ${policy}\n`);
 }
 

@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import { specSchema, editsSchema } from './schemas.mjs';
+import { specSchema, editsSchema, replaceSelectionSchema } from './schemas.mjs';
 import {APP_VERSION} from '../shared/version.mjs';
 
 export function createBoardMcp(call,{remote=false,remotePair=false,proposals=true}={}) {
@@ -10,6 +10,8 @@ const result = async (operation, body) => {
     const visual=data.visual??data.board?.visual;
     const content=[];
     if(visual?.dataURL){const {dataURL,...metadata}=visual;if(data.visual)data.visual={...metadata,attachedAsImage:true};if(data.board?.visual)data.board.visual={...metadata,attachedAsImage:true};content.push({type:'image',data:dataURL.split(',')[1],mimeType:'image/png'});}
+    const reference=data.board?.imagineReferences?.visual;
+    if(reference?.dataURL){const {dataURL,...metadata}=reference;data.board.imagineReferences.visual={...metadata,attachedAsImage:true};content.push({type:'text',text:'Existing design reference (context only; keep these objects unchanged).'}, {type:'image',data:dataURL.split(',')[1],mimeType:'image/png'});}
     return { content: [{ type: 'text', text: JSON.stringify(data) },...content], structuredContent: data };
   } catch (error) { return { isError: true, content: [{ type: 'text', text: error.message }] }; }
 };
@@ -80,6 +82,10 @@ const result = async (operation, body) => {
     inputSchema: z.object({ edits: editsSchema, summary: z.string().max(200).default('Agent edited objects'),...(remotePair?{requestId:z.string().uuid().optional()}:{} ) }),
     annotations: { destructiveHint: true },
   }, (input) => result('edit', input));
+  if(remotePair)server.registerTool('replace_selection',{
+    description:'Apply an explicit Imagine request as one atomic editable replacement. First read_chat_message for messageId and inspect its captured selection/image, then read_board. Honor the captured design direction, global design notes and prior Imagine passes. Supply the complete polished design in board coordinates using NEW element IDs, with designSummary documenting its reusable palette, typography, spacing and components. Only objects from that captured Imagine selection are removed; disjoint human work survives. Overlapping changes reject the entire replacement. Never delete/add separately or automatically retry a conflict. Reusing the same messageId with identical input returns the original result. Post the actual completion or failure through reply_to_chat_message afterward.',
+    inputSchema:replaceSelectionSchema,annotations:{destructiveHint:true},
+  },input=>result('replace_selection',input));
   return server;
 }
 

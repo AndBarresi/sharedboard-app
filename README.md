@@ -31,6 +31,7 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 | **Explain the details** | Attached notes, requirements, work cards, and screenshot references. |
 | **Reuse and recover** | Editable starting blocks, your own block library, checkpoints, and automatic recovery. |
 | **Bring your existing AI** | Use native ChatGPT Work Cloud events, a managed Codex or Claude Code plugin, or compatible remote MCP tools, with read-only or requested-edit access. |
+| **Imagine a finished design** | Refine a selected wireframe using an existing page, frame, or manually chosen objects as the visual reference. |
 
 <details>
 <summary><strong>Take a closer look at the planning workspace</strong></summary>
@@ -40,6 +41,14 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 Keep requirements, named areas, and reusable building blocks beside the drawing they describe.
 
 </details>
+
+### Drawing tools and Imagine
+
+The **Shapes** menu groups rectangles, ellipses and diamonds; hold Shift while drawing for a square or circle. The toolbar runs across the top in landscape and down the left in portrait, with drawing tools that scroll independently while utility actions remain available. It also includes the laser pointer and a **More tools** menu for frames, web embeds, shape recognition, bucket fill and lasso selection. **Info & keyboard shortcuts** opens a searchable reference. Press **S** for drawing style, **?** for help, or **Ctrl/Cmd+'** to enable the alignment grid and snapping.
+
+To use **Imagine**, open the tool, drag-select a finished page or component on the canvas, and choose **Use as reference**. Next, drag-select the wireframe you want enhanced and choose **Imagine this selection**. Either step accepts an existing selection. Separate previews show the reference and the target before you submit, with controls to change either selection on the canvas. For example, a finished index page can guide the typography, palette, spacing and components of a rough contact page without an earlier Imagine pass.
+
+Imagine uses the existing connected AI conversation with verified delivery and drawing edit access. It creates an editable canvas design and saves design memory for later passes on the same board. Reference artwork remains in place. Changed targets, references or relevant requirements stop an outdated replacement, while recovery and **AI changes** provide ways to restore the original. Local AI plugins must include the `replace_selection` tool; older running plugin processes need the updated package and a fresh connection before using Imagine. Automated hosted and plugin tests cover this workflow; real provider generation quality still needs live acceptance testing.
 
 ## Start on the website
 

@@ -1,5 +1,32 @@
 # SharedBoard.app changelog
 
+## 0.13.2 — Complete design fidelity and production embed support
+
+### Fixed
+
+- Imagine preserves the requested text family in standalone text and bound labels.
+- Production allows supported HTTPS web embeds while rejecting unsupported scripted widgets and retaining strict application policies.
+- Normalize release source files for consistent validation across Windows, Linux and macOS.
+
+## 0.13.1 — Canvas selection and responsive tool dock
+
+### Fixed
+
+- Imagine now uses two separate canvas selections for its reference and wireframe, accepts existing selections, and removes the object checklist.
+- Portrait uses a vertical left dock with pinned utilities; landscape uses one horizontal row, with responsive panels and redundant controls removed.
+- Preview refresh rejects changed reference scope, and undone or failed passes no longer become approved design direction.
+
+## 0.13.0 — Canvas tools and consistent Imagine designs
+
+### Added
+
+- A compact Shapes menu, clickable laser pointer, native frame and web embed tools, and editable draw-to-shape, bucket-fill and lasso tools.
+- A themed searchable keyboard reference and an Imagine selection workflow with manually chosen design references, saved design memory, safe atomic replacement and undo.
+
+### Fixed
+
+- The S formatting popup, grid activation and snapping, sidebar spacing and typography, mobile toolbar sizing, and frame-aware drawing captures.
+
 ## 0.12.5 — Make connection test progress clear
 
 ### Fixed
