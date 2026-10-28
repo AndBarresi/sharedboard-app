@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CLIENT_PROFILES,clientProfile,isClientProvider,miniChatState} from '../shared/client-profiles.mjs';
+import {CLIENT_PROFILES,clientProfile,isClientProvider,miniChatState,channelTestAvailable} from '../shared/client-profiles.mjs';
 
 const now=Date.now();
 const live=changes=>({connected:true,provider:'codex',permission:'read',deliveryMode:'live-session',automaticMessages:true,liveSession:{id:'11111111-1111-4111-8111-111111111111',status:'waiting',expiresAt:now+1_200_000,waitExpiresAt:now+40_000},...changes});
@@ -12,7 +12,20 @@ test('coding clients come first and ChatGPT native setup is distinct from experi
  for(const id of ['__proto__','cursor',null,{},'not-a-client'])assert.equal(isClientProvider(id),false);
  assert.equal(clientProfile('chatgpt').label,'ChatGPT Work Cloud');assert.match(clientProfile('chatgpt').miniChatLabel,/native event setup/);assert.match(clientProfile('chatgpt').detail,/Work with Cloud selected/);assert.match(clientProfile('chatgpt').detail,/Availability depends on your account/);
  assert.ok(CLIENT_PROFILES.every(client=>client.miniChat==='verify'));
- assert.ok(CLIENT_PROFILES.filter(client=>client.id!=='chatgpt').every(client=>client.miniChatLabel==='Live mini chat · AI session must stay active'&&/Experimental/.test(client.detail)));
+ assert.match(clientProfile('claude-code').miniChatLabel,/Channels plugin setup/);assert.match(clientProfile('claude-code').detail,/each session/);assert.match(clientProfile('claude-code').detail,/Node.js is required/);
+ assert.match(clientProfile('codex').miniChatLabel,/local plugin setup/);assert.match(clientProfile('codex').detail,/Codex CLI queue support/);assert.match(clientProfile('codex').detail,/actual reply test/);
+ assert.ok(CLIENT_PROFILES.filter(client=>!['codex','chatgpt','claude-code'].includes(client.id)).every(client=>client.miniChatLabel==='Live mini chat · AI session must stay active'&&/Experimental/.test(client.detail)));
+});
+
+test('local plugins require current authenticated presence and actual proof, with a separate explicit test gate',()=>{
+ for(const [provider,deliveryMode] of [['claude-code','claude-channel'],['codex','codex-channel']]){
+ const connection={provider,id:'connection',boardId:'board',connected:true,browserOnline:true,deliveryMode,channelConnected:true,channelSessionId:'process-instance',channelExpiresAt:now+60000,channelVerified:false,automaticMessages:false,automaticReviews:false};
+ assert.equal(channelTestAvailable(connection,now),true);assert.equal(miniChatState(connection,now).enabled,false);assert.equal(miniChatState(connection,now).testAvailable,true);
+ for(const changes of [{provider:'claude-code',deliveryMode:'manual'},{channelConnected:false},{channelSessionId:''},{channelExpiresAt:now},{channelExpiresAt:'invalid'},{channelExpiresAt:Infinity},{browserOnline:false},{browserOnline:undefined},{relayAvailable:false},{connected:false},{revoked:true}]){const current={...connection,...changes,channelVerified:true,automaticMessages:true};assert.equal(channelTestAvailable(current,now),false,JSON.stringify(changes));assert.equal(miniChatState(current,now).enabled,false);}
+ for(const channelVerified of [undefined,false,'true'])assert.equal(miniChatState({...connection,channelVerified,automaticMessages:true},now).enabled,false,'a socket and cached automatic flag do not establish proof');
+ const verified={...connection,channelVerified:true,automaticMessages:true};assert.equal(miniChatState(verified,now).enabled,true);assert.equal(miniChatState(verified,now).mode,deliveryMode);assert.equal(miniChatState(verified,now+60000).enabled,false);
+ assert.equal(miniChatState({...verified,automaticMessages:false,automaticReviews:true},now).enabled,false,'review capability alone does not enable mini chat');
+ }
 });
 
 test('every provider and drawing permission needs actual live waiting or verified events',()=>{

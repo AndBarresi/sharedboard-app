@@ -53,5 +53,14 @@ export class RelayAuthorization{
  });}
  async verify(token){if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))throw fail('Authorize this connector in SharedBoard.app first.',401,'UNAUTHORIZED');const item=await this.get(`access:${await hash(token)}`);if(!item||await this.get(`revoked:${item.grant.familyId}`))throw fail('This connector authorization expired or was revoked. Reconnect it.',401,'UNAUTHORIZED');return item.grant;}
  revoke(token){return this.run(async()=>{if(typeof token!=='string')return {ok:true};const digest=await hash(token),entry=await this.get(`access:${digest}`)??await this.get(`refresh:${digest}`);if(entry?.grant?.familyId)await this.put(`revoked:${entry.grant.familyId}`,{revoked:true},this.now()+31*DAY);await this.storage.delete([`access:${digest}`,`refresh:${digest}`,`expiry:access:${digest}`,`expiry:refresh:${digest}`]);return {ok:true,...(entry?.grant?{grant:entry.grant}:{})};});}
+ // Internal only: the Worker retains this grant from successful authentication.
+ // Cleanup may remove an expiring access record while its tool call is active.
+ revokeBound(token,grant){return this.run(async()=>{
+  if(typeof token!=='string'||!/^[a-f0-9]{64}$/i.test(token))throw fail('This authorization cannot be released.',401,'UNAUTHORIZED');
+  for(const field of ['familyId','sessionId','boardId','clientId'])uuid(grant?.[field],field);
+  const digest=await hash(token),entry=await this.storage.get(`access:${digest}`);
+  if(entry?.grant&&['familyId','sessionId','boardId','clientId','scope'].some(field=>entry.grant[field]!==grant[field]))throw fail('This authorization changed. No other connection was released.',409,'CONNECTION_CHANGED');
+  await this.put(`revoked:${grant.familyId}`,{revoked:true},this.now()+31*DAY);await this.storage.delete([`access:${digest}`,`expiry:access:${digest}`]);return {ok:true};
+ });}
  rate(key,ip){return this.run(async()=>{await this.limited(`${key}:${ip}`,key==='pair'?10:60);if(key==='pair'){await this.limited('global:pair',100);await this.limited('global:pair-day',1000,DAY);}return {ok:true};});}
 }

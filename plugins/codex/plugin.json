@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sharedboard",
+  "version": "0.12.2",
+  "description": "Read and edit your browser board and receive its messages in an existing Codex chat.",
+  "author": {
+    "name": "Andrew Barresi",
+    "url": "https://github.com/AndBarresi"
+  },
+  "homepage": "https://sharedboard.app",
+  "license": "MIT",
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "SharedBoard.app",
+        "shortDescription": "Your browser board and existing Codex chat.",
+        "longDescription": "Connect a browser-saved whiteboard to an existing local Codex conversation. Uses the installed Codex queue command, a scoped Cloudflare relay, and Node.js 22 or later."
+      }
+    }
+  }
+}

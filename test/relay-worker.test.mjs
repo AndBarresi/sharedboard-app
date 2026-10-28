@@ -19,7 +19,11 @@ test('actual workerd Worker + SQLite Durable Objects + browser IndexedDB + SDK M
  const dispatch=async(input,init)=>{const request=new Request(input,init);return mf.dispatchFetch(request.url,{method:request.method,headers:Object.fromEntries(request.headers),...(request.method==='GET'||request.method==='HEAD'?{}:{body:await request.arrayBuffer()}),redirect:request.redirect,signal:request.signal});};
  // Keep browser acceptance traffic separate from the setup-validation actor's
  // rate-limit bucket, as distinct real clients would be at Cloudflare's edge.
- const fetcher=async(input,init={})=>{const request=new Request(input,init),headers=new Headers(request.headers);headers.set('origin',appOrigin);headers.set('cf-connecting-ip','192.0.2.10');return dispatch(new Request(request,{headers}));};
+ const fetcher=async(input,init={})=>{let request=new Request(input,init);const headers=new Headers(request.headers);headers.set('origin',appOrigin);headers.set('cf-connecting-ip','192.0.2.10');
+  // This regression deliberately exercises existing remote OAuth grants,
+  // including legacy Claude Code. New normal Claude Code setup uses Channels.
+  if(new URL(request.url).pathname==='/browser/pair'&&request.method==='POST'){const data=await request.clone().json();if(data.provider==='claude-code')request=new Request(request,{body:JSON.stringify({...data,mode:'remote-mcp'})});}
+  return dispatch(new Request(request,{headers}));};
  class BrowserSocket{
   constructor(url){this.readyState=0;sockets.add(this);void mf.dispatchFetch(String(url).replace(/^ws/,'http'),{headers:{origin:appOrigin,upgrade:'websocket'}}).then(response=>{if(response.status!==101||!response.webSocket)throw new Error('WebSocket upgrade failed: '+response.status);this.socket=response.webSocket;this.socket.accept();this.readyState=1;this.socket.addEventListener('message',event=>this.onmessage?.({data:event.data}));this.socket.addEventListener('close',()=>{this.readyState=3;this.onclose?.({});sockets.delete(this);});this.socket.addEventListener('error',()=>this.onerror?.({}));this.onopen?.({});}).catch(error=>{this.readyState=3;this.onerror?.(error);this.onclose?.({});sockets.delete(this);});}
   send(value){this.socket.send(value);}

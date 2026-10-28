@@ -1,0 +1,19 @@
+{
+  "name": "sharedboard-claude-code",
+  "version": "0.12.2",
+  "private": true,
+  "type": "module",
+  "description": "SharedBoard.app Channels plugin for an existing Claude Code session",
+  "author": {
+    "name": "Andrew Barresi",
+    "url": "https://github.com/AndBarresi"
+  },
+  "license": "MIT",
+  "homepage": "https://sharedboard.app",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk-v1": "npm:@modelcontextprotocol/sdk@1.32.2"
+  }
+}

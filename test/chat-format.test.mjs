@@ -83,3 +83,13 @@ test('native chat waits for an actual reply while isolating other connections, b
  assert.equal(nativeChatAwaitingReply([{...base,reply:'Actual answer'},base],connection)?.id,base.id);
  assert.equal(shouldResetChatCapture({status:409,code:'CHAT_REPLY_PENDING'}),false,'waiting for another answer does not invalidate the prepared drawing');
 });
+
+test('channel reply guard waits for real replies only within the exact connection and process instance',()=>{
+ for(const deliveryMode of ['claude-channel','codex-channel']){
+ const connection={id:'connection',boardId:'board',channelSessionId:'current-process'},message={id:'channel-message',connectionId:'connection',boardId:'board',channelSessionId:'current-process',deliveryMode,delivery:'queued',receipt:'ch_chat_channel-message',status:'reading'};
+ assert.equal(nativeChatAwaitingReply([message],connection),message);for(const delivery of ['pending','uncertain'])assert.equal(nativeChatAwaitingReply([{...message,receipt:undefined,delivery}],connection)?.id,message.id);
+ for(const changes of [{reply:'Actual board answer'},{connectionId:'other'},{boardId:'other'},{channelSessionId:'old-process'},{receipt:undefined,delivery:'failed'}])assert.equal(nativeChatAwaitingReply([{...message,...changes}],connection),null);
+ assert.equal(nativeChatAwaitingReply([message],connection,message.id),null);assert.equal(nativeChatAwaitingReply([{...message,status:'answered',reply:'   '}],connection)?.id,message.id,'an answered label is not a saved actual reply');
+ assert.equal(shouldResetChatCapture({status:409,code:'CHANNEL_REQUEST_SESSION_CHANGED'}),false);assert.equal(shouldResetChatCapture({status:409,code:'CHANNEL_TEST_UNAVAILABLE'}),false);
+ }
+});

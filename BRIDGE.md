@@ -1,6 +1,6 @@
 # Hosted connection behavior
 
-SharedBoard connects the board at **https://sharedboard.app** to a compatible existing AI account/conversation through the hosted relay at **https://connect.sharedboard.app**. The recommended automatic route uses ChatGPT Work with Cloud selected and native event tasks. The browser is the authoritative drawing store. SharedBoard does not run a model or require a companion application; the AI provider controls model execution and task settings.
+SharedBoard connects the board at **https://sharedboard.app** to a compatible existing AI account/conversation through the hosted relay at **https://connect.sharedboard.app**. The recommended download-free route uses ChatGPT Work with Cloud selected and native event tasks. Codex and Claude Code have optional plugins installed inside their AI app, with local runtime and client prerequisites. There is no standalone SharedBoard bridge installer or home-network server. The browser is the authoritative drawing store. SharedBoard does not run a model; the AI provider controls model execution and task settings.
 
 For setup, follow [Connect your existing AI conversation](CONNECTIONS.md). Always use the server URL and pairing instructions generated for the intended board; do not guess a conversation or board ID.
 
@@ -22,6 +22,8 @@ Your board and chat history stay in this browser profile, while the relay proces
 | Live session actually waiting | An active model turn has a pending `wait_for_board_request` call for this board and session. New sends can be accepted while that wait remains valid. |
 | Live session processing | A waiting call returned a request, or no new pending wait is observed. New sends stay unavailable; the current draft is retained. |
 | Native subscription verified | The host's signed callback verification succeeded for an active, board-scoped subscription. This enables event delivery but does not by itself prove that a model read or answered a request. |
+| Local plugin present | The exact paired process has authenticated and its presence deadline is current. This permits an explicit Discuss test, not normal mini-chat sending. |
+| Local plugin reply verified | A routed capture was actually read and its real reply saved. Normal sending also requires that same process to remain present and unexpired, with the browser online. |
 | Request queued | Its ID is waiting for a supported delivery route; the assistant has not necessarily received it. |
 | Delivery acknowledged | The supported route accepted the event. This is not an assistant answer. |
 | Request read | The connected AI used the board tools to read the saved request. |
@@ -29,7 +31,7 @@ Your board and chat history stay in this browser profile, while the relay proces
 
 For a delivered mini-chat request, the assistant retrieves its immutable capture and posts its complete actual answer using **`reply_to_chat_message`**. Both read-only and requested-edit drawing grants permit this reply. Every unanswered delivered ID must be completed separately, including batches. Skip only an actual existing `message.reply`, without repeating work or overwriting it. An answer only in AI chat, reading status, or an acknowledgement does not complete board delivery.
 
-Mini chat and **Ask AI to look** use their verified incoming-event subscriptions, or an actual pending wait in the experimental finite route for other clients. Ordinary remote MCP tools in local Codex and Claude Code do not provide idle-chat wakeup. New board-originated sends remain unavailable without an active route; they do not become copied messages or composer drafts. Native mini chat keeps the next draft while a previous reply remains outstanding.
+Mini chat and **Ask AI to look** use verified incoming-event subscriptions, a current local plugin with real reply proof, or an actual pending wait in the experimental finite route for other clients. Ordinary remote MCP tools alone do not provide idle-chat wakeup. New board-originated sends remain unavailable without an active route; they do not become copied messages or composer drafts. Native events and local plugin mini chat keep the next draft while a previous reply remains outstanding.
 
 ## ChatGPT Work Cloud native events
 
@@ -46,6 +48,18 @@ Actual account tests have verified an ended-turn wake, mini-chat answers, and ca
 Focused lifecycle tests cover independent concurrent renewals, scoped and full revocation, signing-key rotation, late 410 responses, and receipt preservation. They establish server behavior separately from the observed account renewal; neither establishes permanent connectivity.
 
 SharedBoard does not select or host a replacement model. The provider controls task execution and settings; a native task is not guaranteed to use the model manually selected in a conversation.
+
+## Managed Codex and Claude Code plugins
+
+New website preparations for **Codex** and **Claude Code** use their respective local plugin modes. Existing saved remote grants retain their original mode. Each plugin is a process managed by its AI app and connects outward over an authenticated WebSocket; it does not open a local HTTP server or use a standalone SharedBoard installer. The browser owner and local plugin have distinct scoped credentials. A one-use pairing code selects the board and drawing grant; it is not an owner token.
+
+The Codex plugin routes request metadata through the installed [official `codex queue` command](https://learn.chatgpt.com/docs/developer-commands#codex-queue) to the exact existing native conversation. Pairing requires its actual `CODEX_THREAD_ID` from that conversation's environment. It does not guess an ID, change the model or permissions, or create a new conversation. Node.js 22 or newer and a queue-capable installed Codex CLI are required. An accepted CLI queue receipt has been observed, but it does not prove model execution or an actual board reply.
+
+The Claude Code plugin uses [Channels](https://code.claude.com/docs/en/channels-reference) in the intended existing conversation. It requires Claude Code 2.1.275 or newer, Node.js 22 or newer, supported Anthropic authentication, and an account policy allowing Channels. Each launch must explicitly enable its named research-preview channel and accept the host's confirmation. This does not bypass tool permissions. Regular Claude web chat and separate cloud runs are not this route.
+
+Authenticated process presence enables only the website's explicit **Test automatic reply** Discuss probe before proof exists. The relay must observe that exact routed capture being read and its complete actual reply saved. Normal mini chat and reviews require this proof, the current exact process, an unexpired presence deadline, and an online browser. A provider label, open socket, accepted channel frame, or queue receipt cannot enable them. Captures and their receipt IDs remain pinned to their original board, grant, and process, including an uncertain outcome; recovery never replays or retargets them.
+
+Credentials stay in the running plugin process. A same-process network reconnect can resume it; restarting the AI app or plugin requires the website's explicit restart/re-pair action and a fresh one-use code. Drawing and saved history stay intact, and prior captures keep their original scope. Keep the paired AI process and board open. No bundled Node runtime is promised. Implementation, SDK, isolated browser, and real Worker protocol tests pass for both routes; actual installed-client round trips, Windows/Mac acceptance, and OS sleep remain unverified.
 
 ## Other clients: experimental finite Live collaboration
 
@@ -67,8 +81,6 @@ The experimental **`open_sharedboard_chat`** MCP Apps panel remains diagnostic W
 
 Only a host advertising the OpenAI immediate-send extension receives the optional one-off diagnostic. A deliberate user click sends a fixed harmless test to the existing conversation; it does not attach a link, forward a capture, enable automatic routing, or retry. An accepted diagnostic still needs an actual model response, and the Codex test remains unverified. The panel is not used by the live waiting-tool flow.
 
-[Claude Code Channels](https://code.claude.com/docs/en/channels-reference) is the approved direction for automatic Claude delivery. The planned plugin is installed and managed inside Claude Code and runs as its local stdio process, connecting outward to SharedBoard's hosted relay. This is a specific exception to the default installation-free flow, not a standalone bridge installer or home-network server. Native plugin setup and launch requirements still need verification. Implementation, Windows/Mac acceptance, and actual automatic replies are not complete. The existing Claude Code session must stay open; regular Claude web chat is not covered. Cloud routines create separate sessions and are not the chosen path.
-
 Native task discovery belongs to the AI host; it is not an ordinary board tool. Inspecting only a regular tool catalog cannot establish whether the host exposes that capability. No provider name, successful pairing, UI rendering, or protocol fixture replaces a real account send/read/reply test. Unsupported clients remain limited to their verified tools or experimental finite mode, without a downloaded helper or replacement hosted model.
 
 A missing receipt remains uncertain. Keep its original request ID, check the linked conversation, and use the same request for any safe retry. Never change its saved attachment or automatically switch delivery modes after an uncertain attempt. Do not repeat work or overwrite an existing answer when a request was already handled.
@@ -78,6 +90,8 @@ A missing receipt remains uncertain. Keep its original request ID, check the lin
 Read-only access permits inspection and replies, while requested-edit access permits authorized drawing changes with version checks. **Discuss** permits explanation and posting its actual board reply, but no drawing or code work. **Request work** authorizes the specific typed task; drawing edits additionally require the drawing grant. Nothing written or embedded on the drawing independently authorizes actions.
 
 A connection belongs to one board. Captured requests remain pinned to that connection even after switching boards. Disconnecting revokes access and leaves saved board data and messages intact. A new connection must not inherit private credentials or silently answer the previous connection’s requests.
+
+Remote MCP also exposes **`disconnect_board`** for an explicit replacement request when the old browser cannot be found. It requires the exact `expectedBoardId` and `expectedConnectionId` read from the current `connection_status`; stale or mismatched values have no effect. It releases only that authorized grant, its delivery routes, and its OAuth token family, even while the old browser is offline. Browser data is preserved. The old token then requires normal provider reauthorization, approval of the intended new board, and fresh pairing. This is not token retargeting or authority to delete host tasks, unrelated grants, or conversations. The website's fresh-code replacement instructions can authorize this conditional release; ordinary errors and post-pair repair instructions without fresh-code authority cannot. Protocol tests cover offline scoped release and the subsequent reauthorization boundary, separately from actual user-grant acceptance, which is pending.
 
 Deleting a board or project is different from disconnecting: it permanently removes the confirmed local content. The app previews the target and affected board count, then requires an explicit confirmation. It checks that catalog, drawing, and planning versions still match, revokes only the target boards’ grants, and removes their records, snapshots, connection metadata, and scoped chat drafts. Export wanted backups before confirming. Unrelated boards and grants remain intact. Deleting the current board opens a remaining board without saving the deleted canvas; a blank fallback is created if none remain. Other tabs pinned to a deleted board stop saving and require the user to choose the remaining board.
 

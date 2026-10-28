@@ -1,0 +1,26 @@
+{
+  "name": "sharedboard",
+  "version": "0.12.2",
+  "description": "Read and edit your browser whiteboard and receive its messages in this Claude Code session.",
+  "author": {
+    "name": "Andrew Barresi",
+    "url": "https://github.com/AndBarresi"
+  },
+  "homepage": "https://sharedboard.app",
+  "repository": "https://github.com/AndBarresi/sharedboard-app",
+  "license": "MIT",
+  "mcpServers": {
+    "sharedboard": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/src/main.mjs"
+      ]
+    }
+  },
+  "channels": [
+    {
+      "server": "sharedboard",
+      "displayName": "SharedBoard.app"
+    }
+  ]
+}

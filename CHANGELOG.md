@@ -1,5 +1,29 @@
 # SharedBoard.app changelog
 
+## 0.12.2 — Close plugin delivery cleanly
+
+### Fixed
+
+- Stop incoming plugin delivery immediately and finish pending receipt writes before shutdown, without late acknowledgements or replay.
+
+## 0.12.1 — Clarify Claude Code account requirements
+
+### Fixed
+
+- Explain the eligible Claude Code account and separate Console API billing before plugin setup; a Free Claude account alone is insufficient.
+
+## 0.12.0 — Local AI plugins and AI-side connection release
+
+### Added
+
+- Preview plugins connect a running Codex conversation or Claude Code session through Cloudflare, with browser-owned boards and real reply verification before normal automatic chat is enabled.
+- Install Claude Code from the website-hosted marketplace; Codex uses its supported plugin marketplace and native existing-chat queue.
+- The AI can release its exact stale remote connection without locating the old browser, preserving boards and history before normal authorization for a new board.
+
+### Fixed
+
+- Scope local delivery, pending replies, reconnects and uncertain outcomes to the exact board and plugin process without replaying work or changing model permissions.
+
 ## 0.11.2 — Recover browser connections and inspect immediate sending
 
 ### Added

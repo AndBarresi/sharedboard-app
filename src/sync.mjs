@@ -255,7 +255,7 @@ export async function connectBoard(onState) {
         const capture=input.capturedContext??await captureContext();
         if(capture.boardId!==state.base.id)throw new Error('This preview belongs to another board. Prepare a new preview.');
         const {notes,...context}=capture;
-        chatInputs.set(input.id,{id:input.id,text:input.text,intent:input.intent,...context,...(browserOnly?{automaticRequired:true}:{})});
+        chatInputs.set(input.id,{id:input.id,text:input.text,intent:input.intent,...context,...(browserOnly?{automaticRequired:true,...(input.channelTest===true?{channelTest:true}:{})}:{})});
       }
       let data;try{data=await request('/api/chat',{method:'POST',body:JSON.stringify(chatInputs.get(input.id))});}catch(error){if(error.status===409&&error.message.includes('drawing changed before sending'))chatInputs.delete(input.id);throw error;}
       state.messages=data.messages;state.chatConnected=data.connected;state.connectionLabel=data.connectionLabel;emit();return data;

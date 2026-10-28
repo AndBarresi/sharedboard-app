@@ -30,7 +30,7 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 | **Organize your work** | Separate projects and boards, named areas, object search, a minimap, and confirmed deletion of work you no longer need. |
 | **Explain the details** | Attached notes, requirements, work cards, and screenshot references. |
 | **Reuse and recover** | Editable starting blocks, your own block library, checkpoints, and automatic recovery. |
-| **Bring your existing AI** | Connect a compatible AI chat through SharedBoard’s hosted MCP relay, with read-only or requested-edit access. |
+| **Bring your existing AI** | Use native ChatGPT Work Cloud events, a managed Codex or Claude Code plugin, or compatible remote MCP tools, with read-only or requested-edit access. |
 
 <details>
 <summary><strong>Take a closer look at the planning workspace</strong></summary>
@@ -47,7 +47,7 @@ Keep requirements, named areas, and reusable building blocks beside the drawing 
 2. Draw something, add a reference or note, and wait for the saved indicator.
 3. Use **Export board** to keep a `.sharedboard` backup outside the browser.
 
-SharedBoard runs in the browser. The current hosted flow has no standalone SharedBoard application or companion to install on Windows or Mac. A Claude Code plugin is the approved direction for automatic messages in an existing Claude Code session; that integration is not implemented or verified yet.
+SharedBoard runs in the browser, without a standalone SharedBoard installer or home-network server. ChatGPT Work Cloud uses a download-free connection. Codex and Claude Code have optional plugins installed inside the AI app; they need Node.js 22 or newer and the client requirements below. Their implementation and isolated tests are complete, but actual installed-client round trips and Windows/Mac acceptance still need testing.
 
 > **Your boards stay in your browser.** They are saved on this device in this browser profile, with no cross-device sync. Clearing site data or leaving private browsing can remove them. Export regularly; each backup contains one board's drawing and planning details. Another domain or preview address has separate storage.
 
@@ -72,11 +72,22 @@ Browser transport recovery detects stalled connections and missing pongs, then r
 
 **What still needs acceptance:** first-time OAuth and new-account setup, actual OS sleep, multiday renewal, other accounts/providers, and a full editing workflow need separate tests. The observed renewal and leave/return tests cover one real account, not every interruption. Reading a request or answering only in AI chat does not deliver a board reply; burst reply handling has required a task-prompt repair requested from the website. This remains a testing beta, without a promise of permanent or bug-free connectivity.
 
-### Other AI clients
+### Codex and Claude Code plugins
+
+Choose **Codex** or **Claude Code** in **Connect an AI** to get the relevant install and pairing instructions on the website. Each plugin connects outward to the hosted relay from its AI app; it does not start a localhost web server or use another model.
+
+| Client | Setup and current boundary |
+| --- | --- |
+| **Codex** | Install the SharedBoard marketplace and plugin, enable it in the existing conversation, and use the generated pairing prompt. Requires Node.js 22+ and an installed Codex CLI with the official queue command. The prompt must use that conversation's actual `CODEX_THREAD_ID`. |
+| **Claude Code** | Install the SharedBoard plugin, resume the intended conversation with its Channels research-preview flag, and use the generated one-use connect command. Requires Claude Code 2.1.275+, Node.js 22+, supported Anthropic authentication, and an account policy permitting Channels. |
+
+Keep the AI app's paired plugin process and the browser board open. Choose **Test automatic reply** after pairing: normal mini chat and reviews stay unavailable until a real capture is read and its actual reply returns. A connected socket, accepted queue receipt, or provider name does not establish that result. Network reconnection can reuse the running process; restarting it requires fresh pairing, while the drawing and saved history remain in the browser. These plugin paths have protocol and isolated test coverage; real installed-client and platform acceptance are pending. See [setup steps and limitations](CONNECTIONS.md).
+
+### Other remote MCP clients
 
 Compatible remote MCP clients can read the board and make authorized edits from their own conversations. Their **Live collaboration · experimental** option uses a finite active AI run: waits default to 40 seconds, allow up to 45 seconds, and share a 20-minute deadline. New sends require an actual pending wait. Empty continuations can use AI allowance, and an ended run needs another explicit start. The website preserves drafts and provides **Pause live collaboration**. This mode still needs provider-specific acceptance testing.
 
-Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. A one-off OpenAI immediate-send test is offered only when the host advertises that extension; it does not enable automatic mini chat or establish Codex support. The planned Claude Code Channels plugin will be installed and managed inside Claude Code, with an outbound connection to SharedBoard's relay rather than a standalone bridge or home server. Setup, platform support, and actual automatic replies still need implementation and testing. Separate cloud runs are not the chosen path. See [connection behavior](BRIDGE.md).
+Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. A one-off OpenAI immediate-send test is offered only when the host advertises that extension; it does not enable automatic mini chat or establish the local Codex plugin's behavior. Existing remote Codex and Claude Code grants keep their original route; they are not silently converted to local plugins. Separate cloud runs are not the chosen path. See [connection behavior](BRIDGE.md).
 
 SharedBoard uses your existing AI account/conversation through the relay. The AI provider controls model execution and task settings; tasks are not guaranteed to use the model manually selected in a chat. SharedBoard does not host a replacement model or include an AI subscription. Shared context passes through Cloudflare to the connected AI service. Saved requests keep their original captures, and delivery, reading, and actual replies remain distinct states.
 
