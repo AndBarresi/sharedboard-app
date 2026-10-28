@@ -22,6 +22,7 @@ import {WorkspacePicker} from './WorkspacePicker.jsx';
 import {ObjectNavigator} from './ObjectNavigator.jsx';
 import {Modal} from './Modal.jsx';
 import {miniChatState,channelTestAvailable} from '../shared/client-profiles.mjs';
+import {nativeChatAwaitingReply,channelTestPendingState,CHAT_REPLY_PENDING_MESSAGE} from './chat-format.mjs';
 import {CREATOR_NAME,CREATOR_URL} from '../shared/brand.mjs';
 import './workspace-upgrade.css';
 import './browser-mode-ui.css';
@@ -60,6 +61,7 @@ function App() {
   const canOpenChat=miniChat.enabled||miniChat.sessionActive===true;
   const miniReview=miniChatState({...view.connection,automaticMessages:view.connection?.automaticReviews,messageExpiresAt:view.connection?.reviewExpiresAt??view.connection?.eventExpiresAt});
   const [connectionOpen,setConnectionOpen]=useState(false);
+  const connectionTestInFlight=useRef(false);
   const [changelogOpen,setChangelogOpen]=useState(false);
   const [storageDetailsOpen,setStorageDetailsOpen]=useState(false);
   const [planner,setPlanner]=useState(null),[plannerAction,setPlannerAction]=useState(null),[referenceOpen,setReferenceOpen]=useState(false),[selectionOpen,setSelectionOpen]=useState(false);
@@ -152,13 +154,18 @@ function App() {
     finally { setRequestingReview(false); }
   };
   const testConnection=async()=>{
+    if(connectionTestInFlight.current)return;
+    if(nativeChatAwaitingReply(view.messages,view.connection)){setChatVisibility(true,{saved:true});throw new Error(channelTestPendingState(view.messages,view.connection)?.description??CHAT_REPLY_PENDING_MESSAGE);}
     const channelTest=browserOnly&&channelTestAvailable(view.connection);
     if(browserOnly&&!miniChat.automatic&&!channelTest)throw new Error(miniChat.reason||'Automatic delivery is unavailable for this connection.');
-    const id=crypto.randomUUID();
-    const result=await sync.current.sendChat({id,intent:'discuss',...(channelTest?{channelTest:true}:{}),text:'Connection check only. Read this attached capture and the live board, confirm the live revision, and post your actual answer here. Use one or two plain-language sentences to say whether you can read the board and whether it changed since capture. Keep internal IDs and technical tool names out of your answer. Do not change the drawing or write code.'});
-    setChatVisibility(true,{saved:true});
-    const message=result.messages.find(item=>item.id===id);
-    if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'The test is saved, but direct delivery was not confirmed. Check the linked chat before retrying.');
+    connectionTestInFlight.current=true;
+    try{
+      const id=crypto.randomUUID();
+      const result=await sync.current.sendChat({id,intent:'discuss',...(channelTest?{channelTest:true}:{}),text:'Connection check only. Read this attached capture and the live board, confirm the live revision, and post your actual answer here. Use one or two plain-language sentences to say whether you can read the board and whether it changed since capture. Keep internal IDs and technical tool names out of your answer. Do not change the drawing or write code.'});
+      setChatVisibility(true,{saved:true});
+      const message=result.messages.find(item=>item.id===id);
+      if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'The test is saved, but direct delivery was not confirmed. Check the linked chat before retrying.');
+    }finally{connectionTestInFlight.current=false;}
   };
   const latestReview = view.reviews[0];
   const reviewAcceptedByLiveSession = typeof latestReview?.receipt==='string' && /^live_[a-f0-9]{64}$/i.test(latestReview.receipt);
@@ -214,7 +221,7 @@ function App() {
       {projectImportOpen&&<ProjectTransfer getSync={()=>sync.current} onClose={()=>setProjectImportOpen(false)}/>}
       {workspaceOpen&&view.workspace&&<WorkspacePicker browserOnly={browserOnly} workspace={view.workspace} onClose={()=>setWorkspaceOpen(false)} run={input=>sync.current.workspaceAction(input)} openBoard={id=>sync.current.openBoard(id)} previewDelete={browserOnly?input=>sync.current.previewWorkspaceDelete(input):undefined} onDeleted={result=>sync.current.openAfterDeletion(result)}/>}
       {storageDetailsOpen&&<BrowserStorageDetails onClose={()=>setStorageDetailsOpen(false)} onExport={exportProject}/>}
-      {connectionOpen&&<ConnectionSetup onStopLive={()=>sync.current.stopLiveSession(view.connection?.liveSession?.id)} detectBridge={()=>sync.current.detectBridge()} browserOnly={browserOnly} connection={view.connection} online={view.online} begin={input=>sync.current.beginPairing(input)} cancel={()=>sync.current.cancelPairing()} disconnect={()=>sync.current.disconnect()} onClose={()=>setConnectionOpen(false)} onTest={testConnection} hasSavedRequests={Boolean(view.messages?.length)} onHistory={()=>{setChatVisibility(true,{saved:true});setConnectionOpen(false);}}/>}
+      {connectionOpen&&<ConnectionSetup onStopLive={()=>sync.current.stopLiveSession(view.connection?.liveSession?.id)} detectBridge={()=>sync.current.detectBridge()} browserOnly={browserOnly} connection={view.connection} messages={view.messages} online={view.online} begin={input=>sync.current.beginPairing(input)} cancel={()=>sync.current.cancelPairing()} disconnect={()=>sync.current.disconnect()} onClose={()=>setConnectionOpen(false)} onTest={testConnection} hasSavedRequests={Boolean(view.messages?.length)} onHistory={()=>{setChatVisibility(true,{saved:true});setConnectionOpen(false);}}/>}
       {initial&&<CloudAuthorization controller={sync.current} view={view} setupOpen={connectionOpen||workspaceOpen} onConnect={()=>setConnectionOpen(true)} onChooseBoard={()=>setWorkspaceOpen(true)}/>}
     </div>
   );

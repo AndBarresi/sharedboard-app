@@ -114,6 +114,26 @@ test('Codex plugin setup requires actual reply proof and uses its own supported 
  const expired=render(CodexChannelSteps,{setup,expires:0,copied:'',copy:()=>{}});assert.match(expired,/<button type="button" class="connect-primary" disabled="">Copy one-use connect prompt<\/button>/);
 });
 
+test('a saved bootstrap test replaces setup prompts and blocks a new test only for its current board and process',()=>{
+ for(const [provider,deliveryMode] of [['codex','codex-channel'],['claude-code','claude-channel']]){
+  const connection={id:'current-connection',boardId:board.id,provider,permission:'read',connected:true,browserOnline:true,deliveryMode,channelConnected:true,channelSessionId:'current-process',channelExpiresAt:Date.now()+60000,channelVerified:false,automaticMessages:false,automaticReviews:false};
+  const base={id:'original-test',boardId:board.id,connectionId:connection.id,channelSessionId:connection.channelSessionId,deliveryMode,channelTest:true,text:'Original saved test',intent:'discuss',boardRevision:3,status:'waiting'};
+  for(const [changes,title] of [[{delivery:'pending'},'Test saved · delivery pending'],[{delivery:'queued',receipt:'ch_chat_original-test'},'Test queued · waiting for reply'],[{delivery:'queued',receipt:'ch_chat_original-test',status:'reading'},'Test read · waiting for reply'],[{delivery:'uncertain'},'Test delivery unconfirmed'],[{delivery:'failed'},'Saved test · retry needed']]){
+   const message={...base,...changes},props={connection,messages:[message],online:true,onClose:()=>{},onHistory:()=>{},hasSavedRequests:true};
+   const setup=render(CloudConnectionSetup,props),chat=render(BoardChat,{open:true,setOpen:()=>{},onConnect:()=>{},retry:()=>{},view:{...view(connection),messages:[message]}});
+   assert.ok(setup.includes(title));assert.ok(chat.includes(title));assert.match(setup,/<button type="button" class="connect-primary" disabled="">(?:Sending saved test…|Waiting for test reply…|Check saved test|Use saved test retry)<\/button>/);
+   assert.doesNotMatch(setup,/is connected\. Choose Test automatic reply once/);assert.doesNotMatch(chat,/is connected\. Choose Test automatic reply once|<form/);assert.match(chat,/Original saved test/);
+   if(changes.delivery==='uncertain')assert.match(chat,/I checked my chat · retry/);else if(changes.delivery==='failed')assert.match(chat,/Retry delivery/);else assert.doesNotMatch(chat,/I checked my chat · retry|Retry delivery/);
+  }
+  for(const changes of [{connectionId:'earlier-connection'},{boardId:'different-board'},{boardId:undefined},{channelSessionId:'earlier-process'},{deliveryMode:deliveryMode==='codex-channel'?'claude-channel':'codex-channel'},{reply:'Actual completed test answer',status:'answered'}]){
+   const messages=[{...base,delivery:'queued',receipt:'ch_chat_original-test',...changes}],setup=render(CloudConnectionSetup,{connection,messages,online:true,onClose:()=>{}});
+   assert.match(setup,/<button type="button" class="connect-primary">Test automatic reply<\/button>/);assert.match(setup,/test reply needed/);assert.doesNotMatch(setup,/Test queued · waiting for reply/);
+  }
+  const verified={...connection,channelVerified:true,automaticMessages:true,automaticReviews:true},answered={...base,delivery:'queued',reply:'Actual completed test answer',status:'answered'};
+  const ready=render(CloudConnectionSetup,{connection:verified,messages:[answered],online:true,onClose:()=>{}});assert.match(ready,/automatic reply verified/);assert.doesNotMatch(ready,/Waiting for test reply…/);
+ }
+});
+
 test('ChatGPT account and browser mismatch help remains conditional and preserves stored work',()=>{
  const id='22222222-2222-4222-8222-222222222222',html=render(CloudConnectionSetup,{online:true,onClose:()=>{},connection:{id,boardId:board.id,provider:'chatgpt',connected:true,deliveryMode:'manual'}});assert.match(html,/If setup reports an existing connection or the wrong board/);assert.match(html,/connector account may still authorize the earlier board/);assert.match(html,/reconnect or re-authorize the SharedBoard connector account/);assert.match(html,/Chrome and the in-app browser have separate board storage/);assert.match(html,/Disconnecting a link keeps the board and saved history/);assert.match(html,/clearing site data or creating a new chat is not a repair step/);
  assert.match(html,/even if the old board tab is unavailable/);assert.match(html,/Copy AI disconnect instructions/);assert.match(html,/Native tasks are not deleted/);assert.match(html,/normal provider reauthorization and fresh pairing are still required/);

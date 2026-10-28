@@ -71,9 +71,18 @@ export function nativeChatAwaitingReply(messages,connection,exceptId){
   return (messages??[]).find(message=>{
     if(!message||message.id===exceptId||message.connectionId!==connection.id||connection.boardId&&message.boardId&&message.boardId!==connection.boardId||typeof message.reply==='string'&&message.reply.trim())return false;
     const pending=['pending','uncertain'].includes(message.delivery),eventReceipt=typeof message.id==='string'&&message.receipt===`evt_chat_${message.id}`,channelReceipt=typeof message.id==='string'&&message.receipt===`ch_chat_${message.id}`;
-    const sameChannel=typeof message.channelSessionId==='string'&&Boolean(message.channelSessionId)&&message.channelSessionId===connection.channelSessionId;
-    return eventReceipt||message.deliveryMode==='events'&&pending||sameChannel&&(channelReceipt||(isLocalChannelMode(message.deliveryMode)&&pending));
+    const sameChannel=typeof message.channelSessionId==='string'&&Boolean(message.channelSessionId)&&message.channelSessionId===connection.channelSessionId&&(!connection.boardId||message.boardId===connection.boardId)&&(!connection.deliveryMode||message.deliveryMode===connection.deliveryMode);
+    return eventReceipt||message.deliveryMode==='events'&&pending||sameChannel&&(channelReceipt||(isLocalChannelMode(message.deliveryMode)&&(pending||message.channelTest===true&&(message.delivery!=='failed'||connection.channelVerified!==true))));
   })??null;
+}
+export function channelTestPendingState(messages,connection){
+  if(!isLocalChannelMode(connection?.deliveryMode))return null;
+  const message=nativeChatAwaitingReply((messages??[]).filter(item=>item?.channelTest===true&&item.deliveryMode===connection.deliveryMode),connection);
+  if(!message)return null;
+  if(message.delivery==='pending')return {id:message.id,title:'Test saved · delivery pending',button:'Sending saved test…',description:'Your original test is saved and waiting for delivery to be confirmed. Keep the paired AI session and this board open. Another new test is not needed.'};
+  if(message.delivery==='failed')return {id:message.id,title:'Saved test · retry needed',button:'Use saved test retry',description:'The saved test could not be delivered. Open Saved requests & replies and use Retry delivery on that same test. Its original drawing context and request are kept.'};
+  if(message.delivery==='uncertain')return {id:message.id,title:'Test delivery unconfirmed',button:'Check saved test',description:'Check your linked AI conversation before retrying. In Saved requests & replies, use I checked my chat · retry on the same saved test. Do not create another test while its result is uncertain.'};
+  return {id:message.id,title:message.status==='reading'?'Test read · waiting for reply':'Test queued · waiting for reply',button:'Waiting for test reply…',description:'Your saved test is waiting for an actual reply. Keep the paired AI session and this board open; the AI can handle it when its current work finishes. Reading the test alone does not verify a reply.'};
 }
 export function shouldResetChatCapture(error){
   // An ambiguous delivery may already be running. Preserve its original ID and
