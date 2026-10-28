@@ -1,5 +1,13 @@
 # SharedBoard.app changelog
 
+## 0.13.3 — Shared branding and clearer plugin setup
+
+### Fixed
+
+- Use the SharedBoard logo for the website favicon and packaged Codex plugin artwork.
+- Replace the Other tools dots with a wrench in the existing toolbar style.
+- Clarify the same Codex install commands for macOS, Windows, and Linux.
+
 ## 0.13.2 — Complete design fidelity and production embed support
 
 ### Fixed
