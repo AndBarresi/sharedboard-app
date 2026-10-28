@@ -1,6 +1,16 @@
 {
-  "version": "0.12.4",
+  "version": "0.12.5",
   "entries": [
+    {
+      "version": "0.12.5",
+      "title": "Make connection test progress clear",
+      "added": [],
+      "fixed": [
+        "Show saved connection-test progress and guide failed or uncertain tests to their original saved request.",
+        "Prevent duplicate connection tests from rapid clicks or concurrent browser tabs while preserving explicit retries.",
+        "Keep verified sessions usable when an earlier connection test failed without a delivery receipt."
+      ]
+    },
     {
       "version": "0.12.4",
       "title": "Check local plugins across platforms",
@@ -427,5 +437,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "c185b825008b0895fc428b71c78c163e997a964574344c913a5178bd16250cef"
+  "sourceHash": "731a7c80f20255c291123162b29755dcfc80e02b1a5c78488cdeb75daf5ba0a0"
 }

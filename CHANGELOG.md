@@ -1,5 +1,13 @@
 # SharedBoard.app changelog
 
+## 0.12.5 — Make connection test progress clear
+
+### Fixed
+
+- Show saved connection-test progress and guide failed or uncertain tests to their original saved request.
+- Prevent duplicate connection tests from rapid clicks or concurrent browser tabs while preserving explicit retries.
+- Keep verified sessions usable when an earlier connection test failed without a delivery receipt.
+
 ## 0.12.4 — Check local plugins across platforms
 
 ### Added
