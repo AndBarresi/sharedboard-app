@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {IDBFactory} from 'fake-indexeddb';
 import {createBrowserTransport} from '../src/browser-store.mjs';
 import {createBrowserBridge,validateBridgeDeadline} from '../src/browser-relay.mjs';
+import {codexChannelSetup,claudeChannelSetup} from '../shared/connection-instructions.mjs';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Z5kAAAAASUVORK5CYII=';
 const call=(t,path,input,method=input===undefined?'GET':'POST')=>t.request(path,{method,...(input===undefined?{}:{body:JSON.stringify(input)})});
@@ -322,6 +323,31 @@ test('temporary network loss preserves native captured IDs, offline browser edit
   const read=await bridge.command('read_chat_message',{id:input.id});assert.equal(read.result.board.revision,input.expectedRevision);assert.equal(read.result.board.elements.some(element=>element.id==='saved-offline'),false);assert.equal(read.result.board.visual.dataURL,png);
   await bridge.command('reply_to_chat_message',{id:input.id,text:'The actual saved capture survived the outage.'});assert.equal((await call(t,'/api/chat')).messages[0].reply,'The actual saved capture survived the outage.');assert.deepEqual(await call(t,'/api/board'),offlineBoard);
  }finally{t.close();}
+});
+
+test('website pairing preserves the selected plugin mode through browser storage to the relay',async()=>{
+ for(const input of [
+  {provider:'codex',permission:'edit',mode:'codex-channel'},
+  {provider:'claude-code',permission:'read',mode:'claude-channel'},
+  {provider:'codex',permission:'read',mode:'remote-mcp'},
+  {provider:'chatgpt',permission:'edit'},
+ ]){
+  const requests=[],sessionId=crypto.randomUUID(),connectionCode=`${sessionId}.${'a'.repeat(64)}`;
+  const transport=await createBrowserTransport({indexedDB:new IDBFactory(),dbName:crypto.randomUUID(),origin:'https://sharedboard.app',BroadcastChannel:null,bridgeWebSocket:null,bridgeFetch:async(url,options)=>{
+   const path=new URL(url).pathname,body=JSON.parse(options.body??'{}');requests.push({path,body});assert.equal(path,'/browser/pair');
+   const setup=body.mode==='codex-channel'?codexChannelSetup({connectionCode}):body.mode==='claude-channel'?claudeChannelSetup({connectionCode}):{kind:'remote-mcp',url:'https://connect.sharedboard.app/mcp',prompt:'Remote connector instructions'};
+   return Response.json({browserToken:'isolated-browser-grant',sessionId,connection:{id:sessionId,boardId:body.boardId,provider:body.provider,permission:body.permission,deliveryMode:body.mode??'remote-mcp',connected:false,automaticMessages:false,channelVerified:false},pairing:{code:connectionCode,expiresAt:new Date(Date.now()+60000).toISOString()},setup});
+  }});
+  try{
+   const board=await call(transport,'/api/board'),planning=await call(transport,'/api/planning');
+   const prepared=await call(transport,'/api/connection/pairing',input);
+   assert.equal(requests.length,1);assert.deepEqual(requests[0].body,{boardId:board.id,title:planning.project.title,provider:input.provider,permission:input.permission,...(input.mode===undefined?{}:{mode:input.mode}),clientId:requests[0].body.clientId});
+   assert.ok(requests[0].body.clientId);assert.equal(prepared.setup.kind,input.mode??'remote-mcp');
+   if(input.mode==='codex-channel'){assert.equal(prepared.setup.installCommand,'codex plugin add sharedboard@sharedboard');assert.match(prepared.setup.connectPrompt,/actual CODEX_THREAD_ID/);assert.equal(prepared.setup.url,undefined);}
+   if(input.mode==='claude-channel'){assert.match(prepared.setup.connectCommand,/^\/sharedboard:connect /);assert.match(prepared.setup.startCommand,/--dangerously-load-development-channels/);}
+   const connection=await call(transport,'/api/connection');assert.equal(connection.deliveryMode,input.mode??'remote-mcp');assert.equal(connection.automaticMessages,false,'preparing plugin instructions must not enable unverified delivery');assert.equal(connection.channelVerified,false);
+  }finally{transport.close();}
+ }
 });
 
 test('Claude Code pairing uses the shared provider registry and invalid choices cannot replace a grant',async()=>{

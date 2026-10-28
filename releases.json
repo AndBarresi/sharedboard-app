@@ -1,6 +1,15 @@
 {
-  "version": "0.12.2",
+  "version": "0.12.3",
   "entries": [
+    {
+      "version": "0.12.3",
+      "title": "Use the selected local plugin setup",
+      "added": [],
+      "fixed": [
+        "Preserve the chosen Codex or Claude Code connection mode through browser setup instead of showing remote connector instructions.",
+        "Keep the visible connection-test reply brief and readable without internal IDs or tool names."
+      ]
+    },
     {
       "version": "0.12.2",
       "title": "Close plugin delivery cleanly",
@@ -408,5 +417,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "b4c7c2b03c6b77a63e51d9180f6d82dd0682a5651b2d4de81f3478250edbb01e"
+  "sourceHash": "de432b0440c6eacccef33e815a00754e1b178546f2c17c1282e5724d5dfebe37"
 }

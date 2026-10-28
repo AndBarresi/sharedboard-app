@@ -95,7 +95,7 @@ export function createBrowserBridge({boardId,clientId,load,save,execute,fetch:fe
     try{await http('/browser/disconnect',{token:previous.browserToken,body:{clientId}});}
     catch(error){if(![401,403].includes(error.status)||error.deliveryUnknown)throw error; /* An expired or revoked grant is already disconnected. */}
     await save(null,{expectedToken:previous.browserToken});
-   }disconnectSocket();const paired=await http('/browser/pair',{body:{boardId,title,provider:input.provider,permission:input.permission,clientId}});
+   }disconnectSocket();const paired=await http('/browser/pair',{body:{boardId,title,provider:input.provider,permission:input.permission,...(input.mode===undefined?{}:{mode:input.mode}),clientId}});
    if(typeof paired.browserToken!=='string'||!paired.sessionId||paired.connection?.boardId!==boardId)throw failure('The relay did not return a board-scoped connection.');
    await save({browserToken:paired.browserToken,sessionId:paired.sessionId,connection:paired.connection});void start();return {pairing:paired.pairing,setup:paired.setup};
   },
