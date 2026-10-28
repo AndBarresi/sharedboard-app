@@ -1,6 +1,15 @@
 {
-  "version": "0.13.5",
+  "version": "0.13.6",
   "entries": [
+    {
+      "version": "0.13.6",
+      "title": "Preserve Imagine undo for zero-stroke surfaces",
+      "added": [],
+      "fixed": [
+        "Recognize the pinned editor's initial zero-to-default stroke normalization without treating it as a later human edit.",
+        "Cover the full recorded no-brief Imagine render and preserve protection for subsequent human style edits."
+      ]
+    },
     {
       "version": "0.13.5",
       "title": "Imagine without a written brief and dependable undo",
@@ -497,5 +506,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "3cadb3e005a20b39ab38881e62ee69115b40b13fee33d6b57b74f9c53eae798d"
+  "sourceHash": "b34d7855dd5296c69e0e3792503cb64548521b9afcfcfee002f60bcd4041c7cd"
 }

@@ -10,6 +10,10 @@ export function isRenderNormalization(before,after,scene=[]){
   if(!sameEdit&&!firstIndex)return false;
   const allowed=new Set(before.type==='text'?['x','y','width','height','baseline','index']:['index']);
   if(firstIndex)for(const key of ['version','versionNonce','updated'])allowed.add(key);
+  // Pinned Excalidraw 0.18.1 restores a zero stroke width to its default (2)
+  // via `element.strokeWidth || DEFAULT_ELEMENT_PROPS.strokeWidth`. Limit this
+  // exception to that same first index/version initialization, never later edits.
+  if(firstIndex&&before.strokeWidth===0&&after.strokeWidth===2)allowed.add('strokeWidth');
   if(before.type==='text'&&typeof before.originalText==='string'&&before.originalText===after.originalText)allowed.add('text');
   const oldBindings=before.boundElements??[],newBindings=after.boundElements??[];
   if(Array.isArray(oldBindings)&&Array.isArray(newBindings)){
