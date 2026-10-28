@@ -14,6 +14,8 @@ import {createBoardMcp} from '../server/tools.mjs';
 import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
 import liveMeasurement from './fixtures/imagine-editor-normalization.json' with {type:'json'};
+import fullLiveNormalization from './fixtures/imagine-editor-normalization-full.json' with {type:'json'};
+import {imagineSelection} from '../shared/imagine.mjs';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Z5kAAAAASUVORK5CYII=';
 const call=(t,path,input,method=input===undefined?'GET':'POST')=>t.request(path,{method,...(input===undefined?{}:{body:JSON.stringify(input)})});
@@ -303,6 +305,54 @@ test('a real human edit after measured Imagine still blocks its entire undo and 
   const before=await call(f.t,'/api/board'),planning=await call(f.t,'/api/planning');
   await assert.rejects(call(f.t,'/api/undo-agent',{id:action.id}),error=>error.status===409&&error.message.includes('edited afterward'));
   assert.deepEqual(await call(f.t,'/api/board'),before);assert.deepEqual(await call(f.t,'/api/planning'),planning);
+ }finally{f.t.close();}
+});
+
+async function fullRecordedImagineFixture(){
+ const f=await fixture();
+ try{
+ // Replay complete sanitized live scene records, not a hand-picked subset of
+ // measurement properties. Only per-run randomness/provenance is substituted.
+ await call(f.t,'/api/board',{changes:fullLiveNormalization.before.map(element=>({id:element.id,expectedVersion:0,element}))},'PATCH');
+ const originalIds=new Set(fullLiveNormalization.before.map(element=>element.id)),frameId=fullLiveNormalization.after.find(element=>!originalIds.has(element.id)).frameId;
+ const selectedIds=new Set(imagineSelection(fullLiveNormalization.before,[frameId]).map(element=>element.id));
+ const input=await capture(f.t,{selectedIds:[frameId],scope:'selection',text:'Imagine this wireframe using only the existing reference page. Both optional fields are blank.',intent:'work',imagine:{instructions:'',designDirection:''},imagineReferences:{elementIds:fullLiveNormalization.before.filter(element=>!element.isDeleted&&!selectedIds.has(element.id)).map(element=>element.id),visual:png}});
+ await call(f.t,'/api/chat',input);await f.bridge.command('read_chat_message',{id:input.id});
+ const response=await f.bridge.command('replace_selection',{messageId:input.id,elements:fullLiveNormalization.specs,designSummary:'Recorded synthetic contact page with cream surfaces, forest text and buttons, sage card and editable form.'});assert.equal(response.error,undefined);
+ const board=await call(f.t,'/api/board'),recorded=new Map(fullLiveNormalization.after.map(element=>[element.id,element])),created=new Set(response.result.createdIds);
+ assert.equal(created.size,26);assert.equal(board.elements.length,fullLiveNormalization.after.length);
+ const normalized=board.elements.map(element=>{
+  const rendered=structuredClone(recorded.get(element.id));assert.ok(rendered,`full recorded output contains ${element.id}`);
+  rendered.seed=element.seed;rendered.customData=element.customData;
+  rendered.versionNonce=created.has(element.id)?rendered.versionNonce:element.versionNonce;
+  rendered.updated=created.has(element.id)?Math.max(element.updated+1,rendered.updated):element.updated;
+  return rendered;
+ });
+ const zeroStroke=board.elements.filter(element=>created.has(element.id)&&element.strokeWidth===0).map(element=>element.id);assert.equal(zeroStroke.length,4,'the original live failure contained four zero-width rectangles');
+ await call(f.t,'/api/board',{changes:normalized.map(element=>({id:element.id,expectedVersion:board.elementVersions[element.id],element}))},'PATCH');
+ return {...f,input,applied:response.result,zeroStroke};
+ }catch(error){f.t.close();throw error;}
+}
+
+test('the complete recorded 26-object blank Imagine output remains undoable after all actual editor defaults and binding repairs',async()=>{
+ const f=await fullRecordedImagineFixture();try{
+  const board=await call(f.t,'/api/board'),plan=await call(f.t,'/api/planning'),action=plan.agentActions[0];
+  for(const id of f.zeroStroke)assert.equal(board.elements.find(element=>element.id===id).strokeWidth,2);
+  for(const reference of action.after)assert.equal(reference.expectedVersion,board.elementVersions[reference.id],`full-field normalization preserved undo for ${reference.id}`);
+  assert.deepEqual(await call(f.t,'/api/undo-agent',{id:action.id}),{ok:true});
+  const restored=await call(f.t,'/api/board');
+  for(const original of fullLiveNormalization.before)assert.equal(restored.elements.find(element=>element.id===original.id).isDeleted,original.isDeleted,`original visibility restored for ${original.id}`);
+  assert.ok(restored.elements.filter(element=>f.applied.createdIds.includes(element.id)).every(element=>element.isDeleted));
+  assert.equal((await call(f.t,'/api/planning')).project.notes.some(note=>note.title==='Imagine design memory'),false);assert.ok((await call(f.t,'/api/chat')).messages[0].imagine.result.undoneAt);
+ }finally{f.t.close();}
+});
+
+test('a human stroke edit to the full recorded Imagine output still rejects undo without changing any objects',async()=>{
+ const f=await fullRecordedImagineFixture();try{
+  let board=await call(f.t,'/api/board');const surface=board.elements.find(element=>element.id===f.zeroStroke[0]),action=(await call(f.t,'/api/planning')).agentActions[0];
+  await call(f.t,'/api/board',{changes:[{id:surface.id,expectedVersion:board.elementVersions[surface.id],element:{...surface,strokeWidth:1,version:surface.version+1,versionNonce:surface.versionNonce+1,updated:surface.updated+1}}]},'PATCH');
+  board=await call(f.t,'/api/board');const plan=await call(f.t,'/api/planning');
+  await assert.rejects(call(f.t,'/api/undo-agent',{id:action.id}),error=>error.status===409&&error.message.includes('edited afterward'));assert.deepEqual(await call(f.t,'/api/board'),board);assert.deepEqual(await call(f.t,'/api/planning'),plan);
  }finally{f.t.close();}
 });
 
