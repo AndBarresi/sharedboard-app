@@ -1,6 +1,6 @@
 {
   "name": "sharedboard-codex",
-  "version": "0.13.4",
+  "version": "0.13.5",
   "private": true,
   "type": "module",
   "description": "SharedBoard.app local plugin for an existing Codex conversation",

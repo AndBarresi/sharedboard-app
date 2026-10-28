@@ -13,6 +13,7 @@ import {createMcpHandler} from '@modelcontextprotocol/server';
 import {createBoardMcp} from '../server/tools.mjs';
 import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
+import liveMeasurement from './fixtures/imagine-editor-normalization.json' with {type:'json'};
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Z5kAAAAASUVORK5CYII=';
 const call=(t,path,input,method=input===undefined?'GET':'POST')=>t.request(path,{method,...(input===undefined?{}:{body:JSON.stringify(input)})});
@@ -260,6 +261,49 @@ test('human edits after an AI action block its whole undo and preserve all newer
   await call(t,'/api/board',{changes:[{id:card.id,expectedVersion:board.elementVersions[card.id],element:edited}]},'PATCH');const before=await call(t,'/api/board'),planBefore=await call(t,'/api/planning');
   await assert.rejects(call(t,'/api/undo-agent',{id:action.id}),error=>error.status===409&&error.message.includes('edited afterward'));assert.deepEqual(await call(t,'/api/board'),before);assert.deepEqual(await call(t,'/api/planning'),planBefore);assert.equal(before.elements.find(e=>e.id===card.id).x,800);assert.equal(before.elements.filter(e=>!e.isDeleted).length,2);
  }finally{t.close();}
+});
+
+async function measuredImagineFixture(){
+ const f=await imagineFixture();
+ let board=await call(f.t,'/api/board');
+ // The original wireframe already went through the editor before capture.
+ await call(f.t,'/api/board',{changes:board.elements.map((element,index)=>({id:element.id,expectedVersion:board.elementVersions[element.id],element:{...element,index:`a${index}`,boundElements:element.boundElements??[],version:element.version+1,versionNonce:element.versionNonce+1,updated:element.updated+1}}))},'PATCH');
+ const input=await capture(f.t,{...f.input,expectedRevision:(await call(f.t,'/api/board')).revision});
+ await call(f.t,'/api/chat',input);await f.bridge.command('read_chat_message',{id:input.id});
+ const output={...f.output,elements:liveMeasurement.specs};
+ const applied=await f.bridge.command('replace_selection',output);assert.equal(applied.error,undefined);
+ board=await call(f.t,'/api/board');const measured=new Map(liveMeasurement.normalized.map(element=>[element.id,element]));
+ const normalized=board.elements.map(element=>{
+  const dimensions=measured.get(element.id);
+  if(dimensions)return {...element,...dimensions,version:element.version+1,versionNonce:element.versionNonce+1,updated:element.updated+1};
+  if(element.isDeleted&&element.boundElements?.length)return {...element,boundElements:element.boundElements.filter(binding=>!board.elements.find(other=>other.id===binding.id)?.isDeleted)};
+  return element;
+ });
+ await call(f.t,'/api/board',{changes:normalized.map(element=>({id:element.id,expectedVersion:board.elementVersions[element.id],element}))},'PATCH');
+ return {...f,input,output,applied:applied.result};
+}
+
+test('Undo Imagine survives actual editor measurement, first ordering-key version bumps and deleted-label binding cleanup',async()=>{
+ const f=await measuredImagineFixture();try{
+  const board=await call(f.t,'/api/board'),plan=await call(f.t,'/api/planning'),action=plan.agentActions[0];
+  assert.equal(f.applied.createdIds.length,25,'the regression includes the 25 actual live-generated editable objects');
+  assert.ok(board.revision>f.applied.revision,'the renderer saved its derived normalization separately');
+  for(const reference of action.after)assert.equal(reference.expectedVersion,board.elementVersions[reference.id],`undo version rebased for ${reference.id}`);
+  assert.ok(board.elements.filter(e=>e.isDeleted&&e.type==='rectangle').every(e=>!e.boundElements.length),'deleted containers no longer point at deleted labels');
+  assert.deepEqual(await call(f.t,'/api/undo-agent',{id:action.id}),{ok:true});
+  const restored=await call(f.t,'/api/board');assert.equal(restored.elements.find(e=>e.id==='contact_form').isDeleted,false);assert.ok(restored.elements.filter(e=>f.applied.createdIds.includes(e.id)).every(e=>e.isDeleted));assert.equal(restored.elements.find(e=>e.id==='finished_nav').backgroundColor,'#e5eadc');
+  assert.equal((await call(f.t,'/api/planning')).project.notes.some(note=>note.title==='Imagine design memory'),false);assert.ok((await call(f.t,'/api/chat')).messages[0].imagine.result.undoneAt);
+ }finally{f.t.close();}
+});
+
+test('a real human edit after measured Imagine still blocks its entire undo and preserves the edited layout and memory',async()=>{
+ const f=await measuredImagineFixture();try{
+  const board=await call(f.t,'/api/board'),element=board.elements.find(e=>e.id==='imagine_live_contact_heading'),action=(await call(f.t,'/api/planning')).agentActions[0];
+  await call(f.t,'/api/board',{changes:[{id:element.id,expectedVersion:board.elementVersions[element.id],element:{...element,x:element.x+100,version:element.version+1,versionNonce:element.versionNonce+1,updated:element.updated+1}}]},'PATCH');
+  const before=await call(f.t,'/api/board'),planning=await call(f.t,'/api/planning');
+  await assert.rejects(call(f.t,'/api/undo-agent',{id:action.id}),error=>error.status===409&&error.message.includes('edited afterward'));
+  assert.deepEqual(await call(f.t,'/api/board'),before);assert.deepEqual(await call(f.t,'/api/planning'),planning);
+ }finally{f.t.close();}
 });
 
 test('mini chat persists before delivery, pins immutable PNG and notes, and returns only actual agent replies',async()=>{
