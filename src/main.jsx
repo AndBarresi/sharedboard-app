@@ -201,7 +201,7 @@ function App() {
   return (
     <div className={`workspace ${focused?'is-focused':''} ${browserOnly?'browser-mode':''}`} ref={workspace}>
       <aside className="rail">
-        <div className="brand" aria-label="SharedBoard.app"><span className="brand-mark" aria-hidden="true">↗</span><span>Shared<span className="brand-light">Board.app</span><span className="prototype">VERSION {APP_VERSION} · {browserOnly?'BROWSER BETA':'LOCAL BETA'}</span></span></div>
+        <div className="brand" aria-label="SharedBoard.app"><img className="brand-mark" src="/logo.svg" alt="" aria-hidden="true"/><span>Shared<span className="brand-light">Board.app</span><span className="prototype">VERSION {APP_VERSION} · {browserOnly?'BROWSER BETA':'LOCAL BETA'}</span></span></div>
         <div className="intro compact-intro"><p className="eyebrow">A SPACE TO THINK TOGETHER</p><h1>Make the idea clearer.</h1></div>
         <div className="project-label"><span className="small-dot" /> YOUR WORKSPACE</div>
         <button className="project-card project-switcher" aria-label="Open projects and boards" disabled={!initial} onClick={()=>setWorkspaceOpen(true)}><Icon name="grid" size={25}/><span><small>{view.workspace?.projects.find(p=>p.id===view.workspace.currentProjectId)?.name||'Your project'}</small><strong>{view.planning?.project.title||'Our shared project'}</strong><small>{count} objects · Revision {view.board.revision}</small></span><Icon name="chevron" size={15}/></button>

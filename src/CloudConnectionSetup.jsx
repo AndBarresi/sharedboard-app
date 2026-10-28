@@ -38,13 +38,13 @@ export function ClaudeChannelSteps({setup,expires,copied,copy}){
 export function CodexChannelSteps({setup,expires,copied,copy}){
  const install=`${setup.addMarketplaceCommand}\n${setup.installCommand}`;
  return <>
-  <div className="setup-section-heading"><span>02</span><h3>Install inside Codex</h3></div>
-  <p>Use Node.js 22 or newer and an installed Codex CLI with the queue command. Add the SharedBoard marketplace, then its plugin. There is no separate SharedBoard app or localhost service.</p>
+  <div className="setup-section-heading"><span>02</span><h3>Install with the Codex CLI</h3></div>
+  <p>Use Node.js 22 or newer and an installed Codex CLI with the queue command. Both must be available to Codex on PATH. Run these same commands in macOS Terminal, Windows PowerShell, or a Linux terminal to add the SharedBoard marketplace and plugin.</p>
   <textarea aria-label="Codex plugin install commands" readOnly rows={3} value={install}/><button type="button" className="connect-secondary" onClick={()=>void copy(install,'install')}>{copied==='install'?'Copied install commands':'Copy install commands'}</button>
   <div className="setup-section-heading"><span>03</span><h3>Enable the plugin in your existing conversation</h3></div>
   <p>Enable SharedBoard in the Codex conversation you want to keep using. If Codex requests a restart to load the plugin, return to that same conversation afterward. Codex does not use Claude’s preview Channels startup flag.</p>
   <div className="setup-section-heading"><span>04</span><h3>Pair this exact Codex conversation</h3></div>
-  <p>Send this one-use prompt in that conversation. It requires the actual native conversation ID from CODEX_THREAD_ID in that conversation’s environment; an inferred ID or chat name is not accepted. Then choose <strong>Test automatic reply</strong> here.</p>
+  <p>Send this one-use prompt in that conversation, not in the terminal. It requires the actual native conversation ID from CODEX_THREAD_ID in that conversation’s environment; an inferred ID or chat name is not accepted. Then choose <strong>Test automatic reply</strong> here.</p>
   <textarea aria-label="Codex one-use connect prompt" readOnly rows={7} value={setup.connectPrompt}/><button type="button" className="connect-primary" disabled={!expires} onClick={()=>void copy(setup.connectPrompt,'connect')}>{copied==='connect'?'Copied · connect in Codex':'Copy one-use connect prompt'}</button>
   <p className="cloud-limit">Keep Codex and this board open. A queue receipt only acknowledges routing; an actual captured-message read and reply must return before mini chat and board reviews become available. The plugin keeps its credential in its running process. Restarting that process requires a fresh code; saved board history stays here.</p>
  </>;

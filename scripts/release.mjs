@@ -8,7 +8,7 @@ const write=(name,value)=>writeFileSync(path.join(root,name),`${JSON.stringify(v
 function fingerprint(){
   const hash=createHash('sha256');
   const walk=directory=>{let items;try{items=readdirSync(path.join(root,directory),{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return;throw error;}for(const item of items.sort((a,b)=>a.name.localeCompare(b.name))){if(['.wrangler','node_modules'].includes(item.name))continue;const name=`${directory}/${item.name}`;if(item.isDirectory())walk(name);else{hash.update(name);hash.update(readFileSync(path.join(root,name)));}}};
-  for(const directory of ['src','server','shared','scripts','packaging','hosting','.github','.agents','bridge','cloudflare','plugins'])walk(directory);
+  for(const directory of ['src','server','shared','scripts','public','packaging','hosting','.github','.agents','bridge','cloudflare','plugins'])walk(directory);
   for(const name of ['index.html','vite.config.mjs','pnpm-lock.yaml','pnpm-workspace.yaml','.node-version','.gitattributes','LICENSE','AUTHORS.md']){try{hash.update(name);hash.update(readFileSync(path.join(root,name)));}catch(error){if(error.code!=='ENOENT')throw error;}}
   const pkg=read('package.json');hash.update(JSON.stringify({scripts:pkg.scripts,dependencies:pkg.dependencies,devDependencies:pkg.devDependencies}));return hash.digest('hex');
 }

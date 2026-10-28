@@ -95,6 +95,14 @@ test('the actual Codex stdio entry starts without invoking a native queue or net
 test('the portable Codex build bundles common tools and SDK into ESM with no runtime node_modules',async t=>{
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),"sharedboard-codex-bundle ' spaces-"));t.after(()=>fs.rm(directory,{recursive:true,force:true}));const target=path.join(directory,'plugin');await buildPlugin(target);
   const manifest=JSON.parse(await fs.readFile(path.join(target,'plugin.json'),'utf8')),mcp=JSON.parse(await fs.readFile(path.join(target,'mcp.json'),'utf8'));assert.equal(manifest.name,'sharedboard');assert.equal(manifest.extensions['com.openai'].requires_local_executor,true);assert.deepEqual(Object.keys(mcp.mcpServers),['sharedboard_local']);assert.equal(mcp.mcpServers.sharedboard_local.command,'node');assert.equal(mcp.mcpServers.sharedboard_local.args[0],'${PLUGIN_ROOT}/src/main.mjs');assert.equal(mcp.mcpServers.sharedboard_local.cwd,'${PLUGIN_ROOT}');
+  const listing=manifest.extensions['com.openai'].interface;
+  assert.equal(listing.logo,'./assets/logo.svg');assert.equal(listing.composerIcon,listing.logo);assert.equal(listing.brandColor,'#275c46');
+  const iconPath=path.resolve(target,listing.logo),relativeIcon=path.relative(target,iconPath);
+  assert.ok(relativeIcon&&!relativeIcon.startsWith('..')&&!path.isAbsolute(relativeIcon),'the advertised image must be inside the portable plugin');
+  const icon=await fs.readFile(iconPath),canonical=await fs.readFile(new URL('../public/logo.svg',import.meta.url));
+  assert.deepEqual(icon,canonical,'the plugin must distribute the same canonical logo as the website');assert.ok(icon.length<=5*1024*1024);
+  const svg=icon.toString('utf8');assert.match(svg,/<svg\b[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);assert.match(svg,/<\/svg>\s*$/);assert.doesNotMatch(svg,/<script\b|<foreignObject\b|(?:href|src)\s*=\s*["'](?:https?:|\/\/|data:)/i);
+  const viewBox=svg.match(/\bviewBox="([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"/);assert.ok(viewBox,'the packaged SVG must have a numeric viewBox');assert.equal(Number(viewBox[3]),Number(viewBox[4]));assert.ok(Number(viewBox[3])>=48,'the square plugin icon must be at least 48 by 48');
   assert.equal(JSON.parse(await fs.readFile(path.join(target,'package.json'),'utf8')).dependencies,undefined);assert.match(await fs.readFile(path.join(target,'skills','connect','SKILL.md'),'utf8'),/name: sharedboard-connect/);assert.match(await fs.readFile(path.join(target,'LICENSE'),'utf8'),/MIT/);
   const source=await fs.readFile(path.join(target,'src','main.mjs'),'utf8');assert.equal(source.includes("from '@modelcontextprotocol/sdk-v1"),false);assert.equal(source.includes("from '../../claude-code"),false);assert.match(source,/CODEX_QUEUE_UNCONFIRMED/);await assert.rejects(fs.stat(path.join(target,'node_modules')),error=>error.code==='ENOENT');await stdioSmoke(t,path.join(target,'src','main.mjs'),path.join(directory,'private-home'));
 });
