@@ -7,6 +7,9 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const encoder=new TextEncoder();
 const activationReasons=new Set(['subscription_received','callback_verified','callback_not_approved','invalid_callback','challenge_failed','timeout','callback_unavailable','redirect_blocked','conversation_already_connected','scope_mismatch','invalid_parameters','connection_changed','callback_failed','internal_error']);
 const activationKey=options=>`events.activation.v1:${options.principal}:${options.boardId}`;
+const scopeGenerationKey=options=>`${GENERATION}:${options.principal}:${options.boardId}`;
+const subscriptionGenerationKey=id=>`${GENERATION}:${id}`;
+const transaction=(options,operation)=>typeof options.storage.transaction==='function'?options.storage.transaction(operation):operation(options.storage);
 function activationOrigin(params,options){
   if(!params||typeof params!=='object'||Array.isArray(params)||!params.arguments||typeof params.arguments!=='object'||Array.isArray(params.arguments)||Object.keys(params.arguments).length!==1||params.arguments.boardId!==options.boardId)return undefined;
   try{const value=params.delivery?.url;if(typeof value!=='string'||value.length>2048)return undefined;const url=new URL(value);if(url.protocol==='https:'&&!url.username&&!url.password&&!url.port)return url.origin;}catch{}
@@ -82,10 +85,9 @@ function callbackUrl(value,options,{requireApproval=true}={}){
 }
 async function subscriptions(options){
   const stored=await options.storage.get(SUBSCRIPTIONS),entries=Array.isArray(stored)?stored:[];
-  const active=entries.filter(entry=>Number.isSafeInteger(entry.expiresAt)&&entry.expiresAt>options.now());
-  if(active.length!==entries.length)await options.storage.put(SUBSCRIPTIONS,active);
-  return active;
+  return entries.filter(entry=>Number.isSafeInteger(entry.expiresAt)&&entry.expiresAt>options.now());
 }
+const changeSubscriptions=(options,operation)=>transaction(options,async storage=>operation(await subscriptions({...options,storage}),storage));
 function matches(entry,options){return entry.principal===options.principal&&entry.boardId===options.boardId;}
 function eventInput(params,options,{unsubscribe=false}={}){
   if(!params||typeof params!=='object'||Array.isArray(params)||!eventCatalog.some(event=>event.name===params.name))throw failure('Choose a supported SharedBoard event.');
@@ -135,24 +137,31 @@ export async function handleEventRpc(method,params,configuration){
 async function eventRpc(method,params,options){
   if(method==='events/list')return {events:eventCatalog};
   if(!['events/subscribe','events/unsubscribe'].includes(method))throw failure('Unknown event method.',-32601);
-  const input=eventInput(params,options,{unsubscribe:method==='events/unsubscribe'}),entries=await subscriptions(options);
+  const input=eventInput(params,options,{unsubscribe:method==='events/unsubscribe'});
   const id=`sub_${(await digest(JSON.stringify([options.principal,options.boardId,input.name,input.url]))).slice(0,40)}`;
-  if(method==='events/unsubscribe'){await options.storage.put(GENERATION,(await options.storage.get(GENERATION)??0)+1);await options.storage.put(SUBSCRIPTIONS,entries.filter(entry=>entry.id!==id||!matches(entry,options)));return {};}
+  const generationKey=subscriptionGenerationKey(id);
+  if(method==='events/unsubscribe'){await changeSubscriptions(options,async(entries,storage)=>{await storage.put(generationKey,(await storage.get(generationKey)??0)+1);await storage.put(SUBSCRIPTIONS,entries.filter(entry=>entry.id!==id||!matches(entry,options)));});return {};}
   if(params.ttlMs!==undefined&&params.ttlMs!==null&&(!Number.isSafeInteger(params.ttlMs)||params.ttlMs<1))throw failure('The subscription lifetime must be a positive number of milliseconds.');
-  const lifetime=Math.max(MIN_TTL,Math.min(params.ttlMs??DEFAULT_TTL,MAX_TTL)),existing=entries.find(entry=>entry.id===id&&matches(entry,options));
-  if(entries.some(entry=>matches(entry,options)&&entry.name===input.name&&entry.id!==id))throw failure('This board already sends this event to another conversation. Stop that subscription or disconnect the board before choosing another conversation.',-32000,{reason:'conversation_already_connected'});
-  if(!existing&&entries.filter(entry=>matches(entry,options)).length>=4)throw failure('This connection already has four subscriptions. Stop an existing subscription first.',-32000);
+  const lifetime=Math.max(MIN_TTL,Math.min(params.ttlMs??DEFAULT_TTL,MAX_TTL));
+  const {existing,generation,scopeGeneration}=await changeSubscriptions(options,async(entries,storage)=>{
+    const existing=entries.find(entry=>entry.id===id&&matches(entry,options));
+    if(entries.some(entry=>matches(entry,options)&&entry.name===input.name&&entry.id!==id))throw failure('This board already sends this event to another conversation. Stop that subscription or disconnect the board before choosing another conversation.',-32000,{reason:'conversation_already_connected'});
+    if(!existing&&entries.filter(entry=>matches(entry,options)).length>=4)throw failure('This connection already has four subscriptions. Stop an existing subscription first.',-32000);
+    const generation=(await storage.get(generationKey)??0)+1,scopeGeneration=await storage.get(scopeGenerationKey(options))??0;
+    await storage.put(generationKey,generation);return {existing,generation,scopeGeneration};
+  });
   const now=options.now(),entry={id,principal:options.principal,boardId:options.boardId,name:input.name,url:input.url,secret:input.secret,expiresAt:now+lifetime,verifiedAt:now};
-  const generation=(await options.storage.get(GENERATION)??0)+1;await options.storage.put(GENERATION,generation);
   if(existing&&existing.secret!==entry.secret){entry.previousSecret=existing.secret;entry.previousSecretUntil=now+VERIFY_CACHE;}
   else if(existing?.previousSecretUntil>now){entry.previousSecret=existing.previousSecret;entry.previousSecretUntil=existing.previousSecretUntil;}
   if(!existing||existing.secret!==entry.secret||existing.verifiedAt+VERIFY_CACHE<=now)await verify(entry,options);
   else entry.verifiedAt=existing.verifiedAt;
-  // Reload after the external challenge so a concurrent unsubscribe is not overwritten.
-  if(await options.storage.get(GENERATION)!==generation)throw failure('The event connection changed while its callback was being verified. Retry only if you still want this subscription.',-32000);
-  const latest=await subscriptions(options);
-  if(latest.some(item=>matches(item,options)&&item.name===input.name&&item.id!==id))throw failure('This board event was connected to another conversation during verification. Stop that subscription before trying again.',-32000,{reason:'conversation_already_connected'});
-  await options.storage.put(SUBSCRIPTIONS,[...latest.filter(item=>item.id!==id),entry]);
+  // Independent event renewals may verify together. Commit against the latest
+  // durable array, while unsubscribe/revocation still cancels this identity.
+  await changeSubscriptions(options,async(latest,storage)=>{
+    if(await storage.get(generationKey)!==generation||(await storage.get(scopeGenerationKey(options))??0)!==scopeGeneration)throw failure('The event connection changed while its callback was being verified. Retry only if you still want this subscription.',-32000);
+    if(latest.some(item=>matches(item,options)&&item.name===input.name&&item.id!==id))throw failure('This board event was connected to another conversation during verification. Stop that subscription before trying again.',-32000,{reason:'conversation_already_connected'});
+    await storage.put(SUBSCRIPTIONS,[...latest.filter(item=>item.id!==id),entry]);
+  });
   return {id,refreshBefore:new Date(entry.expiresAt).toISOString(),cursor:null,truncated:false};
 }
 
@@ -163,12 +172,14 @@ export async function eventStatus(configuration){
 }
 
 export async function clearEventSubscriptions(configuration){
-  const options=context(configuration),entries=await subscriptions(options);
-  if(typeof options.storage.delete==='function')await options.storage.delete(activationKey(options));else await options.storage.put(activationKey(options),null);
-  await options.storage.put(GENERATION,(await options.storage.get(GENERATION)??0)+1);
-  await options.storage.put(SUBSCRIPTIONS,entries.filter(entry=>!matches(entry,options)));
-  const receipts=await options.storage.get(DELIVERIES);
-  if(Array.isArray(receipts))await options.storage.put(DELIVERIES,receipts.filter(entry=>!entries.some(subscription=>matches(subscription,options)&&subscription.id===entry.subscriptionId)));
+  const options=context(configuration);
+  await changeSubscriptions(options,async(entries,storage)=>{
+    if(typeof storage.delete==='function')await storage.delete(activationKey(options));else await storage.put(activationKey(options),null);
+    const key=scopeGenerationKey(options);await storage.put(key,(await storage.get(key)??0)+1);
+    await storage.put(SUBSCRIPTIONS,entries.filter(entry=>!matches(entry,options)));
+    const receipts=await storage.get(DELIVERIES);
+    if(Array.isArray(receipts))await storage.put(DELIVERIES,receipts.filter(entry=>!entries.some(subscription=>matches(subscription,options)&&subscription.id===entry.subscriptionId)));
+  });
 }
 
 export async function dispatchEvent(input,configuration){
@@ -186,8 +197,8 @@ export async function dispatchEvent(input,configuration){
       const current=(await subscriptions(options)).find(item=>item.id===entry.id&&matches(item,options));if(!current)break;
       let response;try{callbackUrl(current.url,options);attempted=true;response=await signedRequest(current,body,eventId,options);}catch(error){if(error.code)break;if(attempt<2){await new Promise(resolve=>setTimeout(resolve,250*2**attempt));continue;}break;}
       await response.body?.cancel().catch(()=>{});
-      if(response.ok){accepted=true;const latest=await options.storage.get(DELIVERIES)??[];await options.storage.put(DELIVERIES,[...latest.filter(receipt=>!(receipt.subscriptionId===entry.id&&receipt.eventId===eventId)),{subscriptionId:entry.id,eventId,deliveredAt:options.now()}].slice(-128));break;}
-      if(response.status===410){const latest=await subscriptions(options);await options.storage.put(SUBSCRIPTIONS,latest.filter(item=>item.id!==entry.id));break;}
+      if(response.ok){accepted=true;await transaction(options,async storage=>{const latest=await storage.get(DELIVERIES)??[];await storage.put(DELIVERIES,[...latest.filter(receipt=>!(receipt.subscriptionId===entry.id&&receipt.eventId===eventId)),{subscriptionId:entry.id,eventId,deliveredAt:options.now()}].slice(-128));});break;}
+      if(response.status===410){await changeSubscriptions(options,async(latest,storage)=>{await storage.put(SUBSCRIPTIONS,latest.filter(item=>item.id!==current.id||item.expiresAt!==current.expiresAt||item.secret!==current.secret));});break;}
       if(response.status===413||response.status>=300&&response.status<500&&response.status!==429)break;
       if(attempt<2)await new Promise(resolve=>setTimeout(resolve,250*2**attempt));
     }

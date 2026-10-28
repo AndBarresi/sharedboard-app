@@ -1,6 +1,15 @@
 {
-  "version": "0.11.0",
+  "version": "0.11.1",
   "entries": [
+    {
+      "version": "0.11.1",
+      "title": "Independent native event renewals",
+      "added": [],
+      "fixed": [
+        "Renew mini-chat and board-review subscriptions concurrently without invalidating the other event.",
+        "Commit subscription changes and accepted delivery receipts atomically, and preserve renewed leases when an older callback returns late."
+      ]
+    },
     {
       "version": "0.11.0",
       "title": "Automatic ChatGPT Work Cloud collaboration",
@@ -360,5 +369,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "4dc05b75d32547daffd2e275cfe9788d806d7c9f97a53fb8ca156c53ebe8e45a"
+  "sourceHash": "47d5de1aced3c8018c05836333abdaa7f4a9b8237fe18b6f4029cdf81931c6f9"
 }

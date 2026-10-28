@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.11.1 — Independent native event renewals
+
+### Fixed
+
+- Renew mini-chat and board-review subscriptions concurrently without invalidating the other event.
+- Commit subscription changes and accepted delivery receipts atomically, and preserve renewed leases when an older callback returns late.
+
 ## 0.11.0 — Automatic ChatGPT Work Cloud collaboration
 
 ### Added
