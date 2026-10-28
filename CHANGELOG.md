@@ -1,5 +1,16 @@
 # SharedBoard.app changelog
 
+## 0.11.2 — Recover browser connections and inspect immediate sending
+
+### Added
+
+- Check OpenAI immediate-send support separately from draft messaging with an explicitly clicked diagnostic; automatic panel routing remains unavailable.
+
+### Fixed
+
+- Recover stalled or half-open connections after returning to the page or network, using the same browser-saved board grant without replaying requests.
+- Bound connection opening and missing heartbeat replies, and ignore late callbacks from replaced sockets.
+
 ## 0.11.1 — Independent native event renewals
 
 ### Fixed

@@ -1,6 +1,17 @@
 {
-  "version": "0.11.1",
+  "version": "0.11.2",
   "entries": [
+    {
+      "version": "0.11.2",
+      "title": "Recover browser connections and inspect immediate sending",
+      "added": [
+        "Check OpenAI immediate-send support separately from draft messaging with an explicitly clicked diagnostic; automatic panel routing remains unavailable."
+      ],
+      "fixed": [
+        "Recover stalled or half-open connections after returning to the page or network, using the same browser-saved board grant without replaying requests.",
+        "Bound connection opening and missing heartbeat replies, and ignore late callbacks from replaced sockets."
+      ]
+    },
     {
       "version": "0.11.1",
       "title": "Independent native event renewals",
@@ -369,5 +380,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "47d5de1aced3c8018c05836333abdaa7f4a9b8237fe18b6f4029cdf81931c6f9"
+  "sourceHash": "2cac1d00230d2a5c2246714798e1047d4d7847240c4eea341b9e5c81a0610066"
 }
