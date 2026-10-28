@@ -20,3 +20,16 @@ test('binding normalization permits empty equivalence and removes only reference
  assert.equal(isRenderNormalization({...container,boundElements:null},{...container,boundElements:[]}),true);
  assert.equal(isRenderNormalization(container,{...container,boundElements:[],x:100},[{id:'label',isDeleted:true}]),false,'binding repair must not conceal a real shape move');
 });
+
+test('only the pinned first-render zero stroke default is derived, while later or different style changes remain edits',()=>{
+ const before={id:'surface',type:'rectangle',x:0,y:0,width:100,height:100,strokeWidth:0,index:null,version:1,versionNonce:100,updated:1000,boundElements:null};
+ const initialized={...before,strokeWidth:2,index:'a0',version:2,versionNonce:200,updated:1001,boundElements:[]};
+ assert.equal(isRenderNormalization(before,initialized),true);
+ assert.equal(isRenderNormalization(before,{...initialized,strokeWidth:1}),false);
+ assert.equal(isRenderNormalization(before,{...initialized,strokeWidth:4}),false);
+ assert.equal(isRenderNormalization({...before,strokeWidth:1},initialized),false);
+ assert.equal(isRenderNormalization(before,{...initialized,version:3}),false,'a coalesced human edit increments past the single initializer mutation');
+ assert.equal(isRenderNormalization({...before,index:'a0'},{...initialized,index:'a0'}),false,'a valid existing index cannot use the initial default exception');
+ assert.equal(isRenderNormalization(initialized,{...initialized,strokeWidth:1,version:3,versionNonce:300,updated:1002}),false);
+ assert.equal(isRenderNormalization(before,{...initialized,containerId:null}),false,'unknown nullable defaults are not accepted without actual editor evidence');
+});

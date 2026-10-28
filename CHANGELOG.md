@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.13.6 — Preserve Imagine undo for zero-stroke surfaces
+
+### Fixed
+
+- Recognize the pinned editor's initial zero-to-default stroke normalization without treating it as a later human edit.
+- Cover the full recorded no-brief Imagine render and preserve protection for subsequent human style edits.
+
 ## 0.13.5 — Imagine without a written brief and dependable undo
 
 ### Fixed
