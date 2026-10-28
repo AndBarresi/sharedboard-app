@@ -64,7 +64,9 @@ Your account must expose native event tasks. A provider label never enables deli
 
 **What has been verified:** native delivery woke an ended AI turn, and mini-chat and review tests completed with AI browser tabs closed and no timed wait active. The production page reloaded with its board, connection, and history preserved. After more than ten minutes with AI tabs closed, another actual reply returned to the website. The next draft stayed editable while Send was disabled, then unlocked with the text intact when the reply arrived.
 
-**What still needs acceptance:** the following drafted message was sent, but its answer is not yet confirmed. Fresh one-time setup, sleep/reconnect, long-term host renewal, other accounts/providers, and a full editing workflow need separate tests. Eighteen focused lifecycle tests cover renewal, revocation, signing-key rotation, and receipt preservation; they do not replace those real-client checks. Reading a request or answering only in AI chat does not deliver a board reply; burst reply handling has required a task-prompt repair requested from the website. This remains a testing beta, without a promise of permanent or bug-free connectivity.
+The preserved draft was then sent and received a second actual automatic reply from the same native Work Cloud chat, with AI tabs still closed.
+
+**What still needs acceptance:** fresh one-time setup, sleep/reconnect, long-term host renewal, other accounts/providers, and a full editing workflow need separate tests. Eighteen focused lifecycle tests cover renewal, revocation, signing-key rotation, and receipt preservation; they do not replace those real-client checks. Reading a request or answering only in AI chat does not deliver a board reply; burst reply handling has required a task-prompt repair requested from the website. This remains a testing beta, without a promise of permanent or bug-free connectivity.
 
 ### Other AI clients
 
