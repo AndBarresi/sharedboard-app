@@ -90,6 +90,21 @@ test('channel reply guard waits for real replies only within the exact connectio
  assert.equal(nativeChatAwaitingReply([message],connection),message);for(const delivery of ['pending','uncertain'])assert.equal(nativeChatAwaitingReply([{...message,receipt:undefined,delivery}],connection)?.id,message.id);
  for(const changes of [{reply:'Actual board answer'},{connectionId:'other'},{boardId:'other'},{channelSessionId:'old-process'},{receipt:undefined,delivery:'failed'}])assert.equal(nativeChatAwaitingReply([{...message,...changes}],connection),null);
  assert.equal(nativeChatAwaitingReply([message],connection,message.id),null);assert.equal(nativeChatAwaitingReply([{...message,status:'answered',reply:'   '}],connection)?.id,message.id,'an answered label is not a saved actual reply');
+ const failedTest={...message,channelTest:true,receipt:undefined,delivery:'failed'};assert.equal(nativeChatAwaitingReply([failedTest],connection),failedTest,'an unanswered bootstrap test keeps its original retry even after known failure');assert.equal(nativeChatAwaitingReply([failedTest],connection,failedTest.id),null,'an explicit same-ID test retry remains allowed');
+ for(const changes of [{connectionId:'earlier-connection'},{boardId:'different-board'},{channelSessionId:'earlier-process'},{reply:'Actual test answer'}])assert.equal(nativeChatAwaitingReply([{...failedTest,...changes}],connection),null);
  assert.equal(shouldResetChatCapture({status:409,code:'CHANNEL_REQUEST_SESSION_CHANGED'}),false);assert.equal(shouldResetChatCapture({status:409,code:'CHANNEL_TEST_UNAVAILABLE'}),false);
+ }
+});
+
+test('a verified current process is not blocked by an older failed bootstrap without a receipt',()=>{
+ for(const deliveryMode of ['codex-channel','claude-channel']){
+  const connection={id:'current-connection',boardId:'board',deliveryMode,channelSessionId:'current-process',channelVerified:true};
+  const older={id:'older-failed-test',boardId:'board',connectionId:connection.id,deliveryMode,channelSessionId:connection.channelSessionId,channelTest:true,delivery:'failed',status:'waiting'};
+  const newer={...older,id:'newer-actual-test',delivery:'queued',receipt:'ch_chat_newer-actual-test',status:'answered',reply:'The newer test returned its actual answer.'};
+  assert.equal(nativeChatAwaitingReply([older,newer],connection),null,'the definitely failed history does not invalidate verified current-process proof');
+  assert.equal(nativeChatAwaitingReply([older,newer],{...connection,channelVerified:false}),older,'an unverified process must still retry its original failed test');
+  for(const changes of [{delivery:'pending'},{delivery:'uncertain'},{delivery:'queued'},{delivery:'queued',receipt:`ch_chat_${older.id}`},{delivery:'failed',receipt:`ch_chat_${older.id}`}]){
+   const outstanding={...older,...changes};assert.equal(nativeChatAwaitingReply([outstanding,newer],connection),outstanding,'verification never clears an accepted, pending, or uncertain per-ID obligation');
+  }
  }
 });

@@ -15,7 +15,7 @@ class TestChannel{
  close(){this.closed=true;TestChannel.channels.get(this.name).delete(this);}
 }
 class FakeBridge{
- token='private-browser-token'; connection=null; commands=[]; receipts=new Map(); results=new Map(); notifyCount=0; owner=null; onNotify=null; loseReceipt=false; failHandoff=false; offline=false; requests=[]; sockets=[];
+ token='private-browser-token'; connection=null; commands=[]; receipts=new Map(); results=new Map(); notifyCount=0; owner=null; onNotify=null; notifyFailure=null; loseReceipt=false; failHandoff=false; offline=false; requests=[]; sockets=[];
  constructor(){const relay=this;this.WebSocket=class{
   constructor(url){this.url=url;this.readyState=0;relay.sockets.push(this);assert.equal(new URL(url).origin,'wss://connect.sharedboard.app');assert.equal(new URL(url).searchParams.has('token'),false);queueMicrotask(()=>{if(this.readyState!==0)return;this.readyState=1;this.onopen?.();});}
   send(raw){const data=JSON.parse(raw);if(data.type==='authenticate'){assert.equal(data.browserToken,relay.token);this.clientId=data.clientId;if(relay.owner&&relay.owner!==this&&relay.owner.clientId!==this.clientId){this.close(4009);return;}relay.owner=this;this.emit({type:'connection',connection:structuredClone(relay.connection)});relay.flush();return;}if(data.type==='ping'){this.emit({type:'pong'});return;}if(data.type==='result'){const target=relay.results.get(data.id);if(target){relay.results.delete(data.id);target(data);}return;}throw new Error(`Unexpected socket message ${data.type}`);}
@@ -33,7 +33,7 @@ class FakeBridge{
   if(path==='/browser/pair'){const sessionId=crypto.randomUUID();this.token=`${sessionId}.private-browser-token`;this.connection={connected:false,id:sessionId,boardId:body.boardId,provider:body.provider,permission:body.permission};return this.response({browserToken:this.token,sessionId,connection:this.connection,pairing:{code:'fixture-code',expiresAt:new Date(Date.now()+60000).toISOString()},setup:{prompt:'Fixture pairing prompt'}});}
   assert.equal(options.headers['x-sharedboard-browser'],this.token);
   if(path==='/browser/status')return this.response({connection:this.connection});
-  if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`${['claude-channel','codex-channel'].includes(this.connection.deliveryMode)?'ch':'evt'}_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
+  if(path==='/browser/notify'){this.notifyCount++;if(this.notifyFailure)return this.response(this.notifyFailure,409);await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`${['claude-channel','codex-channel'].includes(this.connection.deliveryMode)?'ch':'evt'}_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
   if(path==='/browser/handoff')return this.failHandoff?this.response({error:'Fixture handoff unavailable'},503):this.response({delivery:'manual',handoffPrompt:`Read captured ${body.kind} ${body.id} using the connected SharedBoard tools.`,connection:this.connection});
   if(path==='/browser/live/stop'){if(body.sessionId!==this.connection.liveSession?.id)return this.response({error:'The live session changed.',code:'LIVE_SESSION_CHANGED'},409);this.connection={...this.connection,automaticMessages:false,automaticReviews:false,messageExpiresAt:null,reviewExpiresAt:null,liveSession:{...this.connection.liveSession,status:'stopped',waitExpiresAt:null}};return this.response({connection:this.connection});}
   if(path==='/browser/disconnect'){this.connection={...this.connection,connected:false};return this.response({connection:this.connection});}
@@ -196,6 +196,66 @@ test('local channels bootstrap only an explicit Discuss probe and require real p
   bridge.connection.channelSessionId=crypto.randomUUID();bridge.connection.channelVerified=false;bridge.connection.automaticMessages=false;bridge.connection.automaticReviews=false;await t.bridgeStatus();
   await assert.rejects(call(t,'/api/chat/retry',{id:next.id}),error=>error.code==='CHANNEL_REQUEST_SESSION_CHANGED');assert.equal((await call(t,'/api/chat')).messages.at(-1).id,next.id);assert.equal((await call(t,'/api/chat')).messages.at(-1).channelSessionId,processId);
  }finally{t.close();}
+ }
+});
+
+test('bootstrap tests reserve one original capture across initial notify races, tabs and reopening',async()=>{
+ for(const [provider,deliveryMode] of [['codex','codex-channel'],['claude-code','claude-channel']]){
+  const {t,bridge,config}=await fixture('read',{BroadcastChannel:TestChannel});let second,reopened,release;
+  try{
+   const processId=crypto.randomUUID();Object.assign(bridge.connection,{provider,deliveryMode,channelConnected:true,channelVerified:false,channelSessionId:processId,channelExpiresAt:new Date(Date.now()+60000).toISOString(),automaticMessages:false,automaticReviews:false});await t.bridgeStatus();
+   second=await createBrowserTransport(config);await second.ready();
+   const original=await capture(t,{text:'Original bootstrap test',intent:'discuss',automaticRequired:true,channelTest:true}),extra=await capture(second,{text:'Second click must not create another test',intent:'discuss',automaticRequired:true,channelTest:true});
+   let entered;const notifying=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{release=resolve;});bridge.onNotify=async body=>{if(body.id===original.id){entered();await gate;}};
+   const sending=call(t,'/api/chat',original);await notifying;
+   const staged=(await call(second,'/api/chat')).messages;assert.equal(staged.length,1);assert.equal(staged[0].delivery,'pending');assert.equal(staged[0].channelTest,true);assert.equal(staged[0].channelSessionId,processId);
+   const attempts=await Promise.allSettled([call(t,'/api/chat',extra),call(second,'/api/chat',{...extra,id:crypto.randomUUID()})]);for(const attempt of attempts){assert.equal(attempt.status,'rejected');assert.equal(attempt.reason.code,'CHAT_REPLY_PENDING');}
+   assert.deepEqual((await call(t,'/api/chat')).messages,staged);assert.equal(bridge.notifyCount,1);
+   release();await sending;await bridge.command('read_chat_message',{id:original.id});await assert.rejects(call(second,'/api/chat',extra),error=>error.code==='CHAT_REPLY_PENDING');
+   second.close();second=null;t.close();await wait(()=>bridge.owner===null);reopened=await createBrowserTransport(config);await reopened.ready();await wait(()=>bridge.owner?.readyState===1);
+   const saved=(await call(reopened,'/api/chat')).messages;assert.equal(saved[0].id,original.id);assert.equal(saved[0].status,'reading');assert.equal(saved[0].receipt,`ch_chat_${original.id}`);
+   await assert.rejects(call(reopened,'/api/chat',extra),error=>error.code==='CHAT_REPLY_PENDING');assert.equal(bridge.notifyCount,1,'reopening and another click do not create or notify a second test');
+   const read=await bridge.command('read_chat_message',{id:original.id});assert.equal(read.result.board.visual.dataURL,png);assert.equal(read.result.message.id,original.id);
+   const nextProcess=crypto.randomUUID();bridge.connection.channelSessionId=nextProcess;await reopened.bridgeStatus();
+   const fresh=await call(reopened,'/api/chat',await capture(reopened,{text:'Fresh process gets its own explicit test',intent:'discuss',automaticRequired:true,channelTest:true}));assert.equal(fresh.messages.length,2);assert.equal(fresh.messages[0].channelSessionId,processId);assert.equal(fresh.messages[1].channelSessionId,nextProcess);assert.equal(bridge.notifyCount,2);
+   await assert.rejects(call(reopened,'/api/chat/retry',{id:original.id}),error=>error.code==='CHANNEL_REQUEST_SESSION_CHANGED');
+  }finally{release?.();t.close();second?.close();reopened?.close();}
+ }
+});
+
+test('failed and uncertain bootstrap tests require an explicit retry of their original saved ID',async()=>{
+ for(const failure of ['failed','uncertain']){
+  const {t,bridge}=await fixture('read');try{
+   Object.assign(bridge.connection,{provider:'codex',deliveryMode:'codex-channel',channelConnected:true,channelVerified:false,channelSessionId:crypto.randomUUID(),channelExpiresAt:new Date(Date.now()+60000).toISOString(),automaticMessages:false,automaticReviews:false});await t.bridgeStatus();
+   if(failure==='failed')bridge.notifyFailure={error:'The channel could not accept this test.',code:'CHANNEL_UNAVAILABLE'};else bridge.loseReceipt=true;
+   const original=await capture(t,{text:'Keep this original test and capture',intent:'discuss',automaticRequired:true,channelTest:true});
+   const saved=(await call(t,'/api/chat',original)).messages;assert.equal(saved.length,1);assert.equal(saved[0].delivery,failure);assert.equal(bridge.notifyCount,1);
+   await assert.rejects(call(t,'/api/chat',await capture(t,{text:'Do not create another bootstrap ID',intent:'discuss',channelTest:true})),error=>error.code==='CHAT_REPLY_PENDING');assert.deepEqual((await call(t,'/api/chat')).messages,saved);assert.equal(bridge.notifyCount,1);
+   bridge.notifyFailure=null;const retried=(await call(t,'/api/chat/retry',{id:original.id})).messages;assert.equal(retried.length,1);assert.equal(retried[0].id,original.id);assert.equal(retried[0].delivery,'queued');assert.equal(retried[0].receipt,`ch_chat_${original.id}`);assert.equal(bridge.receipts.size,1);assert.equal(bridge.notifyCount,2);
+   await call(t,'/api/chat/retry',{id:original.id});assert.equal(bridge.notifyCount,2,'accepted original-ID retries are status checks without replay');
+   const read=await bridge.command('read_chat_message',{id:original.id});assert.equal(read.result.board.visual.dataURL,png);assert.equal(read.result.message.text,original.text);assert.equal((await call(t,'/api/connection')).automaticMessages,false,'test status is never fake proof');
+  }finally{t.close();}
+ }
+});
+
+test('verified plugin migration preserves failed bootstrap history without blocking or replaying it',async()=>{
+ for(const [provider,deliveryMode] of [['codex','codex-channel'],['claude-code','claude-channel']]){
+  const {t,bridge,config}=await fixture('read');let db;
+  try{
+   Object.assign(bridge.connection,{provider,deliveryMode,channelConnected:true,channelVerified:false,channelSessionId:crypto.randomUUID(),channelExpiresAt:new Date(Date.now()+60000).toISOString(),automaticMessages:false,automaticReviews:false});await t.bridgeStatus();
+   const newer=await capture(t,{text:'Newer test completed before this upgrade',intent:'discuss',automaticRequired:true,channelTest:true});await call(t,'/api/chat',newer);await bridge.command('read_chat_message',{id:newer.id});await bridge.command('reply_to_chat_message',{id:newer.id,text:'The newer test returned its actual saved answer.'});
+   Object.assign(bridge.connection,{channelVerified:true,automaticMessages:true,automaticReviews:true});await t.bridgeStatus();
+   db=await new Promise((resolve,reject)=>{const opening=config.indexedDB.open(config.dbName);opening.onsuccess=()=>resolve(opening.result);opening.onerror=()=>reject(opening.error);});
+   const oldId=crypto.randomUUID(),oldText='Historical failed bootstrap from before the guard was added';
+   const setHistorical=changes=>new Promise((resolve,reject)=>{const tx=db.transaction('boards','readwrite'),store=tx.objectStore('boards'),reading=store.get(t.boardId);reading.onsuccess=()=>{const record=reading.result,answered=record.messages.find(item=>item.id===newer.id),old={...structuredClone(answered),id:oldId,text:oldText,status:'waiting',delivery:'failed',...changes};delete old.reply;delete old.repliedAt;if(!Object.hasOwn(changes,'receipt'))delete old.receipt;record.messages=[old,...record.messages.filter(item=>item.id!==oldId)];store.put(record);};tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});
+   const next=await capture(t,{text:'The normal next message after migration',intent:'discuss',automaticRequired:true});
+   for(const changes of [{delivery:'pending'},{delivery:'uncertain'},{delivery:'queued'},{delivery:'queued',receipt:`ch_chat_${oldId}`},{delivery:'failed',receipt:`ch_chat_${oldId}`}]){
+    await setHistorical(changes);await assert.rejects(call(t,'/api/chat',{...next,id:crypto.randomUUID()}),error=>error.code==='CHAT_REPLY_PENDING');assert.equal((await call(t,'/api/chat')).messages.length,2);assert.equal(bridge.notifyCount,1,'an outstanding historical obligation never creates another send');
+   }
+   await setHistorical({delivery:'failed'});const saved=await call(t,'/api/chat'),before=saved.messages.find(item=>item.id===oldId);assert.equal(before.reply,undefined);assert.equal(before.receipt,undefined);assert.equal((await call(t,'/api/connection')).channelVerified,true);
+   const sent=(await call(t,'/api/chat',next)).messages;assert.equal(sent.length,3);assert.deepEqual(sent.find(item=>item.id===oldId),before);assert.equal(sent.find(item=>item.id===newer.id).reply,'The newer test returned its actual saved answer.');assert.equal(sent.at(-1).id,next.id);assert.equal(sent.at(-1).channelTest,undefined);assert.equal(bridge.notifyCount,2);
+   const notified=bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').map(request=>JSON.parse(request.body).id);assert.deepEqual(notified,[newer.id,next.id],'migration never replays the historical failed test');assert.equal(bridge.receipts.size,2);
+  }finally{db?.close();t.close();}
  }
 });
 

@@ -1,6 +1,6 @@
 # Connect your existing AI conversation
 
-Start at [sharedboard.app](https://sharedboard.app). All routes use its hosted Cloudflare relay and browser-saved boards, without a standalone SharedBoard installer or home-network server. **ChatGPT Work Cloud** is the recommended download-free route. **Codex** and **Claude Code** use optional plugins installed inside the AI app, with the prerequisites below. Their implementation and isolated tests are complete; actual installed-client and Windows/Mac acceptance are pending.
+Start at [sharedboard.app](https://sharedboard.app). All routes use its hosted Cloudflare relay and browser-saved boards, without a standalone SharedBoard installer or home-network server. **ChatGPT Work Cloud** is the recommended download-free route. **Codex** and **Claude Code** use optional plugins installed inside the AI app, with the prerequisites below. An actual installed Codex bootstrap read/reply has passed. Broader account and interactive platform acceptance remain incomplete.
 
 ## Set up from the board
 
@@ -30,7 +30,11 @@ Existing **legacy remote Claude Code** grants can use a connector inherited from
 4. Copy the website's one-use pairing prompt into that conversation. It requires the **actual `CODEX_THREAD_ID` from that conversation's environment**, then reads and confirms the exact board revision. A guessed ID, conversation title, or another chat's ID is not accepted. The plugin's connect skill is `$sharedboard-connect`; use the complete generated prompt rather than inventing an ID.
 5. On SharedBoard, choose **Test automatic reply**. Pairing and a queue receipt do not enable normal mini chat. The captured test must actually be read and answered through the board reply tool before normal Send and board reviews become available.
 
-The plugin runs inside Codex and connects outward to the hosted relay. It uses the [official queue command](https://learn.chatgpt.com/docs/developer-commands#codex-queue) for that exact existing native conversation, without a local HTTP service, replacement model, or permission override. Keep Codex, its paired plugin process, and the board open. An actual CLI queue receipt has been accepted; that receipt is not proof that the model read or answered. Installed-plugin end-to-end and Windows/Mac acceptance remain pending.
+The plugin runs inside Codex and connects outward to the hosted relay. It uses the [official queue command](https://learn.chatgpt.com/docs/developer-commands#codex-queue) for that exact existing native conversation, without a local HTTP service, replacement model, or permission override. Keep Codex, its paired plugin process, and the board open. A queue receipt alone is not proof that the model read or answered.
+
+An actual website bootstrap through the installed plugin started a new turn in the same Codex conversation after its previous turn ended. The model read the captured PNG and live board, confirmed revision 1, and posted its actual two-sentence answer. The same process became verified for automatic messages and reviews; the website displayed the answer and unlocked its composer. Pair/read/confirm and an offline Codex-side release also preserved the isolated test board and an unrelated ChatGPT grant. Normal Request work drawing edits, Codex Ask AI to look completion, fresh-account setup, and Mac GUI acceptance remain pending.
+
+The full automated suite and website build passed on Linux, Windows, and macOS ARM for version 0.12.4. These CI results are separate from interactive platform acceptance and do not establish every provider or model. Claude Code account acceptance remains pending; Free Claude alone cannot complete that route.
 
 ## Claude Code plugin setup
 
@@ -103,7 +107,7 @@ Remote MCP board tools let the assistant inspect the drawing or make a particula
 | --- | --- |
 | Remote MCP board tools | Read the board, return actual replies to saved requests, and make authorized edits when granted. |
 | ChatGPT Work Cloud native events | Recommended website-only route. Actual replies, reviews, subscription renewal, and a leave/return round trip have passed in one account. Fresh-account setup, actual OS sleep, multiday renewal, and broader acceptance remain open. |
-| Codex local plugin | Implemented outbound relay connection and official native-thread queue delivery. Node.js 22+ and queue-capable Codex CLI required. Isolated tests pass; actual installed-plugin read/reply and platform acceptance are pending. |
+| Codex local plugin | An actual website bootstrap woke the same existing conversation and returned its real board reply. Node.js 22+ and queue-capable Codex CLI required. Normal work/review, fresh-account, and Mac GUI acceptance remain pending. |
 | Claude Code Channels plugin | Implemented outbound relay connection. Node.js 22+, per-launch preview permission, and supported account policy required. Isolated tests pass; actual installed-plugin read/reply and platform acceptance are pending. |
 | Experimental Live collaboration | Other compatible clients can use a finite, active AI turn calling `wait_for_board_request`. Actual waiting gates new sends; reliable provider-loop acceptance remains incomplete. |
 | Experimental MCP Apps panel | Diagnostic WIP. A rendered panel or text-message capability flag does not establish automatic sending. |

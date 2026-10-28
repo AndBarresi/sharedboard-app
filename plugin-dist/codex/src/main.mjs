@@ -17426,7 +17426,7 @@ var board_tools_default = [
 // plugins/claude-code/package.json
 var package_default = {
   name: "sharedboard-claude-code",
-  version: "0.12.4",
+  version: "0.12.5",
   private: true,
   type: "module",
   description: "SharedBoard.app Channels plugin for an existing Claude Code session",
@@ -17960,7 +17960,7 @@ function createCodexQueue({ execute = run, executable = "codex" } = {}) {
 // plugins/codex/package.json
 var package_default2 = {
   name: "sharedboard-codex",
-  version: "0.12.4",
+  version: "0.12.5",
   private: true,
   type: "module",
   description: "SharedBoard.app local plugin for an existing Codex conversation",
