@@ -4,6 +4,7 @@ import {BoardRelay} from '../cloudflare/relay.mjs';
 import {MemoryStorage} from './relay-fixtures.mjs';
 import {hash,manualPrompt} from '../cloudflare/protocol.mjs';
 import {panelOperation,queuePanelRequest} from '../cloudflare/panel-state.mjs';
+import {handleEventRpc,eventStatus,eventCatalog} from '../cloudflare/events.mjs';
 
 class Socket{
  constructor(ctx,handler){this.ctx=ctx;this.handler=handler;this.messages=[];this.readyState=1;this.attachment={authenticated:false,createdAt:Date.now()};ctx.sockets.push(this);}
@@ -26,6 +27,17 @@ test('relay refuses board access until explicit pairing and validates browser ow
 });
 test('offline relay has no drawing fallback and read-only permission blocks writes before delivery',async()=>{
  const f=await fixture('read');assert.equal((await f.call('read')).status,503);assert.equal((await f.call('add',{elements:[{text:'Private drawing text'}]})).status,403);assert.ok(!JSON.stringify([...f.storage.map]).includes('Private drawing text'));
+});
+
+test('AI-side release requires the exact current board, connection, and family and clears only its automatic routes while offline',async()=>{
+ const f=await fixture('read'),options={...f.relay.eventContext(),allowedCallbackOrigins:['https://chatgpt.com'],callbackFetch:async(url,init)=>{const data=JSON.parse(init.body);return Response.json({challenge:data.challenge});}};f.relay.eventContext=()=>options;
+ for(const event of eventCatalog)await handleEventRpc('events/subscribe',{name:event.name,arguments:{boardId:f.grant.boardId},delivery:{mode:'webhook',url:'https://chatgpt.com/private-native-route',secret:`whsec_${Buffer.alloc(32,9).toString('base64')}`}},options);
+ assert.equal((await eventStatus(options)).eventSubscriptions,2);assert.equal((await f.relay.connection()).browserOnline,false);
+ const request=(grant,input)=>f.relay.fetch(new Request('https://internal/agent/disconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant,input})}));
+ const expected={expectedBoardId:f.grant.boardId,expectedConnectionId:f.grant.sessionId};
+ for(const input of [{...expected,expectedBoardId:crypto.randomUUID()},{...expected,expectedConnectionId:crypto.randomUUID()}]){const response=await request(f.grant,input);assert.equal(response.status,409);assert.equal((await response.json()).code,'CONNECTION_CHANGED');assert.equal(f.relay.meta.revoked,undefined);assert.equal((await eventStatus(options)).eventSubscriptions,2);}
+ for(const field of ['familyId','boardId','sessionId','clientId']){const response=await request({...f.grant,[field]:crypto.randomUUID()},expected);assert.equal(response.status,403);assert.equal(f.relay.meta.revoked,undefined);}
+ const response=await request(f.grant,expected),released=await response.json();assert.equal(response.status,200);assert.equal(released.disconnected,true);assert.equal(released.requiresReauthorization,true);assert.deepEqual(released.released,{boardId:f.grant.boardId,connectionId:f.grant.sessionId});assert.equal((await eventStatus(options)).eventSubscriptions,0);assert.equal((await f.call('read')).status,401);
 });
 test('browser RPC preserves command IDs, returns actual results and only accepts the owning authenticated socket',async()=>{
  const f=await fixture();let owner;owner=await f.socket(async frame=>{if(frame.type==='command')await f.relay.webSocketMessage(owner,JSON.stringify({type:'result',id:frame.command.id,connectionId:f.created.sessionId,result:{revision:7,elements:[]}}));});

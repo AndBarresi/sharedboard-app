@@ -27,6 +27,7 @@ export class RelayAuth{
   else if(url.pathname==='/token')result=await this.auth.issue(input.params,input.ip);
   else if(url.pathname==='/verify')result=await this.auth.verify(input.token);
   else if(url.pathname==='/revoke')result=await this.auth.revoke(input.token);
+  else if(url.pathname==='/revoke-bound')result=await this.auth.revokeBound(input.token,input.grant);
   else if(url.pathname==='/rate')result=await this.auth.rate(input.key,input.ip);
   else throw fail('Unknown authorization operation.',404);
   return json(result);
@@ -45,6 +46,23 @@ export async function handleRequest(request,env){
   if(path==='/.well-known/oauth-authorization-server'&&request.method==='GET')return cors(json(await internal(authStub(env),'/metadata')),request,env,{publicRoute:true});
   if(['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'].includes(path)&&request.method==='GET')return cors(json({resource:`${origin}/mcp`,authorization_servers:[origin],scopes_supported:['board.read','board.write'],bearer_methods_supported:['header'],resource_name:'SharedBoard.app browser board'}),request,env,{publicRoute:true});
   const ip=await hash(request.headers.get('cf-connecting-ip')??'unknown');
+  if(path.startsWith('/channel/')){
+   if(request.headers.has('origin'))throw fail('Use the installed local AI plugin for this connection.',403,'ORIGIN_DENIED');
+   if(path==='/channel/pair'&&request.method==='POST'){
+    await internal(authStub(env),'/rate',{key:'pair',ip});const input=await body(request,8192),id=tokenSession(input.connectionCode);
+    return json(await internal(sessionStub(env,id),'/channel/pair',input));
+   }
+   if(path==='/channel/call'&&request.method==='POST'){
+    await internal(authStub(env),'/rate',{key:'channel-call',ip});const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9-]{36}\.[a-f0-9]{64})$/i)?.[1];
+    if(!token)throw fail('Pair the local AI channel from SharedBoard.app first.',401,'CHANNEL_UNAUTHORIZED');
+    const id=tokenSession(token),input=await body(request,4_000_000);return json(await internal(sessionStub(env,id),'/channel/call',{...input,channelToken:token}));
+   }
+   if(path==='/channel/socket'&&request.method==='GET'){
+    if([...url.searchParams.keys()].some(key=>key!=='session')||url.searchParams.getAll('session').length!==1)throw fail('Use the channel socket address without credentials in its URL.');
+    const id=uuid(url.searchParams.get('session'),'session ID');return sessionStub(env,id).fetch(new Request(`${origin}/channel/socket`,{method:'GET',headers:request.headers}));
+   }
+   throw fail('Unknown local AI channel route.',404);
+  }
   if(path==='/register'&&request.method==='POST')return cors(json(await internal(authStub(env),'/register',{body:await body(request,16384),ip}),201),request,env,{publicRoute:true});
   if(path==='/authorize'&&request.method==='GET'){
    if([...new Set(url.searchParams.keys())].some(key=>url.searchParams.getAll(key).length>1))throw fail('Duplicate OAuth parameters are not allowed.');const result=await internal(authStub(env),'/authorize',{params:Object.fromEntries(url.searchParams),ip});return new Response(null,{status:302,headers:{Location:result.redirect,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});
@@ -74,7 +92,12 @@ export async function handleRequest(request,env){
   if(path==='/mcp'){
    const grant=await authenticate(request,env),stub=sessionStub(env,grant.sessionId);
    const handler=createMcpHandler(()=>{
-    const mcp=createBoardMcp((operation,input)=>internal(stub,'/agent/call',{grant,operation,input}),{remote:true,remotePair:true,proposals:false});
+    const mcp=createBoardMcp(async(operation,input)=>{
+     if(operation!=='disconnect')return internal(stub,'/agent/call',{grant,operation,input});
+     const released=await internal(stub,'/agent/disconnect',{grant,input});
+     // The bearer belongs to this request's verified family, never to a model-selected target.
+     await internal(authStub(env),'/revoke-bound',{token:request.headers.get('authorization').slice(7),grant});return released;
+    },{remote:true,remotePair:true,proposals:false});
     attachEventHandlers(mcp,(method,params)=>internal(stub,'/agent/events',{grant,method,params}));
     attachLiveTools(mcp,(operation,input)=>internalLiveWait(stub,{grant,operation,input},{signal:request.signal}));
     return attachChatPanel(mcp,(operation,input)=>internal(stub,'/agent/panel',{grant,operation,input}),{serverURL:`${origin}/mcp`,provider:async()=>(await internal(stub,'/agent/check',{grant,connected:false})).connection.provider});

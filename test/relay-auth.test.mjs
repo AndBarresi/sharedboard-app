@@ -28,6 +28,15 @@ test('expired OAuth requests cannot be approved; denied requests return no autho
  const f=await fixture();const denied=await f.auth.decide(f.request.id,false,f.session);assert.equal(new URL(denied.redirect).searchParams.get('error'),'access_denied');assert.equal(new URL(denied.redirect).searchParams.has('code'),false);await assert.rejects(f.auth.decide(f.request.id,true,f.session),/already handled/);
  const second=await f.auth.start(f.params);f.advance(300001);await assert.rejects(f.auth.decide(second.id,true,f.session),/expired/);
 });
+
+test('an authenticated in-flight release revokes its exact refresh family after access expiry and cleanup',async()=>{
+ const f=await fixture(),approval=await f.approve(),issued=await f.auth.issue(approval.exchange),validated=await f.auth.verify(issued.tokens.access_token);
+ const another=await f.auth.start(f.params),otherSession={...f.session,id:crypto.randomUUID(),boardId:crypto.randomUUID()},otherApproval=await f.auth.decide(another.id,true,otherSession),otherIssued=await f.auth.issue({...approval.exchange,code:new URL(otherApproval.redirect).searchParams.get('code')});
+ await assert.rejects(f.auth.revokeBound(issued.tokens.access_token,otherIssued.grant),error=>error.code==='CONNECTION_CHANGED');assert.equal((await f.auth.verify(issued.tokens.access_token)).familyId,validated.familyId);assert.equal((await f.auth.verify(otherIssued.tokens.access_token)).familyId,otherIssued.grant.familyId);
+ f.advance(3600001);await f.auth.cleanup();assert.equal(await f.storage.get(`access:${await hash(issued.tokens.access_token)}`),undefined);
+ await f.auth.revokeBound(issued.tokens.access_token,validated);await assert.rejects(f.auth.issue({grant_type:'refresh_token',client_id:f.client.client_id,refresh_token:issued.tokens.refresh_token}),error=>error.code==='INVALID_GRANT');
+ const unaffected=await f.auth.issue({grant_type:'refresh_token',client_id:f.client.client_id,refresh_token:otherIssued.tokens.refresh_token});assert.equal((await f.auth.verify(unaffected.tokens.access_token)).boardId,otherSession.boardId);
+});
 test('rate limiting applies to anonymous registrations and session creation',async()=>{
  const storage=new MemoryStorage(),auth=new RelayAuthorization({storage});for(let i=0;i<10;i++)await auth.rate('pair','test-ip');await assert.rejects(auth.rate('pair','test-ip'),error=>error.status===429);
 });

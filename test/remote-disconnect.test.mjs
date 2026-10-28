@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {realpathSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {Client,StreamableHTTPClientTransport} from '@modelcontextprotocol/client';
+import {IDBFactory} from 'fake-indexeddb';
+import {createBrowserTransport} from '../src/browser-store.mjs';
+
+const root=fileURLToPath(new URL('../',import.meta.url)),requireWrangler=createRequire(realpathSync(new URL('../node_modules/wrangler/package.json',import.meta.url))),{Miniflare,convertV4MiniflareOptions}=requireWrangler('miniflare'),{build}=requireWrangler('esbuild');
+const origin='https://connect.sharedboard.app',appOrigin='https://sharedboard.app';
+const wait=async check=>{const deadline=Date.now()+5000;while(Date.now()<deadline){if(await check())return;await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('Isolated disconnect protocol timed out.');};
+
+test('remote AI disconnect releases only its observed offline board and OAuth family, keeps browser data, and requires new approval for another board',{timeout:20000},async()=>{
+ const bundle=await build({entryPoints:[root+'cloudflare/worker.mjs'],bundle:true,format:'esm',platform:'neutral',target:'es2022',conditions:['workerd','worker','browser'],external:['node:*'],write:false,logLevel:'silent'});
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-10-27',compatibilityFlags:['nodejs_compat'],bindings:{RELAY_ORIGIN:origin,APP_ORIGIN:appOrigin,EVENT_CALLBACK_ORIGINS:''},durableObjects:{BOARD_RELAY:{className:'BoardRelay',useSQLite:true},RELAY_AUTH:{className:'RelayAuth',useSQLite:true}},durableObjectsPersist:false}));
+ const browsers=[],clients=[],sockets=new Set(),indexedDB=new IDBFactory();
+ const dispatch=async(input,init)=>{const request=new Request(input,init);return mf.dispatchFetch(request.url,{method:request.method,headers:Object.fromEntries(request.headers),...(request.method==='GET'||request.method==='HEAD'?{}:{body:await request.arrayBuffer()}),redirect:request.redirect});};
+ const fetcher=(input,init={})=>{const request=new Request(input,init),headers=new Headers(request.headers);headers.set('origin',appOrigin);return dispatch(new Request(request,{headers}));};
+ class BrowserSocket{
+  constructor(url){this.readyState=0;sockets.add(this);void mf.dispatchFetch(String(url).replace(/^ws/,'http'),{headers:{origin:appOrigin,upgrade:'websocket'}}).then(response=>{if(response.status!==101)throw new Error('Isolated browser connection failed.');this.socket=response.webSocket;this.socket.accept();this.readyState=1;this.socket.addEventListener('message',event=>this.onmessage?.({data:event.data}));this.socket.addEventListener('close',()=>{this.readyState=3;this.onclose?.({});sockets.delete(this);});this.onopen?.({});}).catch(error=>{this.readyState=3;this.onerror?.(error);this.onclose?.({});sockets.delete(this);});}
+  send(value){this.socket.send(value);}
+  close(){if(this.readyState>=2)return;this.readyState=2;this.socket?.close(1000);sockets.delete(this);}
+ }
+ const http=async(path,input,{browserToken,token}={})=>{const response=await mf.dispatchFetch(origin+path,{method:'POST',headers:{origin:appOrigin,'content-type':'application/json',...(browserToken?{'x-sharedboard-browser':browserToken}:{}),...(token?{authorization:'Bearer '+token}:{})},body:JSON.stringify(input)});return {response,data:await response.json()};};
+ const callBrowser=(browser,path,input)=>browser.request(path,{method:input===undefined?'GET':'POST',...(input===undefined?{}:{body:JSON.stringify(input)})});
+ const savedGrant=(browser,dbName)=>new Promise((resolve,reject)=>{const open=indexedDB.open(dbName);open.onerror=()=>reject(open.error);open.onsuccess=()=>{const db=open.result,get=db.transaction('meta','readonly').objectStore('meta').get('relay:v1:'+browser.boardId);get.onsuccess=()=>{resolve(get.result.value);db.close();};get.onerror=()=>reject(get.error);};});
+ const makeBrowser=async()=>{const dbName='disconnect-'+crypto.randomUUID(),config={indexedDB,dbName,BroadcastChannel:null,origin:appOrigin,bridgeFetch:fetcher,bridgeWebSocket:BrowserSocket,bridgeBaseURL:origin,bridgePollDelay:20},browser=await createBrowserTransport(config);browsers.push(browser);await browser.ready();const prepared=await callBrowser(browser,'/api/connection/pairing',{provider:'claude',permission:'edit'});return {browser,config,prepared,state:await savedGrant(browser,dbName)};};
+ const verifier='v'.repeat(64),challenge=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))).toString('base64url');
+ let registration;
+ const authorize=async board=>{const response=await mf.dispatchFetch(origin+'/authorize?'+new URLSearchParams({client_id:registration.client_id,redirect_uri:registration.redirect_uris[0],response_type:'code',code_challenge:challenge,code_challenge_method:'S256',resource:origin+'/mcp'}),{redirect:'manual'});assert.equal(response.status,302);const requestId=new URL(response.headers.get('location')).searchParams.get('sharedboard_connect'),approved=await http('/browser/approve',{requestId,allow:true},{browserToken:board.state.browserToken});assert.equal(approved.response.status,200,JSON.stringify(approved.data));const issued=await http('/token',{grant_type:'authorization_code',client_id:registration.client_id,redirect_uri:registration.redirect_uris[0],code_verifier:verifier,resource:origin+'/mcp',code:new URL(approved.data.redirect).searchParams.get('code')});assert.equal(issued.response.status,200,JSON.stringify(issued.data));return issued.data;};
+ const connect=async tokens=>{const client=new Client({name:'Isolated disconnect SDK client',version:'1'});clients.push(client);await client.connect(new StreamableHTTPClientTransport(new URL(origin+'/mcp'),{fetch:dispatch,requestInit:{headers:{authorization:'Bearer '+tokens.access_token}}}));return {client,call:(name,args={})=>client.callTool({name,arguments:args})};};
+ const oldRequest=token=>mf.dispatchFetch(origin+'/mcp',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})});
+ try{
+  await mf.ready;registration=(await http('/register',{client_name:'Reusable registered AI client',redirect_uris:['https://client.example/callback']})).data;
+  const old=await makeBrowser(),oldTokens=await authorize(old),oldAI=await connect(oldTokens);assert.ok(!(await oldAI.call('connect_board',{code:old.prepared.pairing.code})).isError);await wait(async()=>(await old.browser.bridgeStatus())?.browserOnline);
+  const definitions=(await oldAI.client.listTools()).tools,disconnect=definitions.find(tool=>tool.name==='disconnect_board');assert.deepEqual(disconnect.inputSchema.required.sort(),['expectedBoardId','expectedConnectionId']);assert.equal(disconnect.annotations.destructiveHint,true);
+  await oldAI.call('read_board');const added=await oldAI.call('add_elements',{elements:[{id:'preserved-card',text:'Keep this private browser drawing',x:12,y:34}]});assert.ok(!added.isError,JSON.stringify(added));
+  const drawing=await callBrowser(old.browser,'/api/board'),planning=await callBrowser(old.browser,'/api/planning'),messageId=crypto.randomUUID();await callBrowser(old.browser,'/api/chat',{id:messageId,boardId:drawing.id,expectedRevision:drawing.revision,expectedPlanningVersion:planning.version,scope:'board',selectedIds:[],text:'Saved isolated history before release.',intent:'discuss'});await oldAI.call('read_chat_message',{id:messageId});await oldAI.call('reply_to_chat_message',{id:messageId,text:'Actual isolated protocol-client reply saved before release.'});
+  const beforeDrawing=await callBrowser(old.browser,'/api/board'),beforeHistory=await callBrowser(old.browser,'/api/chat');
+  // A second family for the same registered client is independent of the old one.
+  const foreign=await makeBrowser(),foreignTokens=await authorize(foreign),foreignAI=await connect(foreignTokens);assert.ok(!(await foreignAI.call('connect_board',{code:foreign.prepared.pairing.code})).isError);
+  const observed=(await oldAI.call('connection_status')).structuredContent,expected={expectedBoardId:observed.boardId,expectedConnectionId:observed.id};
+  for(const invalid of [{...expected,expectedBoardId:foreign.browser.boardId},{...expected,expectedConnectionId:foreign.state.sessionId}]){assert.equal((await oldAI.call('disconnect_board',invalid)).isError,true);assert.equal((await oldAI.call('connection_status')).structuredContent.connected,true);}
+  // Rotate access credentials first: release must invalidate sibling access and refresh too.
+  const rotated=await http('/token',{grant_type:'refresh_token',client_id:registration.client_id,refresh_token:oldTokens.refresh_token,resource:origin+'/mcp'});assert.equal(rotated.response.status,200);
+  old.browser.close();await wait(async()=>(await oldAI.call('connection_status')).structuredContent.browserOnline===false);
+  const released=await oldAI.call('disconnect_board',expected);assert.ok(!released.isError,JSON.stringify(released));assert.equal(released.structuredContent.requiresReauthorization,true);assert.deepEqual(released.structuredContent.released,{boardId:observed.boardId,connectionId:observed.id});
+  for(const token of [oldTokens.access_token,rotated.data.access_token]){const denied=await oldRequest(token);assert.equal(denied.status,401);assert.match(denied.headers.get('www-authenticate'),/resource_metadata/);}
+  const refresh=await http('/token',{grant_type:'refresh_token',client_id:registration.client_id,refresh_token:rotated.data.refresh_token});assert.equal(refresh.response.status,400);assert.equal(refresh.data.error,'invalid_grant');
+  assert.equal((await foreignAI.call('connection_status')).structuredContent.boardId,foreign.browser.boardId);assert.ok(!(await foreignAI.call('read_board')).isError,'another family of the same AI client remains usable');
+  const reopened=await createBrowserTransport(old.config);browsers.push(reopened);await reopened.ready();assert.deepEqual(await callBrowser(reopened,'/api/board'),beforeDrawing);assert.deepEqual(await callBrowser(reopened,'/api/chat'),beforeHistory);
+  const next=await makeBrowser(),nextTokens=await authorize(next),nextAI=await connect(nextTokens);assert.ok(!(await nextAI.call('connect_board',{code:next.prepared.pairing.code})).isError);assert.equal((await nextAI.call('connection_status')).structuredContent.boardId,next.browser.boardId);assert.ok(!(await nextAI.call('read_board')).isError,'new normal OAuth approval for the same client reaches the new board');
+  const replay=await nextAI.call('disconnect_board',expected);assert.equal(replay.isError,true);assert.equal((await nextAI.call('connection_status')).structuredContent.boardId,next.browser.boardId);assert.equal((await nextAI.call('connection_status')).structuredContent.connected,true);
+  assert.equal((await http('/revoke-bound',{token:nextTokens.access_token,grant:{familyId:crypto.randomUUID()}})).response.status,404,'private bound-revoke is not an external endpoint');
+ }finally{for(const browser of browsers)browser.close();for(const client of clients)await client.close().catch(()=>{});for(const socket of sockets)socket.close();await mf.dispose();}
+});

@@ -6,18 +6,19 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {chatStorageKey} from '../src/chat-format.mjs';
+import {claudeChannelSetup,codexChannelSetup} from '../shared/connection-instructions.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const require=createRequire(import.meta.url),requireWrangler=createRequire(realpathSync(new URL('../node_modules/wrangler/package.json',import.meta.url)));
 const {build}=requireWrangler('esbuild');
-const compiled=await build({stdin:{contents:"export {BoardChat} from './src/BoardChat.jsx'; export {DrawingToolbar} from './src/DrawingToolbar.jsx'; export {CloudConnectionSetup} from './src/CloudConnectionSetup.jsx'; export {PlanningPanel} from './src/PlanningPanel.jsx';",resolveDir:root,sourcefile:'mini-chat-ui-entry.mjs'},bundle:true,format:'esm',platform:'node',write:false,loader:{'.css':'empty'},define:{'import.meta.env.VITE_STORAGE_MODE':'"browser"'},plugins:[{name:'ui-render-dependencies',setup(builder){
+const compiled=await build({stdin:{contents:"export {BoardChat} from './src/BoardChat.jsx'; export {DrawingToolbar} from './src/DrawingToolbar.jsx'; export {CloudConnectionSetup,ClaudeChannelSteps,CodexChannelSteps} from './src/CloudConnectionSetup.jsx'; export {PlanningPanel} from './src/PlanningPanel.jsx';",resolveDir:root,sourcefile:'mini-chat-ui-entry.mjs'},bundle:true,format:'esm',platform:'node',write:false,loader:{'.css':'empty'},define:{'import.meta.env.VITE_STORAGE_MODE':'"browser"'},plugins:[{name:'ui-render-dependencies',setup(builder){
  builder.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}));
  // Toolbar editing behavior has separate integration tests. These exports are not
  // invoked by server rendering; the fixture isolates its accessibility controls.
  builder.onResolve({filter:/^@excalidraw\/excalidraw$/},()=>({path:'drawing-editor',namespace:'ui-render'}));
  builder.onLoad({filter:/.*/,namespace:'ui-render'},()=>({contents:'export const CaptureUpdateAction={}; export const restoreElements=value=>value; export const convertToExcalidrawElements=value=>value; export const exportToBlob=()=>{throw new Error("Canvas export is outside this UI fixture")};',loader:'js'}));
 }}]});
-const {BoardChat,DrawingToolbar,CloudConnectionSetup,PlanningPanel}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+const {BoardChat,DrawingToolbar,CloudConnectionSetup,ClaudeChannelSteps,CodexChannelSteps,PlanningPanel}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const render=(component,props)=>renderToStaticMarkup(React.createElement(component,props));
 const board={id:'11111111-1111-4111-8111-111111111111',revision:3,elements:[]};
 const view=connection=>({board,storageMode:'browser',chatConnected:Boolean(connection?.connected),connection,messages:[],selectedIds:[],online:true,planning:{project:{areas:[]}}});
@@ -84,9 +85,52 @@ test('connection choices put coding clients first and distinguish mini-chat avai
  const choices=html.match(/<div class="ai-choices">([\s\S]*?)<\/div>/)?.[1]??'';
  assert.deepEqual([...choices.matchAll(/<strong>([^<]+)<\/strong>/g)].map(match=>match[1]),['Codex','Claude Code','ChatGPT Work Cloud','Claude (web)','Other MCP client']);
  assert.equal([...choices.matchAll(/class="client-mini-badge /g)].length,5);
- assert.equal([...choices.matchAll(/Live mini chat · AI session must stay active/g)].length,4);assert.match(choices,/Automatic mini chat · native event setup/);
+ assert.equal([...choices.matchAll(/Live mini chat · AI session must stay active/g)].length,2);assert.match(choices,/Automatic mini chat · native event setup/);assert.match(choices,/Automatic mini chat · Channels plugin setup/);assert.match(choices,/Automatic mini chat · local plugin setup/);
  assert.match(choices,/Experimental/);assert.match(choices,/only fill a composer draft/);
  assert.doesNotMatch(choices,/Mini chat unavailable|Mini chat needs verification/);
+});
+
+test('Claude Code channel setup requires an authenticated live process and actual proof, while legacy remote grants stay finite',()=>{
+ const connection={id:'channel-connection',boardId:board.id,provider:'claude-code',permission:'read',connected:true,browserOnline:true,deliveryMode:'claude-channel',channelConnected:true,channelSessionId:'current-process',channelExpiresAt:Date.now()+60000,channelVerified:false,automaticMessages:false,automaticReviews:false},props={online:true,onClose:()=>{}};
+ const pending=render(CloudConnectionSetup,{...props,connection});assert.match(pending,/Claude Code · test reply needed/);assert.doesNotMatch(pending.match(/<button[^>]*>Test automatic reply<\/button>/)?.[0]??'',/disabled=/);assert.match(chatButton(bubble(connection)),/disabled=/);assert.match(pending,/an actual read and reply verifies delivery/);assert.match(pending,/Pair a restarted Claude Code session/);assert.match(pending,/earlier requests will not replay/);assert.doesNotMatch(pending,/Start live collaboration · experimental|Copy native setup instructions|Add custom connector/);
+ const verified={...connection,channelVerified:true,automaticMessages:true,automaticReviews:true};assert.doesNotMatch(chatButton(bubble(verified)),/disabled=/);assert.match(render(CloudConnectionSetup,{...props,connection:verified}),/automatic reply verified/);
+ const expired={...verified,channelExpiresAt:Date.now()-1};assert.match(chatButton(bubble(expired)),/disabled=/);assert.match(render(CloudConnectionSetup,{...props,connection:expired}).match(/<button[^>]*>Test automatic reply<\/button>/)?.[0]??'',/disabled=/);
+ const legacy=render(CloudConnectionSetup,{...props,connection:{...connection,deliveryMode:'manual',channelConnected:undefined}});assert.match(legacy,/Start live collaboration · experimental/);assert.match(legacy,/wait_for_board_request/);assert.doesNotMatch(legacy,/Pair a restarted Claude Code session|Test automatic reply/);
+});
+
+test('Claude Code install steps show only plugin pairing with honest runtime, preview and restart instructions',()=>{
+ const setup=claudeChannelSetup({connectionCode:`${board.id}.${'a'.repeat(64)}`}),html=render(ClaudeChannelSteps,{setup,expires:120,copied:'',copy:()=>{}});
+ assert.match(html,/Node.js 22 or newer/);assert.match(html,/Claude Code 2.1.275/);assert.match(html,/plugin install sharedboard --marketplace https:\/\/sharedboard.app\/claude-marketplace.json/);assert.match(html,/claude --resume --dangerously-load-development-channels/);assert.match(html,/must be enabled for each session/);assert.match(html,/does not bypass tool permissions/);assert.match(html,/sharedboard:connect/);assert.match(html,/Restarting Claude Code needs a fresh connection code/);assert.doesNotMatch(html,/MCP server URL|OAuth|Register automatically|wait_for_board_request|everything included/);
+ assert.match(html,/Pro\/Max, eligible Team\/Enterprise/);assert.match(html,/separately billed Claude Console API access/);assert.match(html,/Free Claude alone is insufficient/);assert.match(html,/organization must allow Channels/);
+ const expired=render(ClaudeChannelSteps,{setup,expires:0,copied:'',copy:()=>{}});assert.match(expired,/<button type="button" class="connect-primary" disabled="">Copy one-use connect command<\/button>/);
+});
+
+test('Codex plugin setup requires actual reply proof and uses its own supported install and connect path',()=>{
+ const connection={id:'codex-channel-connection',boardId:board.id,provider:'codex',permission:'read',connected:true,browserOnline:true,deliveryMode:'codex-channel',channelConnected:true,channelSessionId:'codex-process',channelExpiresAt:Date.now()+60000,channelVerified:false,automaticMessages:false,automaticReviews:false},props={online:true,onClose:()=>{}};
+ const pending=render(CloudConnectionSetup,{...props,connection});assert.match(pending,/Codex · test reply needed/);assert.match(pending,/Codex plugin guidance/);assert.match(pending,/Pair a restarted Codex session/);assert.doesNotMatch(pending,/dangerously-load-development-channels|Claude Code Channels guidance|Start live collaboration · experimental/);assert.match(chatButton(bubble(connection)),/disabled=/);assert.doesNotMatch(pending.match(/<button[^>]*>Test automatic reply<\/button>/)?.[0]??'',/disabled=/);
+ const verified={...connection,channelVerified:true,automaticMessages:true,automaticReviews:true};assert.doesNotMatch(chatButton(bubble(verified)),/disabled=/);assert.match(render(CloudConnectionSetup,{...props,connection:verified}),/Codex · automatic reply verified/);
+ const legacy=render(CloudConnectionSetup,{...props,connection:{...connection,deliveryMode:'manual'}});assert.match(legacy,/Start live collaboration · experimental/);assert.match(legacy,/has not been converted to a local plugin/);assert.doesNotMatch(legacy,/Pair a restarted Codex session/);
+ const setup=codexChannelSetup({connectionCode:`${board.id}.${'b'.repeat(64)}`}),steps=render(CodexChannelSteps,{setup,expires:120,copied:'',copy:()=>{}});assert.match(steps,/codex plugin marketplace add AndBarresi\/sharedboard-app/);assert.match(steps,/codex plugin add sharedboard@sharedboard/);assert.match(steps,/\$sharedboard-connect/);assert.match(steps,/actual native conversation ID from CODEX_THREAD_ID/);assert.match(steps,/queue receipt only acknowledges routing/);assert.match(steps,/Node.js 22 or newer/);assert.doesNotMatch(steps,/dangerously-load-development-channels|claude-marketplace.json|OAuth|codex:\/\//);
+ const expired=render(CodexChannelSteps,{setup,expires:0,copied:'',copy:()=>{}});assert.match(expired,/<button type="button" class="connect-primary" disabled="">Copy one-use connect prompt<\/button>/);
+});
+
+test('ChatGPT account and browser mismatch help remains conditional and preserves stored work',()=>{
+ const id='22222222-2222-4222-8222-222222222222',html=render(CloudConnectionSetup,{online:true,onClose:()=>{},connection:{id,boardId:board.id,provider:'chatgpt',connected:true,deliveryMode:'manual'}});assert.match(html,/If setup reports an existing connection or the wrong board/);assert.match(html,/connector account may still authorize the earlier board/);assert.match(html,/reconnect or re-authorize the SharedBoard connector account/);assert.match(html,/Chrome and the in-app browser have separate board storage/);assert.match(html,/Disconnecting a link keeps the board and saved history/);assert.match(html,/clearing site data or creating a new chat is not a repair step/);
+ assert.match(html,/even if the old board tab is unavailable/);assert.match(html,/Copy AI disconnect instructions/);assert.match(html,/Native tasks are not deleted/);assert.match(html,/normal provider reauthorization and fresh pairing are still required/);
+ const prompt=html.match(/<textarea aria-label="Exact SharedBoard link disconnect instructions"[^>]*>([\s\S]*?)<\/textarea>/)?.[1]??'';assert.ok(prompt.includes(board.id));assert.ok(prompt.includes(id));assert.match(prompt,/actual boardId and id must exactly match/);assert.match(prompt,/disconnect_board/);
+ const incomplete=render(CloudConnectionSetup,{online:true,onClose:()=>{},connection:{id:'unknown',provider:'chatgpt',connected:true,deliveryMode:'manual'}});assert.doesNotMatch(incomplete,/Copy AI disconnect instructions/,'missing trusted IDs cannot create a release prompt');
+ assert.doesNotMatch(render(CloudConnectionSetup,{online:true,onClose:()=>{},connection:{id:'codex-board',provider:'codex',connected:true,deliveryMode:'manual'}}),/Replace an existing ChatGPT board or conversation link/);
+});
+
+test('Claude channel keeps the next draft and same-process proof retry while refusing old-process replay',()=>{
+ const connection={id:'channel-connection',boardId:board.id,provider:'claude-code',connected:true,browserOnline:true,deliveryMode:'claude-channel',channelConnected:true,channelSessionId:'current-process',channelExpiresAt:Date.now()+60000,channelVerified:true,automaticMessages:true,automaticReviews:true},message={id:'channel-first',connectionId:connection.id,boardId:board.id,boardRevision:3,intent:'discuss',text:'First channel question',deliveryMode:'claude-channel',channelSessionId:connection.channelSessionId,delivery:'queued',receipt:'ch_chat_channel-first'};
+ const originalStorage=globalThis.sessionStorage;globalThis.sessionStorage={getItem:key=>key===chatStorageKey(board.id,'draft')?'Keep this next channel draft':null};
+ try{
+  const props={open:true,setOpen:()=>{},view:{...view(connection),messages:[message]}},blocked=render(BoardChat,props);assert.match(blocked,/Waiting for the previous reply/);assert.match(blocked,/aria-label="Message the connected model"[^>]*>Keep this next channel draft<\/textarea>/);assert.match(blocked,/<button type="submit" disabled=""/);assert.match(blocked,/Accepted by the Claude Code channel/);
+  const answered=render(BoardChat,{...props,view:{...props.view,messages:[{...message,status:'answered',reply:'The actual channel answer'}]}});assert.match(answered,/Keep this next channel draft/);assert.match(answered,/The actual channel answer/);assert.doesNotMatch(answered,/<button type="submit" disabled=/);
+  const probing={...connection,channelVerified:false,automaticMessages:false,automaticReviews:false},probe={...message,channelTest:true,receipt:undefined,delivery:'uncertain'},pending=render(BoardChat,{...props,view:{...view(probing),messages:[probe]}});assert.match(pending,/I checked my chat · retry/);assert.doesNotMatch(pending,/<form/);
+  const old=render(BoardChat,{...props,view:{...view(probing),messages:[{...probe,channelSessionId:'earlier-process'}]}});assert.doesNotMatch(old,/I checked my chat · retry|Retry delivery/);assert.match(old,/First channel question/);
+ }finally{if(originalStorage===undefined)delete globalThis.sessionStorage;else globalThis.sessionStorage=originalStorage;}
 });
 
 test('connection status explains unavailable mini chat without a diagnostic-panel link loop',()=>{

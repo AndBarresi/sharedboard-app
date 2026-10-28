@@ -8,7 +8,7 @@ const write=(name,value)=>writeFileSync(path.join(root,name),`${JSON.stringify(v
 function fingerprint(){
   const hash=createHash('sha256');
   const walk=directory=>{let items;try{items=readdirSync(path.join(root,directory),{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return;throw error;}for(const item of items.sort((a,b)=>a.name.localeCompare(b.name))){if(['.wrangler','node_modules'].includes(item.name))continue;const name=`${directory}/${item.name}`;if(item.isDirectory())walk(name);else{hash.update(name);hash.update(readFileSync(path.join(root,name)));}}};
-  for(const directory of ['src','server','shared','scripts','packaging','hosting','.github','bridge','cloudflare'])walk(directory);
+  for(const directory of ['src','server','shared','scripts','packaging','hosting','.github','.agents','bridge','cloudflare','plugins'])walk(directory);
   for(const name of ['index.html','vite.config.mjs','pnpm-lock.yaml','pnpm-workspace.yaml','.node-version','.gitattributes','LICENSE','AUTHORS.md']){try{hash.update(name);hash.update(readFileSync(path.join(root,name)));}catch(error){if(error.code!=='ENOENT')throw error;}}
   const pkg=read('package.json');hash.update(JSON.stringify({scripts:pkg.scripts,dependencies:pkg.dependencies,devDependencies:pkg.devDependencies}));return hash.digest('hex');
 }
@@ -25,5 +25,7 @@ if(action==='check'){
     for(let i=0;i<details.length;i+=2){const key=details[i]==='--added'?'added':details[i]==='--fixed'?'fixed':null;if(!key||!details[i+1]?.trim())throw new Error('Every change must use --added or --fixed followed by its description.');entry[key].push(details[i+1]);}
     if(!entry.added.length&&!entry.fixed.length)throw new Error('Describe at least one change.');releases.version=entry.version;releases.entries.unshift(entry);
   }
-  const pkg=read('package.json');pkg.version=releases.version;write('package.json',pkg);releases.sourceHash=fingerprint();write('releases.json',releases);writeFileSync(path.join(root,'CHANGELOG.md'),markdown(releases));console.log(`Recorded SharedBoard.app ${releases.version}.`);
+  const pkg=read('package.json');pkg.version=releases.version;write('package.json',pkg);
+  for(const name of ['plugins/claude-code/package.json','plugins/claude-code/.claude-plugin/plugin.json','plugins/codex/package.json','plugins/codex/plugin.json']){try{const manifest=read(name);manifest.version=releases.version;write(name,manifest);}catch(error){if(error.code!=='ENOENT')throw error;}}
+  releases.sourceHash=fingerprint();write('releases.json',releases);writeFileSync(path.join(root,'CHANGELOG.md'),markdown(releases));console.log(`Recorded SharedBoard.app ${releases.version}.`);
 }else throw new Error('Use check or record. stamp is reserved for initial version setup.');

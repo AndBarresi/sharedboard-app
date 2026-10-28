@@ -1,0 +1,10 @@
+{
+  "name": "sharedboard",
+  "interface": {"displayName": "SharedBoard.app"},
+  "plugins": [{
+    "name": "sharedboard",
+    "source": {"source": "git-subdir", "url": "https://github.com/AndBarresi/sharedboard-app.git", "path": "./plugin-dist/codex", "ref": "codex/plugin-dist"},
+    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+    "category": "Productivity"
+  }]
+}

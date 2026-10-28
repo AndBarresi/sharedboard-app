@@ -1,6 +1,26 @@
 {
-  "version": "0.11.2",
+  "version": "0.12.1",
   "entries": [
+    {
+      "version": "0.12.1",
+      "title": "Clarify Claude Code account requirements",
+      "added": [],
+      "fixed": [
+        "Explain the eligible Claude Code account and separate Console API billing before plugin setup; a Free Claude account alone is insufficient."
+      ]
+    },
+    {
+      "version": "0.12.0",
+      "title": "Local AI plugins and AI-side connection release",
+      "added": [
+        "Preview plugins connect a running Codex conversation or Claude Code session through Cloudflare, with browser-owned boards and real reply verification before normal automatic chat is enabled.",
+        "Install Claude Code from the website-hosted marketplace; Codex uses its supported plugin marketplace and native existing-chat queue.",
+        "The AI can release its exact stale remote connection without locating the old browser, preserving boards and history before normal authorization for a new board."
+      ],
+      "fixed": [
+        "Scope local delivery, pending replies, reconnects and uncertain outcomes to the exact board and plugin process without replaying work or changing model permissions."
+      ]
+    },
     {
       "version": "0.11.2",
       "title": "Recover browser connections and inspect immediate sending",
@@ -380,5 +400,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "2cac1d00230d2a5c2246714798e1047d4d7847240c4eea341b9e5c81a0610066"
+  "sourceHash": "02c56aaf1c2d6667ee352ecb01e6c93a6970609f8db97617de922f6ae0dc633a"
 }

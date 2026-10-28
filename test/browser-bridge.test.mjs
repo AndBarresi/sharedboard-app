@@ -32,7 +32,7 @@ class FakeBridge{
   if(path==='/browser/pair'){const sessionId=crypto.randomUUID();this.token=`${sessionId}.private-browser-token`;this.connection={connected:false,id:sessionId,boardId:body.boardId,provider:body.provider,permission:body.permission};return this.response({browserToken:this.token,sessionId,connection:this.connection,pairing:{code:'fixture-code',expiresAt:new Date(Date.now()+60000).toISOString()},setup:{prompt:'Fixture pairing prompt'}});}
   assert.equal(options.headers['x-sharedboard-browser'],this.token);
   if(path==='/browser/status')return this.response({connection:this.connection});
-  if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`evt_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
+  if(path==='/browser/notify'){this.notifyCount++;await this.onNotify?.(body);const key=`${this.connection.id}:${body.kind}:${body.id}`;if(!this.receipts.has(key))this.receipts.set(key,{delivery:'queued',receipt:`${['claude-channel','codex-channel'].includes(this.connection.deliveryMode)?'ch':'evt'}_${body.kind}_${body.id}`});if(this.loseReceipt){this.loseReceipt=false;throw new Error('Receipt response lost');}return this.response(this.receipts.get(key));}
   if(path==='/browser/handoff')return this.failHandoff?this.response({error:'Fixture handoff unavailable'},503):this.response({delivery:'manual',handoffPrompt:`Read captured ${body.kind} ${body.id} using the connected SharedBoard tools.`,connection:this.connection});
   if(path==='/browser/live/stop'){if(body.sessionId!==this.connection.liveSession?.id)return this.response({error:'The live session changed.',code:'LIVE_SESSION_CHANGED'},409);this.connection={...this.connection,automaticMessages:false,automaticReviews:false,messageExpiresAt:null,reviewExpiresAt:null,liveSession:{...this.connection.liveSession,status:'stopped',waitExpiresAt:null}};return this.response({connection:this.connection});}
   if(path==='/browser/disconnect'){this.connection={...this.connection,connected:false};return this.response({connection:this.connection});}
@@ -174,6 +174,30 @@ test('native chat reserves one outstanding reply atomically across tabs before d
  }finally{release?.();t.close();second?.close();reopened?.close();}
 });
 
+test('local channels bootstrap only an explicit Discuss probe and require real proof plus exact process for later work',async()=>{
+ for(const [provider,deliveryMode] of [['claude-code','claude-channel'],['codex','codex-channel']]){
+ const {t,bridge}=await fixture('read');try{
+  const processId=crypto.randomUUID();Object.assign(bridge.connection,{provider,deliveryMode,channelConnected:true,channelVerified:false,channelSessionId:processId,channelExpiresAt:new Date(Date.now()+60000).toISOString(),automaticMessages:false,automaticReviews:false});await t.bridgeStatus();
+  const original=await call(t,'/api/board'),normal=await capture(t,{text:'Normal discussion is still locked',intent:'discuss'});
+  await assert.rejects(call(t,'/api/chat',normal),error=>error.code==='DIRECT_CHAT_NOT_LINKED');await assert.rejects(call(t,'/api/reviews',await capture(t)),error=>error.code==='DIRECT_CHAT_NOT_LINKED');
+  await assert.rejects(call(t,'/api/chat',await capture(t,{text:'Do not bootstrap work',intent:'work',channelTest:true})),error=>error.code==='CHANNEL_TEST_UNAVAILABLE');assert.equal((await call(t,'/api/chat')).messages.length,0);assert.equal(bridge.notifyCount,0);
+  const probe=await capture(t,{text:'Connection check only: read and reply without drawing changes.',intent:'discuss',automaticRequired:true,channelTest:true});
+  const sent=(await call(t,'/api/chat',probe)).messages[0];assert.equal(sent.receipt,`ch_chat_${probe.id}`);assert.equal(sent.deliveryMode,deliveryMode);assert.equal(sent.channelSessionId,processId);assert.equal(sent.channelTest,true);
+  const notification=bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').at(-1);assert.deepEqual(JSON.parse(notification.body),{kind:'chat',id:probe.id,test:true});assert.equal(bridge.notifyCount,1);
+  await assert.rejects(call(t,'/api/chat',await capture(t,{text:'A second test must wait for the actual reply',intent:'discuss',channelTest:true})),error=>error.code==='CHAT_REPLY_PENDING');
+  await bridge.command('read_chat_message',{id:probe.id});assert.equal((await call(t,'/api/connection')).automaticMessages,false,'reading a probe is not delivery proof');
+  await bridge.command('reply_to_chat_message',{id:probe.id,text:'The isolated SDK read and returned this actual captured reply.'});assert.equal((await call(t,'/api/chat')).messages[0].status,'answered');assert.equal((await call(t,'/api/connection')).automaticMessages,false,'the browser must wait for backend proof rather than infer it from unrelated local metadata');
+  Object.assign(bridge.connection,{channelVerified:true,automaticMessages:true,automaticReviews:true});await t.bridgeStatus();
+  const next=await capture(t,{text:'The next normal question',intent:'discuss',automaticRequired:true}),nextSent=(await call(t,'/api/chat',next)).messages.at(-1);assert.equal(nextSent.receipt,`ch_chat_${next.id}`);assert.equal(nextSent.channelTest,undefined);assert.equal(JSON.parse(bridge.requests.filter(request=>new URL(request.url).pathname==='/browser/notify').at(-1).body).test,undefined,'normal sends never acquire bootstrap authorization');
+  await call(t,'/api/reviews',await capture(t,{automaticRequired:true}));assert.deepEqual(await call(t,'/api/board'),original,'tests and Discuss never edit the board');
+  const notifyCount=bridge.notifyCount;bridge.connection.channelConnected=false;await t.bridgeStatus();await assert.rejects(call(t,'/api/reviews',await capture(t,{automaticRequired:true})),error=>error.code==='DIRECT_CHAT_NOT_LINKED');assert.equal(bridge.notifyCount,notifyCount);
+  bridge.connection.channelConnected=true;await t.bridgeStatus();await call(t,'/api/chat/retry',{id:next.id});assert.equal(bridge.notifyCount,notifyCount,'a current-process reconnect preserves the queued receipt without replay');
+  bridge.connection.channelSessionId=crypto.randomUUID();bridge.connection.channelVerified=false;bridge.connection.automaticMessages=false;bridge.connection.automaticReviews=false;await t.bridgeStatus();
+  await assert.rejects(call(t,'/api/chat/retry',{id:next.id}),error=>error.code==='CHANNEL_REQUEST_SESSION_CHANGED');assert.equal((await call(t,'/api/chat')).messages.at(-1).id,next.id);assert.equal((await call(t,'/api/chat')).messages.at(-1).channelSessionId,processId);
+ }finally{t.close();}
+ }
+});
+
 test('ambiguous delivery retains request ID, uses idempotent queue receipt and never silently retargets another connection',async()=>{
  const {t,bridge}=await fixture();try{
   const input=await capture(t,{text:'Discuss the board',intent:'discuss'});bridge.loseReceipt=true;let out=await call(t,'/api/chat',input);assert.equal(out.messages[0].delivery,'uncertain');assert.equal(out.messages[0].status,'waiting');assert.equal(bridge.receipts.size,1);
@@ -312,6 +336,7 @@ test('Claude Code pairing uses the shared provider registry and invalid choices 
   const saved=state,loaded=loads;
   for(const provider of ['unknown','__proto__',null,{},['codex']])await assert.rejects(bridge.pair({provider,permission:'edit'},'Code planning board'),/Choose an AI client/);
   await assert.rejects(bridge.pair({provider:'claude-code',permission:'owner'},'Code planning board'),/Choose an AI client/);
+  for(const [provider,mode] of [['codex','claude-channel'],['claude-code','codex-channel'],['chatgpt','codex-channel'],['codex','unknown']])await assert.rejects(bridge.pair({provider,permission:'read',mode},'Code planning board'),error=>error.code==='INVALID_CONNECTION_MODE');
   assert.deepEqual(requests,['/browser/pair']);assert.equal(saves.length,1);assert.equal(state,saved);assert.equal(loads,loaded,'invalid choices must not even load or disconnect the existing grant');
  }finally{bridge.close();}
 });

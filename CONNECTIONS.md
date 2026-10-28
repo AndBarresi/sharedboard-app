@@ -1,11 +1,11 @@
 # Connect your existing AI conversation
 
-Start at [sharedboard.app](https://sharedboard.app). The current hosted MCP flow uses a Cloudflare relay without a standalone SharedBoard application. A Claude Code Channels plugin is approved for development as a separate, AI-app-managed connection; it is not implemented or verified yet.
+Start at [sharedboard.app](https://sharedboard.app). All routes use its hosted Cloudflare relay and browser-saved boards, without a standalone SharedBoard installer or home-network server. **ChatGPT Work Cloud** is the recommended download-free route. **Codex** and **Claude Code** use optional plugins installed inside the AI app, with the prerequisites below. Their implementation and isolated tests are complete; actual installed-client and Windows/Mac acceptance are pending.
 
 ## Set up from the board
 
 1. Open the board you want to use and choose **Connect an AI**.
-2. For automatic website messaging, select **ChatGPT Work Cloud** and choose **Read only** or **Read and edit when I request changes**. Both permissions allow inspection and replies; drawing edits require the second option. Other supported choices are **Codex**, **Claude Code**, **Claude (web)**, and **Other MCP client**, with the experimental boundary below.
+2. For the download-free automatic route, select **ChatGPT Work Cloud** and choose **Read only** or **Read and edit when I request changes**. Both permissions allow inspection and replies; drawing edits require the second option. The **Codex** and **Claude Code** plugin choices have separate setup instructions below. **Claude (web)** and **Other MCP client** retain experimental remote-client options.
 3. Choose **Prepare connection**. Add the generated MCP server URL in ChatGPT's plugin/connector settings, authenticate with OAuth, and approve access to the intended board.
 4. Enable SharedBoard in the existing ChatGPT conversation with **Work and Cloud selected**. Paste the website's **pairing & native setup instructions** once. They pair, read, and confirm the board, then create or update its two native event tasks in order.
 5. Return to SharedBoard and keep its board tab open. Send a Discuss question or choose **Test with a reply**, then try **Ask AI to look**. Success means an actual mini-chat answer and review completion appear on the board without another Send click in ChatGPT.
@@ -14,7 +14,48 @@ Settings names and remote-MCP availability vary between AI apps and plans. The p
 
 For **Claude**, if connector setup asks you to choose a registration method, select **Register automatically**. SharedBoard supports dynamic client registration and PKCE; a client secret is not required.
 
-For **Claude Code**, the website-led setup uses a connector added at claude.ai, then inherited by Claude Code signed in with that same claude.ai subscription account. API-key and third-party-provider sessions do not inherit those connectors. Check that SharedBoard appears in the intended session's connector settings before using the board pairing instructions. See [Claude Code's connector guidance](https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claudeai).
+Existing **legacy remote Claude Code** grants can use a connector inherited from claude.ai with the same subscription account. API-key and third-party-provider sessions do not inherit those connectors. That remote route is separate from the new local plugin and does not establish automatic Channels delivery. See [Claude Code's connector guidance](https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claudeai). Existing remote Codex and Claude Code grants keep their original mode until the user explicitly disconnects and prepares a new connection.
+
+## Codex plugin setup
+
+1. Choose **Connect an AI → Codex**, select drawing access, and prepare the connection. New website setups use the local plugin route.
+2. Use **Node.js 22 or newer** and an installed Codex CLI that supports the official `queue` command. Add the marketplace and plugin with the website's commands:
+
+   ```sh
+   codex plugin marketplace add AndBarresi/sharedboard-app
+   codex plugin add sharedboard@sharedboard
+   ```
+
+3. Enable SharedBoard in the existing Codex conversation. If the app requires a restart to load its plugin, return to that same conversation afterward.
+4. Copy the website's one-use pairing prompt into that conversation. It requires the **actual `CODEX_THREAD_ID` from that conversation's environment**, then reads and confirms the exact board revision. A guessed ID, conversation title, or another chat's ID is not accepted. The plugin's connect skill is `$sharedboard-connect`; use the complete generated prompt rather than inventing an ID.
+5. On SharedBoard, choose **Test automatic reply**. Pairing and a queue receipt do not enable normal mini chat. The captured test must actually be read and answered through the board reply tool before normal Send and board reviews become available.
+
+The plugin runs inside Codex and connects outward to the hosted relay. It uses the [official queue command](https://learn.chatgpt.com/docs/developer-commands#codex-queue) for that exact existing native conversation, without a local HTTP service, replacement model, or permission override. Keep Codex, its paired plugin process, and the board open. An actual CLI queue receipt has been accepted; that receipt is not proof that the model read or answered. Installed-plugin end-to-end and Windows/Mac acceptance remain pending.
+
+## Claude Code plugin setup
+
+1. Choose **Connect an AI → Claude Code**, select drawing access, and prepare the connection. New setups use the Channels plugin rather than a claude.ai remote connector.
+2. Use **Claude Code 2.1.275 or newer** and **Node.js 22 or newer**, with access through **Pro/Max, an eligible Team/Enterprise seat, or separately billed Claude Console API access**. Free Claude alone is insufficient, and your organization must allow Channels. These are [Claude Code's account requirements](https://code.claude.com/docs/en/authentication#log-in-to-claude-code), separate from SharedBoard. In Claude Code, run the website's install command once:
+
+   ```text
+   /plugin install sharedboard --marketplace https://sharedboard.app/claude-marketplace.json
+   ```
+
+   Older installers can add the marketplace first with `/plugin marketplace add https://sharedboard.app/claude-marketplace.json`, then install `/plugin install sharedboard@sharedboard`. Update Claude Code if Channels are unavailable.
+3. Exit Claude Code, resume the intended conversation with the following command, and accept the preview-channel confirmation:
+
+   ```sh
+   claude --resume --dangerously-load-development-channels plugin:sharedboard@sharedboard
+   ```
+
+4. Send the website's one-use `/sharedboard:connect` command in that conversation. It pairs the board, reads it, and confirms the exact revision.
+5. Choose **Test automatic reply** on SharedBoard. Normal mini chat and reviews stay unavailable until the captured test is read and an actual reply returns.
+
+Channels is a research preview and must be enabled for each launch; installing the plugin alone does not start incoming delivery. The development-channel flag enables this named plugin and does not bypass tool permissions. Use supported Anthropic authentication; third-party cloud providers are unsupported, and organization policy can block Channels. Keep this Claude Code session and the board open. The plugin connects outward without a localhost web server. Its implementation and isolated protocol tests pass, but actual installed-client, Windows/Mac, and runtime-bundle acceptance are not complete. This route does not cover regular Claude web chat or separate cloud routines. See [Claude Code Channels](https://code.claude.com/docs/en/channels) and [its reference](https://code.claude.com/docs/en/channels-reference).
+
+### Plugin reconnects and process restarts
+
+Both local plugins keep their scoped credential only in the running process. A same-process network reconnect can resume it. Restarting the AI app or its plugin process requires a fresh connection code: use the website's **Pair a restarted session** action, which disconnects the old link and prepares the same drawing permission. Drawing and saved history stay in the browser. Old captured requests keep their original connection and process; they are not replayed or moved to the replacement process. There is no bundled Node runtime claim; Node.js must already be available.
 
 ## ChatGPT native automatic delivery
 
@@ -56,18 +97,20 @@ For agents: call **`wait_for_board_request`** without `sessionId` only on the fi
 
 Remote MCP board tools let the assistant inspect the drawing or make a particular authorized change from its conversation. The board’s drawing and notes provide context for that request. Automatic website-originated turns require the separate verified delivery route.
 
-**Talk it through**, **Ask AI to look**, the understanding check, and board-originated connection tests require either an actual waiting Live collaboration session or a separately verified incoming-event subscription. New sends remain unavailable while neither route is active; they do not fall back to copying messages or filling another app’s composer. Saved requests and actual replies remain available, and the assistant can still use the board tools from its own conversation.
+**Talk it through**, **Ask AI to look**, and the understanding check require a current verified local plugin route, an actual waiting Live collaboration session, or a separately verified incoming-event subscription. A local plugin's explicit Discuss test can establish its initial real read/reply proof; normal sends require that proof and current unexpired authenticated presence. New sends remain unavailable without an active route; they do not fall back to copying messages or filling another app’s composer. Saved requests and actual replies remain available, and the assistant can still use the board tools from its own conversation.
 
 | Capability | Current boundary |
 | --- | --- |
 | Remote MCP board tools | Read the board, return actual replies to saved requests, and make authorized edits when granted. |
 | ChatGPT Work Cloud native events | Recommended website-only route. Actual replies, reviews, subscription renewal, and a leave/return round trip have passed in one account. Fresh-account setup, actual OS sleep, multiday renewal, and broader acceptance remain open. |
+| Codex local plugin | Implemented outbound relay connection and official native-thread queue delivery. Node.js 22+ and queue-capable Codex CLI required. Isolated tests pass; actual installed-plugin read/reply and platform acceptance are pending. |
+| Claude Code Channels plugin | Implemented outbound relay connection. Node.js 22+, per-launch preview permission, and supported account policy required. Isolated tests pass; actual installed-plugin read/reply and platform acceptance are pending. |
 | Experimental Live collaboration | Other compatible clients can use a finite, active AI turn calling `wait_for_board_request`. Actual waiting gates new sends; reliable provider-loop acceptance remains incomplete. |
 | Experimental MCP Apps panel | Diagnostic WIP. A rendered panel or text-message capability flag does not establish automatic sending. |
 
 A native Claude test rendered the experimental panel, but **`ui/message`** only populated the composer. The user still needed to press Send; the panel acknowledgement did not establish automatic model execution or a reply. This matches the [composer-behavior explanation in Anthropic's MCP issue tracker](https://github.com/anthropics/claude-ai-mcp/issues/33#issuecomment-3817124671). When a host advertises the OpenAI immediate-send extension, the panel offers one deliberate, fixed connection-test message to that existing conversation. It never links or forwards board requests, enables mini chat, or retries automatically. The Codex diagnostic has not passed an actual delivery test. This panel is separate from Live collaboration setup.
 
-Ordinary remote MCP tools in **local Codex** or **Claude Code** do not wake an idle session by themselves. The approved Claude direction is a [Claude Code Channels](https://code.claude.com/docs/en/channels-reference) plugin installed and managed inside Claude Code. It requires a local stdio process, but the planned connection goes outward to SharedBoard's relay without a standalone bridge installer or home-network server. Native plugin setup and launch steps may be required. This route is not implemented or client-tested yet; regular Claude web chat is not covered. Separate cloud runs, which create new sessions, are not the chosen path. Cursor, VS Code, Codex, and Claude variants must not be advertised as supporting the full mini-chat workflow based only on remote MCP access. Use **Other MCP client** where appropriate; see [Cursor’s MCP support](https://cursor.com/docs/mcp) and [VS Code’s setup guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
+Ordinary remote MCP tools in **local Codex** or **Claude Code** do not wake an idle session by themselves; their managed plugins add the separate incoming route. Cursor, VS Code, Codex, and Claude variants must not be advertised as supporting the full mini-chat workflow based only on remote MCP access. Use **Other MCP client** where appropriate; see [Cursor’s MCP support](https://cursor.com/docs/mcp) and [VS Code’s setup guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
 
 Native event controls are host capabilities, not ordinary board tools. Their absence from a regular tool catalog is not an availability test. The observed OpenAI callback origin is explicitly approved and its signed verification has passed. Connection diagnostics expose only sanitized activation state and callback origin, never private callback URLs or signing keys. Pairing, task creation, callback acknowledgement, capture reading, and actual reply delivery remain separate states.
 
@@ -83,6 +126,14 @@ Native event controls are host capabilities, not ordinary board tools. Their abs
 ## Keep work and connections separate
 
 Each board has its own connection. Switching boards does not retarget existing grants or captured requests. Disconnecting revokes the link and preserves the board and saved messages. Reconnect through the page to change access or choose another conversation.
+
+### Replace an existing remote link
+
+If a ChatGPT or other remote connector is already authorized to a different board, a new pairing code does not silently change that authorization. The website's fresh-code instructions first ask the AI to read `connection_status`. With your explicit replacement instruction, it can release only that observed old link using `disconnect_board` with the exact status `boardId` and connection `id`, even if its old browser tab is unavailable. The old browser drawing and history remain intact. Stale or mismatched IDs release nothing.
+
+The release revokes that grant's authorization and delivery routes. Reconnect or reauthorize the provider's connector normally, approve the intended board in the browser profile where it is saved, then pair using the fresh code. It does not retarget an old token, delete unrelated grants or host tasks, create another conversation, or clear browser data. If the same board is being moved to another conversation, use the website's explicit replacement guidance rather than assuming a callback or account error authorizes release. Existing post-pair task instructions without a fresh code stop on a wrong board. The exact scoped offline release and reauthorization path has passed protocol tests; it has not yet been accepted against an actual user grant.
+
+Chrome and the in-app browser have independent board storage, as do separate profiles. Approve the intended board in its owning browser profile. Do not clear storage to fix a connection mismatch. The remote release tool is separate from the local plugin's restart/re-pair action.
 
 Deleting a board from **Projects & boards** requires confirmation and revokes its connection before removing its local content. Deleting a project removes all its boards; the confirmation shows their count. Export any backups you want first, because deletion also removes saved requests, replies, and recovery history. Remaining boards keep their own connections. If the current board is deleted, the app offers a remaining board or creates a blank one; another open tab does not silently switch its AI connection.
 

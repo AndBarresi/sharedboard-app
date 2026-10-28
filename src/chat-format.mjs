@@ -1,3 +1,4 @@
+import {isLocalChannelMode} from '../shared/client-profiles.mjs';
 // A deliberately small Markdown grammar. Content is rendered as React text;
 // HTML, image loading, and executable URL schemes are never enabled.
 export function safeChatHref(value){
@@ -67,15 +68,17 @@ export function isAcceptedChatMessage(message){
 export const CHAT_REPLY_PENDING_MESSAGE='Waiting for the previous reply. Your next draft is kept here.';
 export function nativeChatAwaitingReply(messages,connection,exceptId){
   if(!connection?.id)return null;
-  return (messages??[]).find(message=>message&&message.id!==exceptId&&message.connectionId===connection.id&&(!connection.boardId||!message.boardId||message.boardId===connection.boardId)&&!(typeof message.reply==='string'&&message.reply.trim())&&(
-    typeof message.id==='string'&&message.receipt===`evt_chat_${message.id}`||
-    message.deliveryMode==='events'&&['pending','uncertain'].includes(message.delivery)
-  ))??null;
+  return (messages??[]).find(message=>{
+    if(!message||message.id===exceptId||message.connectionId!==connection.id||connection.boardId&&message.boardId&&message.boardId!==connection.boardId||typeof message.reply==='string'&&message.reply.trim())return false;
+    const pending=['pending','uncertain'].includes(message.delivery),eventReceipt=typeof message.id==='string'&&message.receipt===`evt_chat_${message.id}`,channelReceipt=typeof message.id==='string'&&message.receipt===`ch_chat_${message.id}`;
+    const sameChannel=typeof message.channelSessionId==='string'&&Boolean(message.channelSessionId)&&message.channelSessionId===connection.channelSessionId;
+    return eventReceipt||message.deliveryMode==='events'&&pending||sameChannel&&(channelReceipt||(isLocalChannelMode(message.deliveryMode)&&pending));
+  })??null;
 }
 export function shouldResetChatCapture(error){
   // An ambiguous delivery may already be running. Preserve its original ID and
   // attachment even when retry reports a conflict after events expire.
-  return !error?.deliveryUnknown&&!String(error?.code??'').startsWith('LIVE_')&&!['CHAT_REPLY_PENDING','DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED','DIRECT_DELIVERY_UNAVAILABLE','PANEL_DIRECT_DELIVERY_UNAVAILABLE'].includes(error?.code)&&[400,409,413].includes(error?.status);
+  return !error?.deliveryUnknown&&!['LIVE_','CHANNEL_'].some(prefix=>String(error?.code??'').startsWith(prefix))&&!['CHAT_REPLY_PENDING','DELIVERY_UNCERTAIN','DIRECT_CHAT_NOT_LINKED','DIRECT_DELIVERY_UNAVAILABLE','PANEL_DIRECT_DELIVERY_UNAVAILABLE'].includes(error?.code)&&[400,409,413].includes(error?.status);
 }
 export function isPreparedContextStale(context,board,planning){
   if(!context)return false;

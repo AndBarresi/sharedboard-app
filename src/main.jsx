@@ -21,7 +21,7 @@ import {ProjectTransfer} from './ProjectTransfer.jsx';
 import {WorkspacePicker} from './WorkspacePicker.jsx';
 import {ObjectNavigator} from './ObjectNavigator.jsx';
 import {Modal} from './Modal.jsx';
-import {miniChatState} from '../shared/client-profiles.mjs';
+import {miniChatState,channelTestAvailable} from '../shared/client-profiles.mjs';
 import {CREATOR_NAME,CREATOR_URL} from '../shared/brand.mjs';
 import './workspace-upgrade.css';
 import './browser-mode-ui.css';
@@ -152,9 +152,10 @@ function App() {
     finally { setRequestingReview(false); }
   };
   const testConnection=async()=>{
-    if(browserOnly&&!miniChat.automatic)throw new Error(miniChat.reason||'Automatic delivery is unavailable for this connection.');
+    const channelTest=browserOnly&&channelTestAvailable(view.connection);
+    if(browserOnly&&!miniChat.automatic&&!channelTest)throw new Error(miniChat.reason||'Automatic delivery is unavailable for this connection.');
     const id=crypto.randomUUID();
-    const result=await sync.current.sendChat({id,intent:'discuss',text:'Connection check only. Please read the live board and confirm its exact revision with confirm_connection, then reply to this mini chat to acknowledge that the connection works. No drawing changes are requested.'});
+    const result=await sync.current.sendChat({id,intent:'discuss',...(channelTest?{channelTest:true}:{}),text:'Connection check only. Please read this captured message, read the live board and confirm its exact revision with confirm_connection, then post your complete actual reply with reply_to_chat_message for this request ID. No drawing changes are requested.'});
     setChatVisibility(true,{saved:true});
     const message=result.messages.find(item=>item.id===id);
     if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'The test is saved, but direct delivery was not confirmed. Check the linked chat before retrying.');

@@ -49,8 +49,8 @@ export function installPagesFiles(directory=webDirectory){
   writeFileSync(path.join(directory,'_headers'),`/*\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Referrer-Policy: no-referrer\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Resource-Policy: same-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()\n  Content-Security-Policy: ${policy}\n`);
 }
 
-export function collectBrowserLicenses(directory){
-  const pkg=read('package.json'),seen=new Set(),queue=Object.keys(pkg.dependencies).map(name=>({name,from:projectRoot,optional:false})),packages=[];
+export function collectBrowserLicenses(directory,{dependencyNames,distribution='browser build'}={}){
+  const pkg=read('package.json'),seen=new Set(),queue=(dependencyNames??Object.keys(pkg.dependencies)).map(name=>({name,from:projectRoot,optional:false})),packages=[];
   while(queue.length){
     const requested=queue.shift(),lookup=createRequire(path.join(requested.from,'package.json')).resolve.paths(requested.name)??[];
     const manifestFile=lookup.map(directory=>path.join(directory,...requested.name.split('/'),'package.json')).find(file=>existsSync(file));
@@ -74,7 +74,7 @@ export function collectBrowserLicenses(directory){
     inventory.push({name,version,license:license??null,files:files.map(file=>`packages/${id}/${file}`),supplementalFiles:supplements.flatMap(s=>s.files.map(file=>`supplemental/${file}`))});
   }
   writeFileSync(path.join(licenses,'inventory.json'),JSON.stringify({packages:inventory,fonts:supplemental.fonts},null,2)+'\n');
-  writeFileSync(path.join(directory,'THIRD_PARTY_NOTICES.md'),'# SharedBoard.app browser build notices\n\nSharedBoard.app is created by Andrew Barresi and released under the MIT license; see LICENSE and AUTHORS.md.\n\nThis static build incorporates the open-source Excalidraw editor, React, Zod and their dependencies. The licenses/ directory contains license and copyright texts collected from the project production dependency closure, including supplemental notices and exact font licenses. Some notices describe components used only by the separate local application.\n\n- licenses/inventory.json lists installed package versions and notice locations.\n- licenses/packages/ contains installed dependency notices.\n- licenses/supplemental/ contains upstream notices and font provenance in sources.json.\n\nThird-party components retain their respective licenses.\n');
+  writeFileSync(path.join(directory,'THIRD_PARTY_NOTICES.md'),`# SharedBoard.app ${distribution} notices\n\nSharedBoard.app is created by Andrew Barresi and released under the MIT license; see LICENSE and AUTHORS.md.\n\nThis distribution incorporates the open-source packages listed in licenses/inventory.json. The licenses/ directory contains their license and copyright texts, including supplemental notices where required.\n\n- licenses/inventory.json lists installed package versions and notice locations.\n- licenses/packages/ contains installed dependency notices.\n- licenses/supplemental/ contains upstream notices and font provenance in sources.json.\n\nThird-party components retain their respective licenses.\n`);
 }
 
 export function buildWeb(){
@@ -83,6 +83,8 @@ export function buildWeb(){
   execFileSync(process.execPath,[path.join(projectRoot,'node_modules/vite/bin/vite.js'),'build'],{cwd:projectRoot,env,stdio:'inherit'});
   execFileSync(process.execPath,['scripts/copy-assets.mjs'],{cwd:projectRoot,env,stdio:'inherit'});
   installPagesFiles();collectBrowserLicenses(webDirectory);
+  execFileSync(process.execPath,['scripts/build-claude-plugin.mjs',webDirectory],{cwd:projectRoot,env,stdio:'inherit'});
+  execFileSync(process.execPath,['scripts/build-codex-plugin.mjs',webDirectory],{cwd:projectRoot,env,stdio:'inherit'});
   const result=validateWebBuild();console.log(JSON.stringify({product:'SharedBoard.app',storageMode:'browser',directory:webDirectory,version:result.version,files:result.files.length,totalBytes:result.totalBytes,largestFile:result.largestFile},null,2));return result;
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))buildWeb();
