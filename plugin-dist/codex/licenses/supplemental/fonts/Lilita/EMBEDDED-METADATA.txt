@@ -1,0 +1,17 @@
+Metadata extracted without modification from bundled @excalidraw/excalidraw 0.18.1 WOFF2 font name tables.
+
+Metadata group 1
+Files: Lilita-Regular-i7dPIFZ9Zz-WBtRtedDbYE98RXi4EwSsbg.woff2, Lilita-Regular-i7dPIFZ9Zz-WBtRtedDbYEF8RXi4EwQ.woff2
+
+Copyright:
+Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), with Reserved Font Names "Lilita One"
+
+Family:
+Lilita One
+
+Version:
+Version 1.002
+
+License URL:
+http://scripts.sil.org/OFL
+

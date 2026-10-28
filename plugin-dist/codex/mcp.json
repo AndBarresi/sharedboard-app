@@ -1,0 +1,4 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {"sharedboard_local": {"type": "stdio", "command": "node", "args": ["${PLUGIN_ROOT}/src/main.mjs"], "cwd": "${PLUGIN_ROOT}"}}
+}
