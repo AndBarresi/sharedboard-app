@@ -13,3 +13,13 @@
 @media(min-width:801px){.workspace:not(.is-focused) .planning-panel .planning-tabs{display:none}}
 @media(max-height:540px){.board-chat.browser-chat .browser-chat-composer{display:none}.browser-chat-content{min-height:0;padding:14px}.browser-chat-lock{display:none}.browser-chat-content h3{font-size:14px;margin:0 0 8px}.browser-chat-content p{margin-bottom:12px}}
 @media(max-height:480px){.browser-chat-content h3{display:none}}
+
+/* Secondary labels stay readable at the same scale as the workspace controls. */
+.workspace .canvas-footer{font-size:10px;line-height:1.5;color:#7b8673}
+.workspace .footer-creator{font-size:10px}
+.workspace .footer-changelog{font-size:10px;min-height:28px;padding:5px 0}
+.browser-storage-notice strong{font-size:12px}
+.browser-storage-notice p,.browser-storage-notice button{font-size:11px}
+@media(max-width:800px){
+  .browser-storage-notice p,.browser-storage-notice button{font-size:11px}
+}

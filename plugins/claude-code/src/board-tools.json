@@ -374,5 +374,140 @@
     "annotations": {
       "destructiveHint": true
     }
+  },
+  {
+    "name": "replace_selection",
+    "description": "Apply an explicit Imagine request as one atomic editable replacement. First read_chat_message for messageId and inspect its captured selection/image, then read_board. Honor the captured design direction, global design notes and prior Imagine passes. Supply the complete polished design in board coordinates using NEW element IDs, with designSummary documenting its reusable palette, typography, spacing and components. Only objects from that captured Imagine selection are removed; disjoint human work survives. Overlapping changes reject the entire replacement. Never delete/add separately or automatically retry a conflict. Reusing the same messageId with identical input returns the original result. Post the actual completion or failure through reply_to_chat_message afterward.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "elements": {
+          "minItems": 1,
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 122,
+                "pattern": "^[A-Za-z0-9_-]{1,128}$"
+              },
+              "type": {
+                "default": "rectangle",
+                "type": "string",
+                "enum": [
+                  "rectangle",
+                  "ellipse",
+                  "diamond",
+                  "text",
+                  "arrow",
+                  "line"
+                ]
+              },
+              "x": {
+                "default": 0,
+                "type": "number"
+              },
+              "y": {
+                "default": 0,
+                "type": "number"
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "fontSize": {
+                "type": "number",
+                "minimum": 8,
+                "maximum": 200
+              },
+              "strokeColor": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "backgroundColor": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "textColor": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "fontFamily": {
+                "default": 2,
+                "type": "number",
+                "enum": [
+                  1,
+                  2,
+                  3
+                ]
+              },
+              "strokeWidth": {
+                "default": 1,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 12
+              },
+              "roughness": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "opacity": {
+                "default": 100,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "corners": {
+                "default": "rounded",
+                "type": "string",
+                "enum": [
+                  "rounded",
+                  "sharp"
+                ]
+              }
+            }
+          }
+        },
+        "designSummary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "summary": {
+          "default": "Imagine polished the selected design",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "messageId",
+        "elements",
+        "designSummary"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "destructiveHint": true
+    }
   }
 ]

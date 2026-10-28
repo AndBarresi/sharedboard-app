@@ -32,15 +32,28 @@ export function rebaseElements(base, local, remote) {
 }
 
 export function selectElements(elements, ids = []) {
-  if (!ids.length) return elements.filter((element) => !element.isDeleted);
-  const selected = new Set(ids);
-  for (const element of elements) {
-    if (selected.has(element.id)) {
-      for (const bound of element.boundElements ?? []) selected.add(bound.id);
+  const active = elements.filter((element) => !element.isDeleted);
+  if (!ids.length) return active;
+  const byId = indexById(active), children = new Map();
+  for (const element of active) {
+    for (const parentId of [element.containerId, element.frameId]) {
+      if (!parentId) continue;
+      if (!children.has(parentId)) children.set(parentId, []);
+      children.get(parentId).push(element.id);
     }
-    if (selected.has(element.containerId)) selected.add(element.id);
   }
-  return elements.filter((element) => selected.has(element.id) && !element.isDeleted);
+  const selected = new Set(ids.filter((id) => byId.has(id))), pending = [...selected];
+  // Follow descendants and existing bound relationships to a fixed point, even
+  // when a label or nested frame appears before its parent in the scene order.
+  while (pending.length) {
+    const id = pending.pop(), element = byId.get(id);
+    const related = [...(children.get(id) ?? []), ...(element.boundElements ?? []).map((bound) => bound.id)];
+    for (const relatedId of related) {
+      if (!byId.has(relatedId) || selected.has(relatedId)) continue;
+      selected.add(relatedId); pending.push(relatedId);
+    }
+  }
+  return active.filter((element) => selected.has(element.id));
 }
 
 export function summarizeScene(board, selection = []) {

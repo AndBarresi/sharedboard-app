@@ -2,3 +2,20 @@
 @media(max-width:800px){.object-navigator{top:77px;bottom:14px;left:12px;width:350px;max-width:calc(100% - 24px)}}
 @media(max-height:650px){.object-navigator-header{padding:12px 15px 10px}.outline-minimap svg{height:90px}.outline-minimap{padding-bottom:8px}.outline-search{padding-top:10px}.outline-minimap>small{font-size:8px;margin-top:4px}}
 @media(max-height:540px){.outline-minimap{display:none}.object-navigator-header{padding:10px 12px 8px}.object-navigator-header .eyebrow{display:none}.object-navigator-header h2{font-size:18px;margin:0}.outline-search{padding:8px 12px 10px}.outline-list{padding:0 10px 10px}}
+
+@media(orientation:portrait){
+  .canvas-shell .object-navigator{left:76px;right:auto;top:12px;bottom:12px;width:min(350px,calc(100% - 88px));max-width:calc(100% - 88px)}
+  .object-navigator-header>div{min-width:0}
+  .object-navigator-header h2{overflow-wrap:anywhere}
+}
+
+@media(orientation:landscape) and (max-height:500px){
+  .object-navigator .outline-minimap,.object-navigator-header .eyebrow{display:none}
+  .object-navigator-header{padding:7px 12px;gap:10px}
+  .object-navigator-header h2{font-size:18px;line-height:1.3;margin:0}
+  .object-navigator .outline-search{padding:6px 12px}
+  .outline-search input{min-height:32px;padding:7px 10px}
+  .object-navigator .outline-list{padding:0 10px 8px}
+  .outline-row{margin:5px 0;padding:6px}
+  .outline-row-actions{padding-top:3px}
+}

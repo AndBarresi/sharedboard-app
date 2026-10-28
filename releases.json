@@ -1,6 +1,37 @@
 {
-  "version": "0.12.5",
+  "version": "0.13.2",
   "entries": [
+    {
+      "version": "0.13.2",
+      "title": "Complete design fidelity and production embed support",
+      "added": [],
+      "fixed": [
+        "Imagine preserves the requested text family in standalone text and bound labels.",
+        "Production allows supported HTTPS web embeds while rejecting unsupported scripted widgets and retaining strict application policies.",
+        "Normalize release source files for consistent validation across Windows, Linux and macOS."
+      ]
+    },
+    {
+      "version": "0.13.1",
+      "title": "Canvas selection and responsive tool dock",
+      "added": [],
+      "fixed": [
+        "Imagine now uses two separate canvas selections for its reference and wireframe, accepts existing selections, and removes the object checklist.",
+        "Portrait uses a vertical left dock with pinned utilities; landscape uses one horizontal row, with responsive panels and redundant controls removed.",
+        "Preview refresh rejects changed reference scope, and undone or failed passes no longer become approved design direction."
+      ]
+    },
+    {
+      "version": "0.13.0",
+      "title": "Canvas tools and consistent Imagine designs",
+      "added": [
+        "A compact Shapes menu, clickable laser pointer, native frame and web embed tools, and editable draw-to-shape, bucket-fill and lasso tools.",
+        "A themed searchable keyboard reference and an Imagine selection workflow with manually chosen design references, saved design memory, safe atomic replacement and undo."
+      ],
+      "fixed": [
+        "The S formatting popup, grid activation and snapping, sidebar spacing and typography, mobile toolbar sizing, and frame-aware drawing captures."
+      ]
+    },
     {
       "version": "0.12.5",
       "title": "Make connection test progress clear",
@@ -437,5 +468,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "731a7c80f20255c291123162b29755dcfc80e02b1a5c78488cdeb75daf5ba0a0"
+  "sourceHash": "2f46034cc9a374af7dfe2f4ffad111538041e103d8497fa1183898bd67c20320"
 }

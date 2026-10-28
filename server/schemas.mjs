@@ -10,6 +10,8 @@ export const specSchema = z.object({
   strokeColor: z.string().max(80).optional(), backgroundColor: z.string().max(80).optional(),
   textColor: z.string().max(80).optional(),
 });
+export const imagineSpecSchema=specSchema.extend({id:idSchema.max(122).optional(),fontFamily:z.enum({handDrawn:1,normal:2,code:3}).default(2),strokeWidth:finite.min(0).max(12).default(1),roughness:finite.min(0).max(2).default(0),opacity:finite.min(0).max(100).default(100),corners:z.enum(['rounded','sharp']).default('rounded')});
+export const replaceSelectionSchema=z.object({messageId:z.string().uuid(),elements:z.array(imagineSpecSchema).min(1).max(200),designSummary:z.string().trim().min(1).max(2000),summary:z.string().trim().min(1).max(200).default('Imagine polished the selected design')});
 export const editsSchema = z.array(z.object({
   id: idSchema, expectedVersion: z.number().int().min(1),
   changes: z.object({

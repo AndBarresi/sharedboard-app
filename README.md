@@ -31,6 +31,7 @@ Sketch a screen, map a system, pin a screenshot, and attach the requirements tha
 | **Explain the details** | Attached notes, requirements, work cards, and screenshot references. |
 | **Reuse and recover** | Editable starting blocks, your own block library, checkpoints, and automatic recovery. |
 | **Bring your existing AI** | Use native ChatGPT Work Cloud events, a managed Codex or Claude Code plugin, or compatible remote MCP tools, with read-only or requested-edit access. |
+| **Imagine a finished design** | Refine a selected wireframe using an existing page, frame, or manually chosen objects as the visual reference. |
 
 <details>
 <summary><strong>Take a closer look at the planning workspace</strong></summary>
@@ -41,13 +42,21 @@ Keep requirements, named areas, and reusable building blocks beside the drawing 
 
 </details>
 
+### Drawing tools and Imagine
+
+The **Shapes** menu groups rectangles, ellipses and diamonds; hold Shift while drawing for a square or circle. The toolbar runs across the top in landscape and down the left in portrait, with drawing tools that scroll independently while utility actions remain available. It also includes the laser pointer and a **More tools** menu for frames, web embeds, shape recognition, bucket fill and lasso selection. **Info & keyboard shortcuts** opens a searchable reference. Press **S** for drawing style, **?** for help, or **Ctrl/Cmd+'** to enable the alignment grid and snapping.
+
+To use **Imagine**, open the tool, drag-select a finished page or component on the canvas, and choose **Use as reference**. Next, drag-select the wireframe you want enhanced and choose **Imagine this selection**. Either step accepts an existing selection. Separate previews show the reference and the target before you submit, with controls to change either selection on the canvas. For example, a finished index page can guide the typography, palette, spacing and components of a rough contact page without an earlier Imagine pass.
+
+Imagine uses the existing connected AI conversation with verified delivery and drawing edit access. It creates an editable canvas design and saves design memory for later passes on the same board. Reference artwork remains in place. Changed targets, references or relevant requirements stop an outdated replacement, while recovery and **AI changes** provide ways to restore the original. Local AI plugins must include the `replace_selection` tool; older running plugin processes need the updated package and a fresh connection before using Imagine. Automated hosted and plugin tests cover this workflow; real provider generation quality still needs live acceptance testing.
+
 ## Start on the website
 
 1. Open [**sharedboard.app**](https://sharedboard.app) in a regular browser profile.
 2. Draw something, add a reference or note, and wait for the saved indicator.
 3. Use **Export board** to keep a `.sharedboard` backup outside the browser.
 
-SharedBoard runs in the browser, without a standalone SharedBoard installer or home-network server. ChatGPT Work Cloud uses a download-free connection. Codex and Claude Code have optional plugins installed inside the AI app; they need Node.js 22 or newer and the client requirements below. Their implementation and isolated tests are complete, but actual installed-client round trips and Windows/Mac acceptance still need testing.
+SharedBoard runs in the browser, without a standalone SharedBoard installer or home-network server. ChatGPT Work Cloud uses a download-free connection. Codex and Claude Code have optional plugins installed inside the AI app; they need Node.js 22 or newer and the client requirements below. Codex has passed actual automatic bootstrap, requested drawing work, and board review in one existing Windows conversation. Claude Code and broader account/platform acceptance still need testing.
 
 > **Your boards stay in your browser.** They are saved on this device in this browser profile, with no cross-device sync. Clearing site data or leaving private browsing can remove them. Export regularly; each backup contains one board's drawing and planning details. Another domain or preview address has separate storage.
 
@@ -81,7 +90,9 @@ Choose **Codex** or **Claude Code** in **Connect an AI** to get the relevant ins
 | **Codex** | Install the SharedBoard marketplace and plugin, enable it in the existing conversation, and use the generated pairing prompt. Requires Node.js 22+ and an installed Codex CLI with the official queue command. The prompt must use that conversation's actual `CODEX_THREAD_ID`. |
 | **Claude Code** | Install the SharedBoard plugin, resume the intended conversation with its Channels research-preview flag, and use the generated one-use connect command. Requires Claude Code 2.1.275+, Node.js 22+, supported Anthropic authentication, and an account policy permitting Channels. |
 
-Keep the AI app's paired plugin process and the browser board open. Choose **Test automatic reply** after pairing: normal mini chat and reviews stay unavailable until a real capture is read and its actual reply returns. A connected socket, accepted queue receipt, or provider name does not establish that result. Network reconnection can reuse the running process; restarting it requires fresh pairing, while the drawing and saved history remain in the browser. These plugin paths have protocol and isolated test coverage; real installed-client and platform acceptance are pending. See [setup steps and limitations](CONNECTIONS.md).
+Keep the AI app's paired plugin process and an awake, responsive browser board open. Choose **Test automatic reply** after pairing: normal mini chat and reviews stay unavailable until a real capture is read and its actual reply returns. A connected socket, accepted queue receipt, or provider name does not establish that result. Network reconnection can reuse the running process; restarting it requires fresh pairing, while the drawing and saved history remain in the browser. A suspended background tab can delay requests. Foreground it, check saved status, and retry the original request when appropriate; do not automatically resend uncertain work as a new request. See [setup steps and limitations](CONNECTIONS.md).
+
+The installed Codex plugin has returned actual replies and completed a captured review after website requests woke the same existing Windows conversation. Its requested edit changed only the specified text and preserved nine unrelated objects; reload retained the drawing, grant, and saved conversation history. Automated tests and website builds also pass on Linux, Windows, and macOS ARM. These results do not establish fresh-account setup, Mac GUI use, multiday or OS sleep reliability, or Claude Code account acceptance.
 
 ### Other remote MCP clients
 
@@ -110,4 +121,4 @@ These are developer commands; people using the app start at the website. See [De
 
 [Connection setup](CONNECTIONS.md) · [Connection behavior](BRIDGE.md) · [Development](docs/LOCAL-DEVELOPMENT.md) · [Hosting](HOSTING.md) · [Changelog](CHANGELOG.md) · [Authorship & credits](AUTHORS.md) · [MIT license](LICENSE)
 
-SharedBoard.app is a **0.x testing beta**. Live voice, multi-user cloud board storage, and automatic verification of generated code are not implemented. Client/account acceptance still needs real testing. The project uses the [Excalidraw editor](https://github.com/excalidraw/excalidraw); third-party components retain their own [notices and licenses](THIRD_PARTY_NOTICES.md).
+SharedBoard.app is a **0.x testing beta**. Live voice, multi-user cloud board storage, and automatic verification of generated code are not implemented. Broader client/account acceptance still needs real testing. The project uses the [Excalidraw editor](https://github.com/excalidraw/excalidraw); third-party components retain their own [notices and licenses](THIRD_PARTY_NOTICES.md).

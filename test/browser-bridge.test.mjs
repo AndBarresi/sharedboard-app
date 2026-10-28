@@ -4,6 +4,15 @@ import {IDBFactory} from 'fake-indexeddb';
 import {createBrowserTransport} from '../src/browser-store.mjs';
 import {createBrowserBridge,validateBridgeDeadline} from '../src/browser-relay.mjs';
 import {codexChannelSetup,claudeChannelSetup} from '../shared/connection-instructions.mjs';
+import {createElements} from '../server/elements.mjs';
+import {toolResult} from '../plugins/claude-code/src/tools.mjs';
+import {Client as StdioClient} from '@modelcontextprotocol/sdk-v1/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk-v1/client/stdio.js';
+import {Client as HostedClient,StreamableHTTPClientTransport} from '@modelcontextprotocol/client';
+import {createMcpHandler} from '@modelcontextprotocol/server';
+import {createBoardMcp} from '../server/tools.mjs';
+import {createServer} from 'node:http';
+import {fileURLToPath} from 'node:url';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Z5kAAAAASUVORK5CYII=';
 const call=(t,path,input,method=input===undefined?'GET':'POST')=>t.request(path,{method,...(input===undefined?{}:{body:JSON.stringify(input)})});
@@ -46,6 +55,123 @@ async function fixture(permission='edit',overrides={}){
  await t.ready();const pair=await call(t,'/api/connection/pairing',{provider:'codex',permission});assert.equal(pair.setup.prompt,'Fixture pairing prompt');bridge.activate();await t.bridgeStatus();await wait(async()=>(await call(t,'/api/connection')).connected&&bridge.owner?.readyState===1);return {t,bridge,config};
 }
 const capture=async(t,extra={})=>{const board=await call(t,'/api/board'),plan=await call(t,'/api/planning');return {id:crypto.randomUUID(),boardId:board.id,expectedRevision:board.revision,expectedPlanningVersion:plan.version,selectedIds:[],scope:'board',visual:png,...extra};};
+
+async function imagineFixture(permission='edit'){
+ const f=await fixture(permission),items=createElements([
+  {id:'finished_index',type:'rectangle',x:0,y:0,width:960,height:720,backgroundColor:'#fcfcfa',strokeColor:'#718b64'},
+  {id:'finished_nav',type:'rectangle',x:24,y:24,width:912,height:64,text:'STUDIO      Work      About      Contact',fontSize:18,backgroundColor:'#e5eadc',strokeColor:'#275c46'},
+  {id:'finished_heading',type:'text',x:64,y:160,text:'Thoughtful design for everyday life',fontSize:40,strokeColor:'#275c46'},
+  {id:'contact_sketch',type:'rectangle',x:1200,y:0,width:960,height:720},
+  {id:'contact_form',type:'rectangle',x:1264,y:200,width:600,height:380,text:'Contact me\nName\nEmail\nMessage\nSend'},
+  {id:'unrelated_drawing',type:'rectangle',x:2600,y:100,width:200,height:100},
+ ]),image={...items[0],id:'imported_index_reference',type:'image',x:0,y:800,fileId:'design_screenshot'};
+ await call(f.t,'/api/board',{changes:[...items,image].map(element=>({id:element.id,expectedVersion:0,element})),files:{design_screenshot:{id:'design_screenshot',mimeType:'image/png',dataURL:png,created:1}}},'PATCH');
+ const plan=await call(f.t,'/api/planning');await call(f.t,'/api/planning',{expectedVersion:plan.version,project:{...plan.project,notes:[{id:crypto.randomUUID(),title:'Index page styling',text:'Sage navigation and cream surfaces; retain the 40px dark green heading and 24px rhythm.',kind:'requirement',status:'open',elementIds:['finished_index'],createdAt:new Date().toISOString(),result:''}]}},'PUT');
+ const input=await capture(f.t,{selectedIds:['contact_sketch','contact_form'],scope:'selection',text:'Imagine my contact wireframe using the finished index page and screenshot as its visual system.',intent:'work',automaticRequired:true,imagine:{instructions:'Polished contact form, consistent navigation.',designDirection:'Keep the existing index-page palette and hierarchy.'},imagineReferences:{elementIds:[...items.filter(e=>e.id.startsWith('finished_')).map(e=>e.id),image.id],visual:png}});
+ const output={messageId:input.id,elements:[{id:'polished_contact',type:'rectangle',x:1200,y:0,width:960,height:720,backgroundColor:'#fcfcfa',strokeColor:'#718b64',corners:'sharp'},{id:'polished_nav',type:'rectangle',x:1224,y:24,width:912,height:64,text:'STUDIO      Work      About      Contact',fontSize:18,backgroundColor:'#e5eadc',strokeColor:'#275c46'},{id:'polished_title',type:'text',x:1264,y:160,text:'Let’s work together',fontSize:40,strokeColor:'#275c46'},{id:'polished_email',type:'rectangle',x:1264,y:270,width:600,height:56,text:'Your email address',fontSize:18,backgroundColor:'#ffffff',strokeColor:'#718b64'},{id:'polished_send',type:'rectangle',x:1264,y:580,width:180,height:48,text:'Send message',fontSize:18,backgroundColor:'#275c46',strokeColor:'#275c46',textColor:'#ffffff'}],designSummary:'Cream #fcfcfa surface; sage #e5eadc navigation; green #275c46 text and CTA; 40px heading, 18px controls, 24px spacing.'};
+ return {...f,input,output};
+}
+
+test('Imagine captures a handmade index design and imported reference, replaces only the rough contact page, persists its real result, and can undo after reopening',async()=>{
+ const f=await imagineFixture();let reopened;try{
+  const before=await call(f.t,'/api/board');
+  await call(f.t,'/api/chat',f.input);
+  assert.equal((await f.bridge.command('replace_selection',f.output)).error.code,'IMAGINE_CAPTURE_UNREAD');
+  const read=(await f.bridge.command('read_chat_message',{id:f.input.id})).result;
+  assert.ok(read.board.elements.every(e=>e.id.startsWith('contact_')));
+  assert.ok(read.board.imagineReferences.elements.some(e=>e.id==='imported_index_reference'));
+  assert.match(read.board.planning.notes[0].text,/40px/);
+  assert.equal(read.board.imagineReferences.files.design_screenshot.dataURL,undefined);
+  const attached=toolResult(read);assert.equal(attached.content.filter(part=>part.type==='image').length,2);assert.equal(attached.structuredContent.board.imagineReferences.visual.attachedAsImage,true);
+  assert.equal((await f.bridge.command('read_board')).result.revision,before.revision);
+  const unrelated=before.elements.find(e=>e.id==='unrelated_drawing');
+  await call(f.t,'/api/board',{changes:[{id:unrelated.id,expectedVersion:before.elementVersions[unrelated.id],element:{...unrelated,x:3000,version:unrelated.version+1}}]},'PATCH');
+  const applied=(await f.bridge.command('replace_selection',f.output)).result;
+  assert.ok(applied.createdIds.includes('polished_contact'));assert.deepEqual([...applied.removedIds].sort(),['contact_form','contact_form_label','contact_sketch']);
+  const board=await call(f.t,'/api/board');
+  for(const element of before.elements.filter(e=>e.id.startsWith('finished_')||e.type==='image'))assert.deepEqual(board.elements.find(e=>e.id===element.id),element);
+  assert.equal(board.elements.find(e=>e.id==='unrelated_drawing').x,3000);
+  assert.ok(board.elements.filter(e=>applied.createdIds.includes(e.id)).every(e=>e.roughness===0));
+  assert.equal(board.elements.find(e=>e.id==='polished_send_label').strokeColor,'#ffffff');assert.equal(board.files.design_screenshot.dataURL,png);
+  assert.deepEqual((await f.bridge.command('replace_selection',f.output)).result,applied);assert.equal((await call(f.t,'/api/board')).revision,board.revision);
+  const reply='I matched the index page’s sage navigation, cream surface, typography and spacing, and replaced only the contact wireframe.';
+  assert.equal((await f.bridge.command('reply_to_chat_message',{id:f.input.id,text:reply})).result.status,'answered');
+  const messages=await call(f.t,'/api/chat');assert.equal(messages.messages[0].imagine.fingerprint,undefined);assert.equal(messages.messages[0].reply,reply);assert.ok(messages.messages[0].imagine.result.createdIds.length>0);
+  const plan=await call(f.t,'/api/planning');assert.ok(plan.recoveries.length>0);assert.ok(plan.project.notes.some(n=>n.title==='Imagine design memory'));
+  const backup=await call(f.t,'/api/project/export');assert.equal(JSON.stringify(backup).includes(f.input.id),false,'backups retain design memory but omit the private chat request routing ID');
+  assert.equal(backup.board.elements.find(e=>e.id==='polished_nav').customData.sharedboardImagine.designSummary,f.output.designSummary);
+  f.t.close();await wait(()=>f.bridge.owner===null);reopened=await createBrowserTransport(f.config);await reopened.ready();await wait(()=>f.bridge.owner?.readyState===1);
+  assert.equal((await call(reopened,'/api/chat')).messages[0].imagine.result.revision,applied.revision);assert.equal((await call(reopened,'/api/board')).elements.find(e=>e.id==='polished_email').backgroundColor,'#ffffff');
+  await call(reopened,'/api/undo-agent',{id:plan.agentActions[0].id});
+  const restored=await call(reopened,'/api/board');assert.equal(restored.elements.find(e=>e.id==='contact_sketch').isDeleted,false);assert.equal(restored.elements.find(e=>e.id==='polished_contact').isDeleted,true);assert.equal(restored.elements.find(e=>e.id==='unrelated_drawing').x,3000);
+  assert.equal((await call(reopened,'/api/planning')).project.notes.some(n=>n.title==='Imagine design memory'),false);
+  const reverted=(await call(reopened,'/api/chat')).messages[0].imagine.result;assert.ok(reverted.undoneAt);assert.deepEqual((await f.bridge.command('replace_selection',f.output)).result,reverted);assert.equal((await call(reopened,'/api/board')).revision,restored.revision,'the same captured request cannot reapply an undone pass');
+ }finally{f.t.close();reopened?.close();}
+});
+
+test('Imagine rejects changed selected objects, changed references, newer design requirements and read-only grants without partial writes or recovery side effects',async()=>{
+ for(const target of ['contact_form','finished_nav','design_screenshot','requirements']){
+  const f=await imagineFixture();try{
+   await call(f.t,'/api/chat',f.input);await f.bridge.command('read_chat_message',{id:f.input.id});
+   if(target==='requirements'){const plan=await call(f.t,'/api/planning');await call(f.t,'/api/planning',{expectedVersion:plan.version,project:{...plan.project,notes:plan.project.notes.map(n=>({...n,text:'Human updated the index style while the AI was working.'}))}},'PUT');}
+   else if(target==='design_screenshot'){const board=await call(f.t,'/api/board');await call(f.t,'/api/board',{changes:[],files:{design_screenshot:{...board.files.design_screenshot,dataURL:png.replace('AAAAASUVORK5CYII=','AAAAASUVORK5CYIE=')}}},'PATCH');}
+   else{const board=await call(f.t,'/api/board'),element=board.elements.find(e=>e.id===target);await call(f.t,'/api/board',{changes:[{id:target,expectedVersion:board.elementVersions[target],element:{...element,x:element.x+20,version:element.version+1}}]},'PATCH');}
+   const before=await call(f.t,'/api/board'),planBefore=await call(f.t,'/api/planning'),response=await f.bridge.command('replace_selection',f.output);
+   assert.equal(response.error.status,409);assert.equal(response.error.code,target==='contact_form'?'IMAGINE_SELECTION_CHANGED':target==='requirements'?'IMAGINE_REQUIREMENTS_CHANGED':'IMAGINE_REFERENCE_CHANGED');
+   assert.deepEqual(await call(f.t,'/api/board'),before);assert.deepEqual(await call(f.t,'/api/planning'),planBefore);
+  }finally{f.t.close();}
+ }
+ const readonly=await imagineFixture('read');try{await assert.rejects(call(readonly.t,'/api/chat',readonly.input),error=>error.status===403&&error.code==='IMAGINE_ACCESS_REQUIRED');assert.equal((await readonly.bridge.command('replace_selection',readonly.output)).error.status,403);}finally{readonly.t.close();}
+});
+
+test('Imagine detects new human frame children atomically and rejects wrong request identities and changed duplicate references',async()=>{
+ const f=await imagineFixture();try{
+  const board=await call(f.t,'/api/board'),frame={id:'contact_frame',type:'frame',x:1200,y:0,width:960,height:720,version:1,isDeleted:false};
+  await call(f.t,'/api/board',{changes:[{id:frame.id,expectedVersion:0,element:frame},...board.elements.filter(e=>e.id.startsWith('contact_')).map(element=>({id:element.id,expectedVersion:board.elementVersions[element.id],element:{...element,frameId:frame.id,version:element.version+1}}))]},'PATCH');
+  const input=await capture(f.t,{...f.input,expectedRevision:(await call(f.t,'/api/board')).revision,selectedIds:[frame.id]});await call(f.t,'/api/chat',input);await f.bridge.command('read_chat_message',{id:input.id});
+  await assert.rejects(call(f.t,'/api/chat',{...input,imagineReferences:{elementIds:['finished_index'],visual:png}}),error=>error.status===409);
+  assert.equal((await f.bridge.command('replace_selection',{...f.output,messageId:crypto.randomUUID()})).error.code,'IMAGINE_REQUEST_SCOPE');
+  const child={id:'human_added_field',type:'rectangle',x:1300,y:300,width:500,height:50,frameId:frame.id,version:1,isDeleted:false};await call(f.t,'/api/board',{changes:[{id:child.id,expectedVersion:0,element:child}]},'PATCH');
+  const before=await call(f.t,'/api/board'),response=await f.bridge.command('replace_selection',f.output);assert.equal(response.error.code,'IMAGINE_SELECTION_CHANGED');assert.ok(response.error.conflicts.includes(child.id));assert.deepEqual(await call(f.t,'/api/board'),before);
+ }finally{f.t.close();}
+});
+
+test('hosted MCP discovery and execution attach both immutable images and apply the Imagine tool through the actual browser transport',async()=>{
+ const f=await imagineFixture(),handler=createMcpHandler(()=>createBoardMcp(async(operation,input)=>{const response=await f.bridge.command(operation,input);if(response.error)throw Object.assign(new Error(response.error.message),response.error);return response.result;},{remote:true,remotePair:true,proposals:false})),client=new HostedClient({name:'Imagine hosted tool acceptance',version:'1'});
+ try{
+  await call(f.t,'/api/chat',f.input);
+  await client.connect(new StreamableHTTPClientTransport(new URL('https://imagine.test/mcp'),{fetch:(input,init)=>handler.fetch(new Request(input,init))}));
+  const definitions=(await client.listTools()).tools,replace=definitions.find(tool=>tool.name==='replace_selection');assert.ok(replace);assert.equal(replace.annotations.destructiveHint,true);assert.ok(replace.inputSchema.required.includes('messageId'));assert.ok(replace.inputSchema.properties.elements.items.properties.corners);
+  const read=await client.callTool({name:'read_chat_message',arguments:{id:f.input.id}});assert.equal(read.isError,undefined);assert.equal(read.content.filter(item=>item.type==='image').length,2);assert.equal(read.structuredContent.board.imagineReferences.visual.attachedAsImage,true);assert.equal(read.structuredContent.board.imagineReferences.visual.dataURL,undefined);
+  assert.equal((await client.callTool({name:'read_board',arguments:{full:true}})).structuredContent.revision,1);
+  const applied=await client.callTool({name:'replace_selection',arguments:f.output});assert.equal(applied.isError,undefined,JSON.stringify(applied));assert.ok(applied.structuredContent.createdIds.includes('polished_nav'));assert.equal((await call(f.t,'/api/board')).elements.find(e=>e.id==='finished_nav').backgroundColor,'#e5eadc');
+  const reply=await client.callTool({name:'reply_to_chat_message',arguments:{id:f.input.id,text:'Applied the contact design using the index page reference.'}});assert.equal(reply.structuredContent.status,'answered');
+ }finally{await client.close();await handler.close();f.t.close();}
+});
+
+for(const provider of ['codex','claude'])test(`updated ${provider} plugin stdio advertises and executes Imagine with both reference images against isolated browser storage`,{timeout:10000},async()=>{
+ const f=await imagineFixture(),requests=[];
+ const server=createServer(async(request,response)=>{
+  try{let raw='';for await(const part of request)raw+=part;const {operation,input}=JSON.parse(raw);requests.push({operation,input});const value=await f.bridge.command(operation,input);response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify(value));}
+  catch(error){response.writeHead(500,{'content-type':'application/json'});response.end(JSON.stringify({error:{message:error.message}}));}
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`,threadId=crypto.randomUUID();
+ const moduleURL=new URL(provider==='codex'?'../plugins/codex/src/server.mjs':'../plugins/claude-code/src/tools.mjs',import.meta.url).href;
+ const source=`import {StdioServerTransport} from '@modelcontextprotocol/sdk-v1/server/stdio.js';
+import {${provider==='codex'?'createCodexPlugin':'createPluginServer'} as create} from ${JSON.stringify(moduleURL)};
+const client={async connect(){return {connected:true};},async disconnect(){return {disconnected:true};},async status(){return {connection:{connected:true}};},async close(){},async call(operation,input){const value=await fetch(${JSON.stringify(origin)},{method:'POST',body:JSON.stringify({operation,input})}).then(response=>response.json());if(value.error)throw Object.assign(new Error(value.error.message),value.error);return value.result;}};
+const plugin=create({client,nativeThreadId:${JSON.stringify(threadId)}});await plugin.server.connect(new StdioServerTransport());`;
+ const transport=new StdioClientTransport({command:process.execPath,args:['--input-type=module','--eval',source],cwd:fileURLToPath(new URL('../',import.meta.url)),stderr:'pipe'}),client=new StdioClient({name:`Imagine ${provider} stdio acceptance`,version:'1'});let stderr='';transport.stderr?.on('data',chunk=>{stderr+=chunk;});
+ try{
+  await call(f.t,'/api/chat',f.input);await client.connect(transport);
+  const definitions=(await client.listTools()).tools,replace=definitions.find(tool=>tool.name==='replace_selection');assert.ok(replace);assert.ok(replace.inputSchema.properties.elements.items.properties.corners);
+  assert.equal((await client.callTool({name:'connect_board',arguments:{connectionCode:'isolated-test-only',...(provider==='codex'?{providerSessionId:threadId}:{})}})).isError,undefined);
+  const read=await client.callTool({name:'read_chat_message',arguments:{id:f.input.id}});assert.equal(read.isError,undefined,JSON.stringify(read));assert.equal(read.content.filter(item=>item.type==='image').length,2);assert.equal(read.structuredContent.board.imagineReferences.visual.dataURL,undefined);assert.equal(read.structuredContent.board.imagineReferences.files.design_screenshot.dataURL,undefined);
+  await client.callTool({name:'read_board',arguments:{full:true}});
+  const result=await client.callTool({name:'replace_selection',arguments:f.output});assert.equal(result.isError,undefined,JSON.stringify(result));assert.ok(result.structuredContent.createdIds.includes('polished_send'));
+  const reply=await client.callTool({name:'reply_to_chat_message',arguments:{id:f.input.id,text:'The matching contact layout is on the board.'}});assert.equal(reply.structuredContent.status,'answered');assert.ok(requests.some(item=>item.operation==='replace_selection'));assert.equal((await call(f.t,'/api/board')).elements.find(e=>e.id==='polished_nav').roughness,0);assert.equal(stderr,'');
+ }finally{await client.close();await new Promise(resolve=>server.close(resolve));f.t.close();}
+});
 
 test('direct-only browser messages and reviews never fall back to manual delivery after a link expires',async()=>{
  const {t,bridge}=await fixture();try{

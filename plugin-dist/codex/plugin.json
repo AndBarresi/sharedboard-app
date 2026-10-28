@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "sharedboard",
-  "version": "0.12.5",
+  "version": "0.13.2",
   "description": "Read and edit your browser board and receive its messages in an existing Codex chat.",
   "author": {
     "name": "Andrew Barresi",
