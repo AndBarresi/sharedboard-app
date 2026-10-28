@@ -1,6 +1,16 @@
 {
-  "version": "0.12.3",
+  "version": "0.12.4",
   "entries": [
+    {
+      "version": "0.12.4",
+      "title": "Check local plugins across platforms",
+      "added": [
+        "Run the complete test suite and production build on standard Linux, Windows and macOS CI runners."
+      ],
+      "fixed": [
+        "Explain the required automatic reply test when an unverified local connection attempts a drawing change."
+      ]
+    },
     {
       "version": "0.12.3",
       "title": "Use the selected local plugin setup",
@@ -417,5 +427,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "de432b0440c6eacccef33e815a00754e1b178546f2c17c1282e5724d5dfebe37"
+  "sourceHash": "c185b825008b0895fc428b71c78c163e997a964574344c913a5178bd16250cef"
 }

@@ -6,7 +6,12 @@ permissions:
   contents: read
 jobs:
   browser-build:
-    runs-on: ubuntu-latest
+    name: browser-build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

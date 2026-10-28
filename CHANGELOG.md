@@ -1,5 +1,15 @@
 # SharedBoard.app changelog
 
+## 0.12.4 — Check local plugins across platforms
+
+### Added
+
+- Run the complete test suite and production build on standard Linux, Windows and macOS CI runners.
+
+### Fixed
+
+- Explain the required automatic reply test when an unverified local connection attempts a drawing change.
+
 ## 0.12.3 — Use the selected local plugin setup
 
 ### Fixed
