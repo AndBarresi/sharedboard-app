@@ -9,6 +9,8 @@ export async function buildPlugin(outDirectory){
   const target=path.resolve(outDirectory),relative=path.relative(root,target),back=path.relative(target,root);if(!relative||!relative.startsWith('..')&&!path.isAbsolute(relative)||!back.startsWith('..')&&!path.isAbsolute(back))throw new Error('Build the plugin into a separate staging directory, never over its source or an ancestor.');
   await generateBoardTools({check:true});await mkdir(path.join(target,'skills','connect'),{recursive:true});
   for(const file of ['plugin.json','mcp.json','skills/connect/SKILL.md','README.md'])await copyFile(path.join(root,file),path.join(target,file));
+  await mkdir(path.join(target,'assets'),{recursive:true});
+  await copyFile(fileURLToPath(new URL('../../../public/logo.svg',import.meta.url)),path.join(target,'assets','logo.svg'));
   const pkg=JSON.parse(await readFile(path.join(root,'package.json'),'utf8'));delete pkg.dependencies;delete pkg.devDependencies;await writeFile(path.join(target,'package.json'),`${JSON.stringify(pkg,null,2)}\n`);
   await copyFile(fileURLToPath(new URL('../../../LICENSE',import.meta.url)),path.join(target,'LICENSE'));
   await build({entryPoints:[path.join(root,'src','main.mjs')],outfile:path.join(target,'src','main.mjs'),bundle:true,platform:'node',target:'node22',format:'esm',logLevel:'silent',packages:'bundle'});

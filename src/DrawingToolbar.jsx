@@ -72,7 +72,7 @@ export function DrawingToolbar({getApi,ui,focused,onFullscreen,onChat,chatDisabl
       <span className="tool-divider"/>
       <div className="tool-scroll">{NATIVE_TOOLS.map(([type,icon,label,key])=>SHAPE_TOOLS.some(([shape])=>shape===type)?type==='rectangle'?button(SHAPE_TOOLS.find(([shape])=>shape===lastShape)[1],'Shapes',()=>setPanel(panel==='shapes'?null:'shapes'),panel==='shapes'||!extraTool&&SHAPE_TOOLS.some(([shape])=>shape===ui.tool),false,'Shapes · rectangle, diamond, ellipse',{'aria-haspopup':'menu','aria-expanded':panel==='shapes',onKeyDown:e=>{if(e.key==='ArrowDown'){e.preventDefault();e.stopPropagation();setPanel('shapes');}}}):null:button(icon,`${label} (${key})`,()=>choose(type),!extraTool&&ui.tool===type))}</div>
       {button('laser','Laser pointer (K)',()=>choose('laser'),ui.tool==='laser')}
-      {button('more','More tools',()=>setPanel(panel==='tools'?null:'tools'),panel==='tools'||Boolean(extraTool)||['frame','embeddable'].includes(ui.tool))}
+      {button('wrench','More tools',()=>setPanel(panel==='tools'?null:'tools'),panel==='tools'||Boolean(extraTool)||['frame','embeddable'].includes(ui.tool))}
       <span className="tool-divider"/>
       {button('palette','Drawing style',()=>setPanel(panel==='style'?null:'style'),panel==='style',false,'Drawing style (S)')}
       {button('undo','Undo',()=>history(false))}{button('redo','Redo',()=>history(true))}

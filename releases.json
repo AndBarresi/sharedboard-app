@@ -1,6 +1,16 @@
 {
-  "version": "0.13.2",
+  "version": "0.13.3",
   "entries": [
+    {
+      "version": "0.13.3",
+      "title": "Shared branding and clearer plugin setup",
+      "added": [],
+      "fixed": [
+        "Use the SharedBoard logo for the website favicon and packaged Codex plugin artwork.",
+        "Replace the Other tools dots with a wrench in the existing toolbar style.",
+        "Clarify the same Codex install commands for macOS, Windows, and Linux."
+      ]
+    },
     {
       "version": "0.13.2",
       "title": "Complete design fidelity and production embed support",
@@ -468,5 +478,5 @@
       "fixed": []
     }
   ],
-  "sourceHash": "2f46034cc9a374af7dfe2f4ffad111538041e103d8497fa1183898bd67c20320"
+  "sourceHash": "b0e2c88208f18c40b8cfb981eeab155bf7f005745fb59eeef74d3ae1b82f8def"
 }

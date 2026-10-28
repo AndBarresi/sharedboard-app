@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>SharedBoard.app</title>
+  <rect width="128" height="128" rx="36" fill="#275c46"/>
+  <path d="M41 87 87 41M45 41h42v42" fill="none" stroke="#f2f4dc" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

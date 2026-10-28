@@ -90,6 +90,15 @@ Choose **Codex** or **Claude Code** in **Connect an AI** to get the relevant ins
 | **Codex** | Install the SharedBoard marketplace and plugin, enable it in the existing conversation, and use the generated pairing prompt. Requires Node.js 22+ and an installed Codex CLI with the official queue command. The prompt must use that conversation's actual `CODEX_THREAD_ID`. |
 | **Claude Code** | Install the SharedBoard plugin, resume the intended conversation with its Channels research-preview flag, and use the generated one-use connect command. Requires Claude Code 2.1.275+, Node.js 22+, supported Anthropic authentication, and an account policy permitting Channels. |
 
+For Codex, the same install commands apply on **macOS, Windows, and Linux**. Install Node.js 22+ and the Codex CLI on the computer running Codex, with both `node` and `codex` available to the app on `PATH`. Run these commands in macOS Terminal, Windows PowerShell, or a Linux terminal:
+
+```sh
+codex plugin marketplace add AndBarresi/sharedboard-app
+codex plugin add sharedboard@sharedboard
+```
+
+Then send the website's one-use `$sharedboard-connect` prompt **in the intended Codex conversation**, rather than the terminal. Node.js runs the local SharedBoard plugin; drawing on the website does not require it. The local plugin runtime requirement is separate from public directory listing: adding this GitHub marketplace does not submit SharedBoard to OpenAI's universal public directory, which has its own [submission and review process](https://developers.openai.com/plugins/build/plugins).
+
 Keep the AI app's paired plugin process and an awake, responsive browser board open. Choose **Test automatic reply** after pairing: normal mini chat and reviews stay unavailable until a real capture is read and its actual reply returns. A connected socket, accepted queue receipt, or provider name does not establish that result. Network reconnection can reuse the running process; restarting it requires fresh pairing, while the drawing and saved history remain in the browser. A suspended background tab can delay requests. Foreground it, check saved status, and retry the original request when appropriate; do not automatically resend uncertain work as a new request. See [setup steps and limitations](CONNECTIONS.md).
 
 The installed Codex plugin has returned actual replies and completed a captured review after website requests woke the same existing Windows conversation. Its requested edit changed only the specified text and preserved nine unrelated objects; reload retained the drawing, grant, and saved conversation history. Automated tests and website builds also pass on Linux, Windows, and macOS ARM. These results do not establish fresh-account setup, Mac GUI use, multiday or OS sleep reliability, or Claude Code account acceptance.
