@@ -1,5 +1,13 @@
 # SharedBoard.app changelog
 
+## 0.13.4 — Distinct drawing icons and reliable board lists
+
+### Fixed
+
+- Distinguish Laser from Imagine and show grouped geometry on the Shapes button.
+- Keep long project and board lists above the picker footer and reachable on narrow screens.
+- Record the completed live production Imagine reference and wireframe acceptance pass.
+
 ## 0.13.3 — Shared branding and clearer plugin setup
 
 ### Fixed
