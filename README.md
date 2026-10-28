@@ -47,7 +47,7 @@ Keep requirements, named areas, and reusable building blocks beside the drawing 
 2. Draw something, add a reference or note, and wait for the saved indicator.
 3. Use **Export board** to keep a `.sharedboard` backup outside the browser.
 
-SharedBoard runs in the browser. There is no SharedBoard application or companion to install on Windows or Mac.
+SharedBoard runs in the browser. The current hosted flow has no standalone SharedBoard application or companion to install on Windows or Mac. A Claude Code plugin is the approved direction for automatic messages in an existing Claude Code session; that integration is not implemented or verified yet.
 
 > **Your boards stay in your browser.** They are saved on this device in this browser profile, with no cross-device sync. Clearing site data or leaving private browsing can remove them. Export regularly; each backup contains one board's drawing and planning details. Another domain or preview address has separate storage.
 
@@ -76,7 +76,7 @@ Browser transport recovery detects stalled connections and missing pongs, then r
 
 Compatible remote MCP clients can read the board and make authorized edits from their own conversations. Their **Live collaboration · experimental** option uses a finite active AI run: waits default to 40 seconds, allow up to 45 seconds, and share a 20-minute deadline. New sends require an actual pending wait. Empty continuations can use AI allowance, and an ended run needs another explicit start. The website preserves drafts and provides **Pause live collaboration**. This mode still needs provider-specific acceptance testing.
 
-Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. A one-off OpenAI immediate-send test is offered only when the host advertises that extension; it does not enable automatic mini chat or establish Codex support. Claude Code Channels requires a local server. Its cloud routine alternative needs an eligible paid account and creates a new session for each trigger; separate cloud runs are under consideration and are not implemented or approved for rollout. See [connection behavior](BRIDGE.md).
+Claude's MCP Apps panel remains diagnostic: the tested `ui/message` path filled a composer draft and required Send in Claude. A one-off OpenAI immediate-send test is offered only when the host advertises that extension; it does not enable automatic mini chat or establish Codex support. The planned Claude Code Channels plugin will be installed and managed inside Claude Code, with an outbound connection to SharedBoard's relay rather than a standalone bridge or home server. Setup, platform support, and actual automatic replies still need implementation and testing. Separate cloud runs are not the chosen path. See [connection behavior](BRIDGE.md).
 
 SharedBoard uses your existing AI account/conversation through the relay. The AI provider controls model execution and task settings; tasks are not guaranteed to use the model manually selected in a chat. SharedBoard does not host a replacement model or include an AI subscription. Shared context passes through Cloudflare to the connected AI service. Saved requests keep their original captures, and delivery, reading, and actual replies remain distinct states.
 
