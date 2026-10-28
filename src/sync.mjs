@@ -6,6 +6,7 @@ import {selectElements} from '../shared/scene.mjs';
 import {renderScene} from './canvas-actions.mjs';
 import {isWebProvider,localConnectionView,webConnectionWip} from './connection-policy.mjs';
 import {clearDeletedBoardChatStorage} from './chat-format.mjs';
+import {imagineSelection} from '../shared/imagine.mjs';
 
 const unavailableWeb=()=>Promise.reject(Object.assign(new Error(webConnectionWip),{status:501,code:'WEB_CONNECTOR_WIP'}));
 
@@ -161,7 +162,7 @@ export async function connectBoard(onState) {
     const selection=state.api.getAppState().selectedElementIds;
     return {expectedRevision:state.base.revision,selectedIds:Object.keys(selection).filter(id=>selection[id])};
   };
-  const captureContext=async({scope,areaId}={})=>{
+  const captureContext=async({scope,areaId,imagine=false,referenceIds}={})=>{
     const context=await waitUntilSaved(),board=structuredClone(state.base),plan=structuredClone(state.planning);
     scope??=context.selectedIds.length?'selection':'board';
     if(scope==='board')context.selectedIds=[];
@@ -173,13 +174,25 @@ export async function connectBoard(onState) {
       if(area.elementIds.length&&!context.selectedIds.length)throw new Error('The objects in this area were removed. Save a new named area first.');
       if(!area.elementIds.length){const b=area.bounds;context.selectedIds=board.elements.filter(e=>!e.isDeleted&&e.x+e.width>=b.x&&e.x<=b.x+b.width&&e.y+e.height>=b.y&&e.y<=b.y+b.height).map(e=>e.id);}
     }
-    const elements=scope==='area'&&!context.selectedIds.length?[]:selectElements(board.elements,context.selectedIds);
+    const elements=imagine?imagineSelection(board.elements,context.selectedIds):scope==='area'&&!context.selectedIds.length?[]:selectElements(board.elements,context.selectedIds);
     const visual=await renderScene(elements,board.files);
+    let imagineReferences;
+    if(imagine){
+      if(referenceIds?.some(id=>!board.elements.some(element=>element.id===id&&!element.isDeleted)))throw new Error('The reference changed or was removed. Select its current objects on the board again.');
+      const targetIds=new Set(elements.map(element=>element.id));
+      const referenceSelection=referenceIds===undefined?board.elements.filter(element=>!element.isDeleted):imagineSelection(board.elements,referenceIds);
+      if(referenceIds!==undefined&&(!referenceSelection.length||referenceSelection.some(element=>targetIds.has(element.id))))throw new Error('The reference and wireframe must stay separate. Select the reference and wireframe on the board again.');
+      const references=referenceSelection.filter(element=>!targetIds.has(element.id));
+      if(references.length>500||JSON.stringify(references).length>1_000_000)throw new Error('Choose a smaller design reference: Imagine supports up to 500 reference objects.');
+      const referenceVisual=references.length?await renderScene(references,board.files):null;
+      if((referenceVisual?.length??0)+(visual?.length??0)>6_000_000)throw new Error('These design images are too detailed. Choose a smaller design reference or selection.');
+      imagineReferences={elementIds:references.map(element=>element.id),...(referenceVisual?{visual:referenceVisual}:{})};
+    }
     if(context.expectedRevision!==state.base.revision||plan.version!==state.planning.version)throw new Error('The board or its notes changed while the image was being prepared. Refresh the preview.');
     if(visual&&visual.length>4_000_000)throw new Error('This view is too detailed for a chat image. Select a smaller area and send again.');
     const ids=new Set(elements.map(e=>e.id));
     const notes=plan.project.notes.filter(n=>scope==='board'||!n.elementIds.length||n.elementIds.some(id=>ids.has(id)));
-    return {...context,boardId:board.id,expectedPlanningVersion:plan.version,scope,...(scope==='area'?{areaId}:{}),notes,...(visual?{visual}:{})};
+    return {...context,boardId:board.id,expectedPlanningVersion:plan.version,scope,...(scope==='area'?{areaId}:{}),notes,...(visual?{visual}:{}),...(imagineReferences?{imagineReferences}:{})};
   };
   return {
     initial,
@@ -255,7 +268,7 @@ export async function connectBoard(onState) {
         const capture=input.capturedContext??await captureContext();
         if(capture.boardId!==state.base.id)throw new Error('This preview belongs to another board. Prepare a new preview.');
         const {notes,...context}=capture;
-        chatInputs.set(input.id,{id:input.id,text:input.text,intent:input.intent,...context,...(browserOnly?{automaticRequired:true,...(input.channelTest===true?{channelTest:true}:{})}:{})});
+        chatInputs.set(input.id,{id:input.id,text:input.text,intent:input.intent,...context,...(input.imagine?{imagine:input.imagine}:{}),...(browserOnly?{automaticRequired:true,...(input.channelTest===true?{channelTest:true}:{})}:{})});
       }
       let data;try{data=await request('/api/chat',{method:'POST',body:JSON.stringify(chatInputs.get(input.id))});}catch(error){if(error.status===409&&error.message.includes('drawing changed before sending'))chatInputs.delete(input.id);throw error;}
       state.messages=data.messages;state.chatConnected=data.connected;state.connectionLabel=data.connectionLabel;emit();return data;

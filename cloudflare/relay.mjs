@@ -6,8 +6,8 @@ import {LiveSession} from './live-session.mjs';
 import {pairingInstructions,claudeChannelSetup,codexChannelSetup} from '../shared/connection-instructions.mjs';
 import {ChannelState,CHANNEL_PRESENCE_TTL,channelProvider} from './channel-state.mjs';
 
-const supported=new Set(['connection','pair','confirm','read','read_full','visual','reviews','review','complete_review','add','chats','chat','reply','edit']);
-const writes=new Set(['add','edit']);
+const supported=new Set(['connection','pair','confirm','read','read_full','visual','reviews','review','complete_review','add','chats','chat','reply','edit','replace_selection']);
+const writes=new Set(['add','edit','replace_selection']);
 const aliases={read_board:'read',view_board:'visual',add_elements:'add',edit_elements:'edit',confirm_connection:'confirm',list_chat_messages:'chats',read_chat_message:'chat',reply_to_chat_message:'reply',list_review_requests:'reviews',read_review_request:'review',complete_review_request:'complete_review'};
 const defaultOrigin='https://connect.sharedboard.app';
 const panelDeliveryReason='This AI app may accept a panel message as a composer draft without sending it or starting a model turn. Automatic panel delivery has not been verified and is unavailable.';

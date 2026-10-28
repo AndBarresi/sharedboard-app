@@ -26,7 +26,7 @@ test('relay refuses board access until explicit pairing and validates browser ow
  await assert.rejects(f.relay.authorized({...f.grant,boardId:crypto.randomUUID()}),/no longer belongs/);await assert.rejects(f.relay.authorized({...f.grant,familyId:crypto.randomUUID()}),/no longer belongs/);
 });
 test('offline relay has no drawing fallback and read-only permission blocks writes before delivery',async()=>{
- const f=await fixture('read');assert.equal((await f.call('read')).status,503);assert.equal((await f.call('add',{elements:[{text:'Private drawing text'}]})).status,403);assert.ok(!JSON.stringify([...f.storage.map]).includes('Private drawing text'));
+ const f=await fixture('read');assert.equal((await f.call('read')).status,503);assert.equal((await f.call('add',{elements:[{text:'Private drawing text'}]})).status,403);assert.equal((await f.call('replace_selection',{messageId:crypto.randomUUID(),elements:[{text:'Private imagined result'}],designSummary:'Private styling'})).status,403);assert.ok(!JSON.stringify([...f.storage.map]).includes('Private drawing text'));assert.ok(!JSON.stringify([...f.storage.map]).includes('Private imagined result'));
 });
 
 test('AI-side release requires the exact current board, connection, and family and clears only its automatic routes while offline',async()=>{

@@ -11,14 +11,14 @@ import {claudeChannelSetup,codexChannelSetup} from '../shared/connection-instruc
 const root=fileURLToPath(new URL('../',import.meta.url));
 const require=createRequire(import.meta.url),requireWrangler=createRequire(realpathSync(new URL('../node_modules/wrangler/package.json',import.meta.url)));
 const {build}=requireWrangler('esbuild');
-const compiled=await build({stdin:{contents:"export {BoardChat} from './src/BoardChat.jsx'; export {DrawingToolbar} from './src/DrawingToolbar.jsx'; export {CloudConnectionSetup,ClaudeChannelSteps,CodexChannelSteps} from './src/CloudConnectionSetup.jsx'; export {PlanningPanel} from './src/PlanningPanel.jsx';",resolveDir:root,sourcefile:'mini-chat-ui-entry.mjs'},bundle:true,format:'esm',platform:'node',write:false,loader:{'.css':'empty'},define:{'import.meta.env.VITE_STORAGE_MODE':'"browser"'},plugins:[{name:'ui-render-dependencies',setup(builder){
- builder.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}));
+const compiled=await build({stdin:{contents:"export {BoardChat} from './src/BoardChat.jsx'; export {DrawingToolbar,ShapesMenu} from './src/DrawingToolbar.jsx'; export {CloudConnectionSetup,ClaudeChannelSteps,CodexChannelSteps} from './src/CloudConnectionSetup.jsx'; export {PlanningPanel} from './src/PlanningPanel.jsx';",resolveDir:root,sourcefile:'mini-chat-ui-entry.mjs'},bundle:true,format:'esm',platform:'node',write:false,loader:{'.css':'empty'},define:{'import.meta.env.VITE_STORAGE_MODE':'"browser"'},plugins:[{name:'ui-render-dependencies',setup(builder){
+ builder.onResolve({filter:/^(?:react|react-dom)$/},args=>({path:pathToFileURL(require.resolve(args.path)).href,external:true}));
  // Toolbar editing behavior has separate integration tests. These exports are not
  // invoked by server rendering; the fixture isolates its accessibility controls.
  builder.onResolve({filter:/^@excalidraw\/excalidraw$/},()=>({path:'drawing-editor',namespace:'ui-render'}));
  builder.onLoad({filter:/.*/,namespace:'ui-render'},()=>({contents:'export const CaptureUpdateAction={}; export const restoreElements=value=>value; export const convertToExcalidrawElements=value=>value; export const exportToBlob=()=>{throw new Error("Canvas export is outside this UI fixture")};',loader:'js'}));
 }}]});
-const {BoardChat,DrawingToolbar,CloudConnectionSetup,ClaudeChannelSteps,CodexChannelSteps,PlanningPanel}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+const {BoardChat,DrawingToolbar,ShapesMenu,CloudConnectionSetup,ClaudeChannelSteps,CodexChannelSteps,PlanningPanel}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const render=(component,props)=>renderToStaticMarkup(React.createElement(component,props));
 const board={id:'11111111-1111-4111-8111-111111111111',revision:3,elements:[]};
 const view=connection=>({board,storageMode:'browser',chatConnected:Boolean(connection?.connected),connection,messages:[],selectedIds:[],online:true,planning:{project:{areas:[]}}});
@@ -69,6 +69,28 @@ test('fullscreen chat entry honors the same disabled capability and explains why
  const props={getApi:()=>null,ui:{tool:'selection'},focused:true,onFullscreen:()=>{},onChat:()=>{},chatDisabled:true,chatUnavailableReason:'This client has no active message subscription'};
  const disabled=chatButton(render(DrawingToolbar,props));assert.match(disabled,/disabled=""/);assert.match(disabled,/title="This client has no active message subscription"/);
  assert.doesNotMatch(chatButton(render(DrawingToolbar,{...props,chatDisabled:false})),/disabled=/);
+});
+
+test('drawing toolbar exposes discoverable pointer, style and help controls while explaining unavailable Imagine',()=>{
+ const props={getApi:()=>null,ui:{tool:'laser'},focused:false,onFullscreen:()=>{},onImagine:()=>{},imagineDisabled:true,imagineUnavailableReason:'Select objects to imagine them'};
+ const html=render(DrawingToolbar,props),control=label=>html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0]??'';
+ assert.match(control('Laser pointer \\(K\\)'),/aria-pressed="true"/);
+ assert.ok(control('More tools'));assert.ok(control('Drawing style'));assert.ok(control('Info &amp; keyboard shortcuts'));
+ assert.match(control('Imagine selection'),/disabled=""/);assert.match(control('Imagine selection'),/title="Select objects to imagine them"/);
+ const available=render(DrawingToolbar,{...props,imagineDisabled:false});
+ assert.doesNotMatch(available.match(/<button[^>]*aria-label="Imagine selection"[^>]*>/)?.[0]??'',/disabled=/);
+});
+
+test('one Shapes control groups native geometry while the open menu exposes its choices and circle/square gestures',()=>{
+ const html=render(DrawingToolbar,{getApi:()=>null,ui:{tool:'ellipse'},focused:false,onFullscreen:()=>{}});
+ assert.equal([...html.matchAll(/aria-label="Shapes"/g)].length,1);
+ assert.match(html,/<button[^>]*aria-label="Shapes"[^>]*aria-pressed="true"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"/);
+ assert.doesNotMatch(html,/aria-label="(?:Rectangle|Diamond|Ellipse) \(/);
+ assert.match(html,/aria-label="Arrow \(A \/ 5\)"/);assert.match(html,/aria-label="Line \(L \/ 6\)"/);
+ const menu=render(ShapesMenu,{selected:'ellipse',onChoose:()=>{},onClose:()=>{}});
+ assert.match(menu,/role="menu" aria-label="Shapes"/);assert.equal([...menu.matchAll(/role="menuitemradio"/g)].length,3);
+ assert.match(menu,/aria-checked="true"[^>]*>[\s\S]*?Ellipse/);assert.equal([...menu.matchAll(/aria-checked="true"/g)].length,1);
+ for(const label of ['Rectangle','Diamond','Ellipse','Hold Shift for a square','Hold Shift for a circle','R / 2','D / 3','O / 4'])assert.ok(menu.includes(label));
 });
 
 test('message expiry controls rendered mini chat independently of an earlier review expiry',()=>{

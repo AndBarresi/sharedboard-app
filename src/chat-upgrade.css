@@ -25,3 +25,17 @@
 .chat-bubble:disabled,.chat-bubble:disabled:hover{opacity:1;background:#e7eae2;border-color:#d5ddcc;color:#929c88;box-shadow:none;cursor:not-allowed}
 .chat-unavailable{flex:0 1 auto;min-height:0;max-height:45%;overflow:auto;padding:13px 15px;border-top:1px solid #dce3d3;background:#f1f3eb;color:#7c8c70;font-size:10px;line-height:1.7;scrollbar-width:thin;scrollbar-color:#cad6bd transparent}
 .chat-unavailable strong{font-size:11px;font-weight:600;color:#65795a}.chat-unavailable p{margin:6px 0 0}.chat-unavailable .secondary-button{margin-top:10px;font-size:10px}
+
+@media(orientation:portrait){
+  .canvas-shell .board-chat.chat-upgraded{right:12px;top:12px;bottom:12px;width:min(420px,calc(100% - 88px))!important;max-width:calc(100% - 88px);min-width:0;height:auto!important;max-height:none;min-height:0;resize:none}
+  .canvas-shell .board-chat.chat-upgraded.is-expanded{width:calc(100% - 88px)!important}
+  .board-chat.chat-upgraded .chat-header{flex-shrink:0}
+  .board-chat.chat-upgraded .chat-timeline{min-height:65px}
+  .board-chat.chat-upgraded .browser-chat-content{min-height:0}
+}
+@media(orientation:portrait) and (max-width:480px){
+  .board-chat.chat-upgraded .chat-header .chat-avatar{display:none}
+  .board-chat.chat-upgraded .chat-window-actions button{width:34px;height:34px}
+  .board-chat.chat-upgraded .browser-chat-content{padding:16px}
+  .browser-chat-connect-actions>button{width:100%}
+}

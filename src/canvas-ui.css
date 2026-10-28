@@ -29,3 +29,76 @@
 .drawing-dock .dock-panel{max-height:calc(100dvh - 220px)}
 @media(max-width:800px){.drawing-dock .dock-panel{max-height:calc(100dvh - 196px)}}
 .is-focused .drawing-dock .dock-panel{max-height:calc(100dvh - 112px)}
+
+/* Every drawing control and popup stays within the canvas and uses the shell palette. */
+.drawing-dock{width:max-content;max-width:calc(100% - 24px)}
+.shared-toolbar{gap:2px;padding:6px}
+.tool-scroll{flex:1;max-width:none;overscroll-behavior-x:contain;scrollbar-width:thin}
+.tool-button{flex-shrink:0;min-width:34px;width:34px;height:38px}
+.tool-divider{margin:0 2px}
+.drawing-dock .dock-panel{top:calc(100% + 10px);left:0;max-width:100%;width:300px;max-height:calc(100dvh - 210px)}
+.drawing-dock .style-panel{left:auto;right:0;width:312px}
+.drawing-dock .more-tools-panel{left:auto;right:0;width:290px}
+.more-tools-panel>button{display:flex;align-items:center;gap:11px;width:100%;min-height:42px;border:0;border-radius:8px;background:transparent;color:#46583e;text-align:left;padding:8px}
+.more-tools-panel>button:hover,.more-tools-panel>button[aria-pressed=true]{background:#e5eadc;color:#275c46}
+.drawing-dock .shapes-panel{left:0;right:auto;width:300px}
+.shapes-panel>button[aria-checked=true]{background:#e5eadc;color:#275c46}
+.shapes-panel>button{min-height:58px}
+.shapes-panel>button small{display:block;font-size:11px;color:#718069;margin-top:3px}
+.more-tools-panel>button kbd,.board-menu>button kbd{margin-left:auto;color:#7e8976;font:11px Inter,"Segoe UI",Arial,sans-serif;white-space:nowrap}
+.more-tools-panel>p:last-child{font-size:12px;line-height:1.65;color:#718069;margin:14px 6px 0}
+.menu-state{margin-left:auto;min-width:29px;color:#275c46;font-size:12px}
+.board-menu>button[aria-pressed=true]{background:#e5eadc}
+.drawing-dock .swatches button{width:26px;height:26px}
+.drawing-dock .swatches{gap:8px}
+.drawing-dock .dock-panel label{font-size:12px}
+.drawing-dock .dock-panel select{min-height:36px;font-size:12px}
+.keyboard-reference{color:#46583e;font-size:13px;line-height:1.6}
+.drawing-dock>.sb-modal,.drawing-dock>.sb-modal::backdrop{pointer-events:auto}
+.keyboard-reference>p{margin:0 0 20px;color:#6b7861}
+.keyboard-reference kbd{font:11px/1.6 Inter,"Segoe UI",Arial,sans-serif;background:#f0f3e9;border:1px solid #dce1d2;border-bottom-width:2px;border-radius:5px;padding:3px 6px;white-space:normal;display:inline-block}
+.keyboard-reference .keyboard-search{display:grid;gap:7px;color:#52654a;font-size:12px;margin-bottom:22px}
+.keyboard-search input{border:1px solid #d5dec9;border-radius:8px;padding:11px 12px;background:#fff;color:#26352e;font:13px Inter,"Segoe UI",Arial,sans-serif;width:100%}
+.keyboard-reference section{break-inside:avoid;margin:0 0 22px}
+.keyboard-reference h3{font-size:13px;color:#31563b;margin:0 0 9px}
+.keyboard-reference dl{margin:0}
+.keyboard-reference dl>div{display:flex;justify-content:space-between;align-items:center;gap:18px;border-bottom:1px solid #e7eadf;padding:8px 0;min-height:38px}
+.keyboard-reference dt{flex:1}
+.keyboard-reference dd{margin:0;text-align:right;max-width:58%}
+.keyboard-reference .keyboard-footnote{font-size:12px;border-top:1px solid #dce1d2;padding-top:16px;margin-bottom:0}
+.extra-tool-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10}
+.extra-tool-hint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:11;border:1px solid #dce1d2;border-radius:9px;padding:9px 14px;background:#fbfbf6f5;color:#52654a;font-size:12px;line-height:1.5;text-align:center;max-width:calc(100% - 32px);width:max-content;pointer-events:none;box-shadow:0 3px 14px #26352e0d}
+.canvas-shell[data-extra-tool] .excalidraw canvas{cursor:crosshair!important}
+.canvas-shell .excalidraw .excalidraw-hyperlinkContainer{background:#fbfbf6;border:1px solid #dce1d2;border-radius:10px;box-shadow:0 6px 22px #26352e18;color:#46583e;font-family:Inter,"Segoe UI",Arial,sans-serif}
+.canvas-shell .excalidraw .excalidraw-hyperlinkContainer:has(input){left:50%!important;top:auto!important;bottom:18px;transform:translateX(-50%);width:min(380px,calc(100% - 24px))!important;max-width:calc(100% - 24px);z-index:24;min-height:46px}
+.canvas-shell .excalidraw .excalidraw-hyperlinkContainer-input{min-width:0;flex:1;width:auto;color:#26352e;font:13px Inter,"Segoe UI",Arial,sans-serif}
+.canvas-shell .excalidraw .excalidraw-hyperlinkContainer button{color:#275c46}
+@media(max-width:1100px){.tool-button{min-width:32px;width:32px}.tool-divider{margin:0 1px}}
+@media(max-width:800px){.drawing-dock{max-width:calc(100% - 16px)}.shared-toolbar{gap:1px;padding:5px}.drawing-dock .tool-divider{display:none}.tool-scroll{max-width:none}.tool-button{min-width:30px;width:30px;height:38px}.drawing-dock .dock-panel{max-height:calc(100dvh - 180px)}.drawing-dock .tool-button[aria-label="Ask AI to look"]{display:none}.keyboard-reference{font-size:12px}.keyboard-reference dl>div{gap:10px}.extra-tool-hint{font-size:11px;bottom:10px}}
+@media(pointer:coarse){.tool-button{min-width:40px;width:40px;height:42px}.shared-toolbar{max-width:100%}.more-tools-panel>button{min-height:46px}.swatches button{min-width:30px;min-height:30px}}
+
+/* Excalidraw mounts export and confirmation dialogs in a body portal. */
+.excalidraw.excalidraw-modal-container{--ui-font:Inter,"Segoe UI",Arial,sans-serif;--color-primary:#275c46;--color-primary-darker:#214e3b;--color-primary-darkest:#1c4936;--color-primary-hover:#214e3b;--color-primary-light:#e5eadc;--color-primary-light-darker:#dce5d3;--color-selection:#718b64;--color-brand-hover:#e5eadc;--color-brand-active:#d4dfc8;--color-surface-primary-container:#e5eadc;--color-on-primary-container:#275c46;--color-surface-high:#e5eadc;--color-surface-mid:#eef0e7;--color-surface-low:#f4f3ed;--color-surface-lowest:#fcfcfa;--color-on-surface:#26352e;--color-border-outline:#718069;--color-border-outline-variant:#dce1d2;--island-bg-color:#fcfcf8;--dialog-border-color:#dce1d2;--input-border-color:#d5dec9;--input-hover-bg-color:#f0f3e9;--input-label-color:#52654a;--focus-highlight-color:#9abd8d;--link-color:#275c46;--ImageExportModal-preview-border:#dce1d2;--modal-shadow:0 24px 100px #182c2133;font-family:Inter,"Segoe UI",Arial,sans-serif;color:#26352e}
+.excalidraw.excalidraw-modal-container .Modal__content{background:#fcfcf8;border-color:#dce1d2;border-radius:18px}
+.excalidraw.excalidraw-modal-container .Modal__background{background:#17271f66;backdrop-filter:blur(3px)}
+.excalidraw.excalidraw-modal-container .Dialog__title{color:#314b36;border-bottom-color:#e1e5d9}
+.excalidraw.excalidraw-modal-container :is(button,input,select){font-family:Inter,"Segoe UI",Arial,sans-serif}
+
+/* Orientation determines the dock direction; neither layout wraps tools. */
+.shared-toolbar{flex-wrap:nowrap}
+.board-menu>.menu-review-entry,.board-menu>.menu-history-entry{display:none}
+@media(max-width:800px) and (orientation:landscape){.board-menu>.menu-review-entry{display:flex}}
+@media(orientation:portrait){
+ .drawing-dock,.is-focused .drawing-dock{top:12px;bottom:12px;left:12px;transform:none;width:52px;max-width:none;max-height:calc(100% - 24px)}
+ .drawing-dock .shared-toolbar{display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;height:auto;max-height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:5px;border-radius:12px;scrollbar-width:thin;scrollbar-color:#cbd5be transparent;backdrop-filter:none}
+ .drawing-dock .tool-scroll{display:flex;flex:0 1 auto;flex-direction:column;align-items:center;gap:3px;width:40px;min-width:40px;min-height:80px;max-width:none;max-height:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:0;scrollbar-width:thin;scrollbar-color:#cbd5be transparent}
+ .drawing-dock .tool-button,.drawing-dock .tool-scroll>.tool-button{display:grid;flex:none;width:40px;min-width:40px;height:42px;min-height:42px}
+ .drawing-dock .tool-button[aria-label="Undo"],.drawing-dock .tool-button[aria-label="Redo"],.drawing-dock .tool-button[aria-label="Ask AI to look"]{display:none}
+ .board-menu>.menu-history-entry,.board-menu>.menu-review-entry{display:flex}
+ .drawing-dock .tool-divider{display:block;flex:none;width:28px;height:1px;min-height:1px;margin:3px 0}
+ .drawing-dock .dock-panel,.is-focused .drawing-dock .dock-panel{left:calc(100% + 10px);right:auto;top:0;width:300px;max-width:calc(100vw - 88px);max-height:100%}
+ .drawing-dock .style-panel{width:312px}
+ .drawing-dock .shapes-panel>button{min-height:58px}
+ .extra-tool-hint{left:76px;right:12px;bottom:12px;transform:none;width:auto;max-width:none}
+ .canvas-shell .excalidraw .excalidraw-hyperlinkContainer:has(input){left:76px!important;right:12px;bottom:12px;transform:none;width:auto!important;max-width:calc(100% - 88px)}
+}
