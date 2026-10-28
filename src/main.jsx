@@ -155,7 +155,7 @@ function App() {
     const channelTest=browserOnly&&channelTestAvailable(view.connection);
     if(browserOnly&&!miniChat.automatic&&!channelTest)throw new Error(miniChat.reason||'Automatic delivery is unavailable for this connection.');
     const id=crypto.randomUUID();
-    const result=await sync.current.sendChat({id,intent:'discuss',...(channelTest?{channelTest:true}:{}),text:'Connection check only. Please read this captured message, read the live board and confirm its exact revision with confirm_connection, then post your complete actual reply with reply_to_chat_message for this request ID. No drawing changes are requested.'});
+    const result=await sync.current.sendChat({id,intent:'discuss',...(channelTest?{channelTest:true}:{}),text:'Connection check only. Read this attached capture and the live board, confirm the live revision, and post your actual answer here. Use one or two plain-language sentences to say whether you can read the board and whether it changed since capture. Keep internal IDs and technical tool names out of your answer. Do not change the drawing or write code.'});
     setChatVisibility(true,{saved:true});
     const message=result.messages.find(item=>item.id===id);
     if(!message?.reply&&message?.delivery!=='queued')throw new Error(message?.deliveryError||'The test is saved, but direct delivery was not confirmed. Check the linked chat before retrying.');

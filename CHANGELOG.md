@@ -1,5 +1,12 @@
 # SharedBoard.app changelog
 
+## 0.12.3 — Use the selected local plugin setup
+
+### Fixed
+
+- Preserve the chosen Codex or Claude Code connection mode through browser setup instead of showing remote connector instructions.
+- Keep the visible connection-test reply brief and readable without internal IDs or tool names.
+
 ## 0.12.2 — Close plugin delivery cleanly
 
 ### Fixed
