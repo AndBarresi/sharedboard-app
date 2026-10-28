@@ -12,8 +12,8 @@ import {fileURLToPath} from 'node:url';
 const boardId='00000000-0000-4000-8000-000000000001',messageId='00000000-0000-4000-8000-000000000002';
 const secret=`whsec_${Buffer.alloc(32,12).toString('base64')}`,otherSecret=`whsec_${Buffer.alloc(32,13).toString('base64')}`;
 function fixture(){
-  const values=new Map(),requests=[];let now=Date.parse('2026-10-27T12:00:00Z');
-  const storage={async get(key){return structuredClone(values.get(key));},async put(key,value){values.set(key,structuredClone(value));},async delete(key){values.delete(key);},async transaction(operation){return operation(storage);}};
+  const values=new Map(),requests=[];let now=Date.parse('2026-10-27T12:00:00Z'),tail=Promise.resolve();
+  const storage={async get(key){return structuredClone(values.get(key));},async put(key,value){values.set(key,structuredClone(value));},async delete(key){values.delete(key);},transaction(operation){const result=tail.then(()=>operation(storage));tail=result.catch(()=>{});return result;}};
   const options={principal:'test-grant',boardId,storage,allowedCallbackOrigins:['https://chatgpt.com'],now:()=>now,async callbackFetch(url,init){requests.push({url,...init});const data=JSON.parse(init.body);return Response.json(data.type==='verification'?{challenge:data.challenge}:{accepted:true});}};
   return {options,values,requests,advance(milliseconds){now+=milliseconds;}};
 }
@@ -45,6 +45,56 @@ test('chat and review expiry remain independent when one verified subscription e
  const chat=await handleEventRpc('events/subscribe',subscribe({ttlMs:3600000}),f.options),review=await handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name,ttlMs:60000}),f.options);
  const both=await eventStatus(f.options);assert.equal(both.automaticMessages,true);assert.equal(both.automaticReviews,true);assert.equal(both.messageExpiresAt,chat.refreshBefore);assert.equal(both.reviewExpiresAt,review.refreshBefore);assert.equal(both.eventExpiresAt,review.refreshBefore);
  f.advance(60001);const remaining=await eventStatus(f.options);assert.equal(remaining.automaticMessages,true);assert.equal(remaining.automaticReviews,false);assert.equal(remaining.messageExpiresAt,chat.refreshBefore);assert.equal(remaining.reviewExpiresAt,null);assert.equal(remaining.eventExpiresAt,chat.refreshBefore);
+});
+
+test('concurrent chat and review renewals preserve both leases, rotated keys, and durable delivery receipts',async()=>{
+  const f=fixture(),chat=await handleEventRpc('events/subscribe',subscribe(),f.options),review=await handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name}),f.options);
+  assert.equal(chat.refreshBefore,'2026-10-27T13:00:00.000Z','omitted lifetime grants one hour');
+  assert.equal((await send(f)).delivery,'queued');
+  f.advance(50*60*1000);
+  const originalFetch=f.options.callbackFetch;let entered;const bothEntered=new Promise(resolve=>{entered=resolve;}),gates=[];
+  f.options.callbackFetch=async(url,init)=>{await new Promise(resolve=>{gates.push(resolve);if(gates.length===2)entered();});return originalFetch(url,init);};
+  const renewals=[handleEventRpc('events/subscribe',subscribe({delivery:{...subscribe().delivery,secret:otherSecret}}),f.options),handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name}),f.options)];
+  await bothEntered;for(const release of gates)release();
+  const renewed=await Promise.all(renewals);
+  assert.deepEqual(renewed.map(item=>item.id),[chat.id,review.id]);assert.deepEqual(renewed.map(item=>item.refreshBefore),['2026-10-27T13:50:00.000Z','2026-10-27T13:50:00.000Z']);
+  const restarted={...f.options,callbackFetch:originalFetch},status=await eventStatus(restarted);
+  assert.equal(status.eventSubscriptions,2);assert.equal(status.messageExpiresAt,renewed[0].refreshBefore);assert.equal(status.reviewExpiresAt,renewed[1].refreshBefore);
+  const requests=f.requests.length;
+  assert.equal((await dispatchEvent({id:messageId,kind:'chat'},restarted)).delivery,'queued');assert.equal(f.requests.length,requests,'same captured event is not resent after refresh or context restart');
+  await dispatchEvent({id:crypto.randomUUID(),kind:'chat'},restarted);verifySignature(f.requests.at(-1),secret);verifySignature(f.requests.at(-1),otherSecret);
+  f.advance(5*60*1000+1);await dispatchEvent({id:crypto.randomUUID(),kind:'chat'},restarted);verifySignature(f.requests.at(-1),otherSecret);assert.equal(f.requests.at(-1).headers['webhook-signature'].split(' ').length,1,'old key stops signing after its overlap window');
+});
+
+test('unsubscribing one event cancels only its pending renewal while full revocation cancels both',async()=>{
+  for(const revokeAll of [false,true]){
+    const f=fixture();await handleEventRpc('events/subscribe',subscribe(),f.options);await handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name}),f.options);f.advance(50*60*1000);
+    let entered;const bothEntered=new Promise(resolve=>{entered=resolve;}),gates=[];
+    f.options.callbackFetch=async(url,init)=>{await new Promise(resolve=>{gates.push(resolve);if(gates.length===2)entered();});return Response.json({challenge:JSON.parse(init.body).challenge});};
+    const pending=[handleEventRpc('events/subscribe',subscribe(),f.options),handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name}),f.options)];
+    await bothEntered;
+    if(revokeAll)await clearEventSubscriptions(f.options);else await handleEventRpc('events/unsubscribe',subscribe(),f.options);
+    for(const release of gates)release();const results=await Promise.allSettled(pending);
+    assert.equal(results[0].status,'rejected');assert.match(results[0].reason.message,/connection changed/);assert.equal(results[1].status,revokeAll?'rejected':'fulfilled');
+    const status=await eventStatus(f.options);assert.equal(status.automaticMessages,false);assert.equal(status.automaticReviews,!revokeAll);
+    if(revokeAll)assert.equal(status.eventActivation,null);
+  }
+});
+
+test('late gone callbacks preserve renewed leases and parallel accepted events retain both receipts',async()=>{
+  const f=fixture();await handleEventRpc('events/subscribe',subscribe(),f.options);await handleEventRpc('events/subscribe',subscribe({name:eventCatalog[1].name}),f.options);
+  const originalFetch=f.options.callbackFetch;let entered,release;
+  const callbackEntered=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{release=resolve;});
+  f.options.callbackFetch=async(url,init)=>{if(JSON.parse(init.body).type==='verification')return originalFetch(url,init);entered();await gate;return new Response(null,{status:410});};
+  const oldDelivery=send(f);await callbackEntered;f.advance(6*60*1000);
+  const renewal=await handleEventRpc('events/subscribe',subscribe({delivery:{...subscribe().delivery,secret:otherSecret}}),f.options);
+  release();await oldDelivery;assert.equal((await eventStatus(f.options)).messageExpiresAt,renewal.refreshBefore);assert.equal((await eventStatus(f.options)).eventSubscriptions,2);
+  let bothEntered;const callbacksEntered=new Promise(resolve=>{bothEntered=resolve;}),gates=[];
+  f.options.callbackFetch=async(url,init)=>{await new Promise(resolve=>{gates.push(resolve);if(gates.length===2)bothEntered();});return originalFetch(url,init);};
+  const captures=[{id:crypto.randomUUID(),kind:'chat'},{id:crypto.randomUUID(),kind:'review'}],deliveries=captures.map(input=>dispatchEvent(input,f.options));
+  await callbacksEntered;for(const resolve of gates)resolve();assert.deepEqual((await Promise.all(deliveries)).map(item=>item.delivery),['queued','queued']);
+  f.options.callbackFetch=originalFetch;const requests=f.requests.length;
+  for(const input of captures)assert.equal((await dispatchEvent(input,f.options)).delivery,'queued');assert.equal(f.requests.length,requests,'neither concurrently accepted capture is replayed');
 });
 
 test('callbacks are fail closed to exact operator-approved HTTPS origins, with no arbitrary fetch or secret-bearing errors',async()=>{
